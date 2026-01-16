@@ -13,7 +13,9 @@ object RetrofitClient {
     private const val BASE_URL = "https://dashscope.aliyuncs.com/"
     
     // TODO: Replace with your actual API Key
-    private const val API_KEY = "YOUR-API-KEY-HERE" 
+    private const val API_KEY = "sk-fb607ee1b6164b349ef0751c1d26e0b4" 
+
+    fun getApiKey(): String = API_KEY 
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY

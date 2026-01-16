@@ -7,8 +7,10 @@ import com.silverlink.app.data.remote.RetrofitClient
 import com.silverlink.app.data.remote.model.Input
 import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.data.remote.model.QwenRequest
+import com.silverlink.app.feature.chat.AudioPlayerHelper
 import com.silverlink.app.feature.chat.AudioRecorder
 import com.silverlink.app.feature.chat.SpeechRecognitionService
+import com.silverlink.app.feature.chat.TextToSpeechService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +26,16 @@ sealed class VoiceState {
     data class Error(val message: String) : VoiceState()
 }
 
+/**
+ * TTS 播放状态
+ */
+sealed class TtsState {
+    object Idle : TtsState()
+    object Synthesizing : TtsState()
+    object Speaking : TtsState()
+    data class Error(val message: String) : TtsState()
+}
+
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
@@ -35,8 +47,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _voiceState = MutableStateFlow<VoiceState>(VoiceState.Idle)
     val voiceState: StateFlow<VoiceState> = _voiceState.asStateFlow()
 
+    private val _ttsState = MutableStateFlow<TtsState>(TtsState.Idle)
+    val ttsState: StateFlow<TtsState> = _ttsState.asStateFlow()
+
     private val audioRecorder = AudioRecorder(application)
     private val speechService = SpeechRecognitionService()
+    private val ttsService = TextToSpeechService()
+    private val audioPlayer = AudioPlayerHelper(application)
     private var currentAudioFile: String? = null
 
     private val systemPrompt = Message(
@@ -49,12 +66,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _messages.value = listOf(
             Message("assistant", "爷爷奶奶好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？")
         )
+
+        // 设置音频播放完成监听器
+        audioPlayer.setOnCompletionListener {
+            _ttsState.value = TtsState.Idle
+        }
+        audioPlayer.setOnErrorListener { errorMsg ->
+            _ttsState.value = TtsState.Error(errorMsg)
+        }
     }
 
     /**
      * 开始录音
      */
     fun startRecording() {
+        // 如果正在播放 TTS，先停止
+        stopSpeaking()
+        
         val filePath = audioRecorder.startRecording()
         if (filePath != null) {
             currentAudioFile = filePath
@@ -108,10 +136,51 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * 重置 TTS 状态
+     */
+    fun resetTtsState() {
+        _ttsState.value = TtsState.Idle
+    }
+
+    /**
+     * 语音朗读文本
+     */
+    fun speakText(text: String) {
+        if (text.isBlank()) return
+
+        viewModelScope.launch {
+            _ttsState.value = TtsState.Synthesizing
+            
+            val result = ttsService.synthesize(text)
+            
+            result.fold(
+                onSuccess = { audioData ->
+                    _ttsState.value = TtsState.Speaking
+                    audioPlayer.play(audioData)
+                },
+                onFailure = { error ->
+                    _ttsState.value = TtsState.Error(error.message ?: "语音合成失败")
+                }
+            )
+        }
+    }
+
+    /**
+     * 停止语音播放
+     */
+    fun stopSpeaking() {
+        audioPlayer.stop()
+        _ttsState.value = TtsState.Idle
+    }
+
+    /**
      * 发送消息
      */
     fun sendMessage(content: String) {
         if (content.isBlank()) return
+
+        // 停止当前的 TTS 播放
+        stopSpeaking()
 
         val userMessage = Message("user", content)
         val currentHistory = _messages.value
@@ -140,12 +209,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val assistantMessage = Message("assistant", assistantMessageContent)
                 _messages.value = _messages.value + assistantMessage
 
+                // 自动播放 AI 回复的语音
+                speakText(assistantMessageContent)
+
             } catch (e: Exception) {
                 e.printStackTrace()
-                _messages.value = _messages.value + Message("assistant", "网络好像有点卡，请检查一下网络连接哦。")
+                val errorMessage = "网络好像有点卡，请检查一下网络连接哦。"
+                _messages.value = _messages.value + Message("assistant", errorMessage)
+                // 即使出错也尝试播放提示语音
+                speakText(errorMessage)
             } finally {
                 _isLoading.value = false
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        audioPlayer.release()
     }
 }
