@@ -1,4 +1,4 @@
-# 🌟 SilverLink 银链
+# 🌟 SilverLink 
 
 > 专为老年人设计的 AI 陪伴助手 Android 应用
 
