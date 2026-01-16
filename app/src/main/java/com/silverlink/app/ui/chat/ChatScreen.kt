@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -312,6 +313,7 @@ fun ChatInputArea(
     onVoiceStart: () -> Unit,
     onVoiceEnd: () -> Unit
 ) {
+    var isVoiceMode by remember { mutableStateOf(false) }
     val isRecording = voiceState is VoiceState.Recording
     val isRecognizing = voiceState is VoiceState.Recognizing
 
@@ -319,128 +321,129 @@ fun ChatInputArea(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
-            .shadow(6.dp)
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .navigationBarsPadding() // Keep this to respect system nav bar
+            .padding(horizontal = 12.dp, vertical = 8.dp) // Reduced padding
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Capsule/Pill shaped input
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChanged,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("输入想说的话…") },
-                textStyle = MaterialTheme.typography.bodyLarge,
-                maxLines = 3,
-                shape = RoundedCornerShape(50), // Fully rounded capsule
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = Color.Transparent, // Clean look
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    focusedContainerColor = MaterialTheme.colorScheme.background,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.background
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { onSendClick() })
-            )
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            // Circular Send Button
+            // Mode Switch Button (Keyboard <-> Mic) - Larger for elderly users
             IconButton(
-                onClick = onSendClick,
-                modifier = Modifier
-                    .size(52.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                onClick = { isVoiceMode = !isVoiceMode },
+                modifier = Modifier.size(56.dp)
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "发送",
-                    modifier = Modifier.size(22.dp)
+                    imageVector = if (isVoiceMode) Icons.Filled.Keyboard else Icons.Filled.Mic,
+                    contentDescription = if (isVoiceMode) "Switch to Keyboard" else "Switch to Voice",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(32.dp)
                 )
             }
-        }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // 语音按钮 - 按住说话
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .background(
-                    color = when {
-                        isRecording -> MaterialTheme.colorScheme.error
-                        isRecognizing -> MaterialTheme.colorScheme.tertiary
-                        else -> MaterialTheme.colorScheme.secondaryContainer
-                    },
-                    shape = RoundedCornerShape(20.dp)
-                )
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onPress = {
-                            // 按下时开始录音
-                            onVoiceStart()
-                            // 等待释放
-                            tryAwaitRelease()
-                            // 释放时停止录音并识别
-                            onVoiceEnd()
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            if (isVoiceMode) {
+                // Press-to-Talk Button
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(64.dp) // Slightly taller for easier access
+                        .background(
+                            color = when {
+                                isRecording -> MaterialTheme.colorScheme.error
+                                isRecognizing -> MaterialTheme.colorScheme.tertiary
+                                else -> MaterialTheme.colorScheme.secondaryContainer
+                            },
+                            shape = RoundedCornerShape(32.dp)
+                        )
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onPress = {
+                                    onVoiceStart()
+                                    tryAwaitRelease()
+                                    onVoiceEnd()
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        if (isRecognizing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.onTertiary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "正在识别...",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onTertiary
+                            )
+                        } else if (isRecording) {
+                            Icon(
+                                imageVector = Icons.Filled.Mic,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.onError
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "松开发送",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onError
+                            )
+                        } else {
+                            Text(
+                                text = "按住 说话",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         }
+                    }
+                }
+            } else {
+                // Text Input
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = onTextChanged,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("输入想说的话…") },
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    maxLines = 3,
+                    shape = RoundedCornerShape(28.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha=0.5f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { onSendClick() })
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Send Button - Larger for elderly users
+                IconButton(
+                    onClick = onSendClick,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    enabled = text.isNotBlank()
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "发送",
+                        modifier = Modifier.size(24.dp)
                     )
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                when {
-                    isRecognizing -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MaterialTheme.colorScheme.onTertiary,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "正在识别...",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onTertiary
-                        )
-                    }
-                    isRecording -> {
-                        Icon(
-                            imageVector = Icons.Filled.Mic,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.onError
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "松开发送",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onError
-                        )
-                    }
-                    else -> {
-                        Icon(
-                            imageVector = Icons.Filled.Mic,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "按住说话",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
                 }
             }
         }
