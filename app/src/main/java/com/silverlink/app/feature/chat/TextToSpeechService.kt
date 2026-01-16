@@ -43,12 +43,13 @@ class TextToSpeechService {
     /**
      * 将文本合成为语音音频数据
      * @param text 待合成的文本
+     * @param rate 语速 (0.5-2.0, 默认1.0)
      * @return 音频数据（MP3 格式）
      */
-    suspend fun synthesize(text: String): Result<ByteArray> = withContext(Dispatchers.IO) {
+    suspend fun synthesize(text: String, rate: Double = 1.0): Result<ByteArray> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Starting TTS synthesis for text: ${text.take(50)}...")
-            val audioData = performTtsSynthesis(text)
+            Log.d(TAG, "Starting TTS synthesis for text: ${text.take(50)}... rate=$rate")
+            val audioData = performTtsSynthesis(text, rate)
             Log.d(TAG, "TTS synthesis completed, audio size: ${audioData.size} bytes")
             if (audioData.isEmpty()) {
                 Result.failure(Exception("未收到音频数据"))
@@ -61,10 +62,10 @@ class TextToSpeechService {
         }
     }
 
-    private suspend fun performTtsSynthesis(inputText: String): ByteArray = suspendCancellableCoroutine { continuation ->
+    private suspend fun performTtsSynthesis(inputText: String, rate: Double): ByteArray = suspendCancellableCoroutine { continuation ->
         val taskId = UUID.randomUUID().toString()
         val audioBuffer = ByteArrayOutputStream()
-        var hasReceivedAudio = false
+        val speechRate = rate  // 保存到局部变量供回调使用
 
         Log.d(TAG, "Creating WebSocket connection, taskId: $taskId")
 
@@ -77,7 +78,8 @@ class TextToSpeechService {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "WebSocket opened, sending run-task")
                 // 发送 run-task 指令开启任务，包含待合成文本
-                val runTaskMessage = createRunTaskMessage(taskId, inputText)
+                val runTaskMessage = createRunTaskMessage(taskId, inputText, speechRate)
+
                 Log.d(TAG, "Sending: $runTaskMessage")
                 webSocket.send(runTaskMessage)
             }
@@ -126,7 +128,6 @@ class TextToSpeechService {
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 val size = bytes.size
                 Log.d(TAG, "Received binary message: $size bytes")
-                hasReceivedAudio = true
                 // 接收音频数据块
                 audioBuffer.write(bytes.toByteArray())
             }
@@ -150,7 +151,7 @@ class TextToSpeechService {
         }
     }
 
-    private fun createRunTaskMessage(taskId: String, text: String): String {
+    private fun createRunTaskMessage(taskId: String, text: String, rate: Double): String {
         return JSONObject().apply {
             put("header", JSONObject().apply {
                 put("action", "run-task")
@@ -168,7 +169,7 @@ class TextToSpeechService {
                     put("format", FORMAT)
                     put("sample_rate", SAMPLE_RATE)
                     put("volume", 50)
-                    put("rate", 1.0)
+                    put("rate", rate)  // 动态语速
                     put("pitch", 1.0)
                 })
                 put("input", JSONObject().apply {

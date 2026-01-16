@@ -63,6 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.ui.theme.CalmContainer
 import com.silverlink.app.ui.theme.CalmOnSecondary
@@ -79,6 +80,8 @@ fun ChatScreen(
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val voiceState by viewModel.voiceState.collectAsState()
+    val currentEmotion by viewModel.currentEmotion.collectAsState()
+    val ttsState by viewModel.ttsState.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -125,10 +128,25 @@ fun ChatScreen(
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopAppBar(
             title = {
-                Text(
-                    text = "小银",
-                    style = MaterialTheme.typography.titleLarge
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "小银",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    // 情绪指示器 - 始终显示
+                    Spacer(modifier = Modifier.width(12.dp))
+                    EmotionBadge(emotion = currentEmotion)
+                }
+            },
+            actions = {
+                // TTS 播放状态指示
+                if (ttsState is TtsState.Speaking) {
+                    Text(
+                        text = "🔊",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(end = 16.dp)
+                    )
+                }
             }
         )
         // Chat History
@@ -357,6 +375,39 @@ fun ChatInputArea(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 情绪标签组件 - 显示检测到的用户情绪
+ */
+@Composable
+fun EmotionBadge(emotion: Emotion) {
+    val (emoji, color) = when (emotion) {
+        Emotion.HAPPY -> "😊" to Color(0xFF4CAF50)
+        Emotion.SAD -> "😢" to Color(0xFF2196F3)
+        Emotion.ANGRY -> "😤" to Color(0xFFFF5722)
+        Emotion.ANXIOUS -> "😰" to Color(0xFFFF9800)
+        Emotion.NEUTRAL -> "😐" to Color.Gray
+    }
+    
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = color.copy(alpha = 0.15f),
+        modifier = Modifier.padding(start = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = emoji, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = emotion.displayName,
+                style = MaterialTheme.typography.labelMedium,
+                color = color
+            )
         }
     }
 }
