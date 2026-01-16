@@ -12,15 +12,40 @@ class AlarmScheduler(private val context: Context) {
 
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-    fun schedule(medication: Medication) {
+    /**
+     * 为药品的所有时间点设置闹钟
+     */
+    fun scheduleAll(medication: Medication) {
+        val times = medication.getTimeList()
+        times.forEachIndexed { index, time ->
+            scheduleForTime(medication, time, index)
+        }
+    }
+
+    /**
+     * 取消药品的所有闹钟
+     */
+    fun cancelAll(medication: Medication) {
+        val times = medication.getTimeList()
+        times.forEachIndexed { index, _ ->
+            cancelForTime(medication.id, index)
+        }
+    }
+
+    /**
+     * 为单个时间点设置闹钟
+     * @param timeIndex 用于生成唯一的 PendingIntent ID
+     */
+    private fun scheduleForTime(medication: Medication, time: String, timeIndex: Int) {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra("MED_ID", medication.id)
             putExtra("MED_NAME", medication.name)
             putExtra("MED_DOSAGE", medication.dosage)
+            putExtra("MED_TIME", time)
         }
 
         // Parse time HH:mm
-        val parts = medication.time.split(":")
+        val parts = time.split(":")
         if (parts.size != 2) return
         
         val hour = parts[0].toIntOrNull() ?: return
@@ -37,9 +62,12 @@ class AlarmScheduler(private val context: Context) {
             calendar.add(Calendar.DAY_OF_YEAR, 1)
         }
 
+        // 使用 medicationId * 100 + timeIndex 作为唯一ID，支持每个药品最多100个时间点
+        val requestCode = medication.id * 100 + timeIndex
+
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            medication.id, // Unique ID per medication
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -53,7 +81,6 @@ class AlarmScheduler(private val context: Context) {
                         pendingIntent
                     )
                 } else {
-                    // Fallback or request permission (omitted for MVP simplicity, assume permission granted)
                     Log.e("AlarmScheduler", "Cannot schedule exact alarms")
                 }
             } else {
@@ -68,14 +95,25 @@ class AlarmScheduler(private val context: Context) {
         }
     }
 
-    fun cancel(medication: Medication) {
+    private fun cancelForTime(medicationId: Int, timeIndex: Int) {
         val intent = Intent(context, AlarmReceiver::class.java)
+        val requestCode = medicationId * 100 + timeIndex
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            medication.id,
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         alarmManager.cancel(pendingIntent)
     }
+
+    // 保留旧方法的兼容性，内部调用新方法
+    fun schedule(medication: Medication) {
+        scheduleAll(medication)
+    }
+
+    fun cancel(medication: Medication) {
+        cancelAll(medication)
+    }
 }
+

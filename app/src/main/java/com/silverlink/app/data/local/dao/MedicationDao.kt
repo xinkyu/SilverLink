@@ -13,7 +13,7 @@ interface MedicationDao {
     @Query("SELECT * FROM medication")
     fun getAllMedications(): Flow<List<Medication>>
 
-    @Query("SELECT * FROM medication WHERE time = :time")
+    @Query("SELECT * FROM medication WHERE times LIKE '%' || :time || '%'")
     suspend fun getMedicationsByTime(time: String): List<Medication>
 
     @Insert
