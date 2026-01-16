@@ -23,13 +23,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.silverlink.app.SilverLinkApp
 import com.silverlink.app.ui.theme.SilverLinkTheme
 import com.silverlink.app.ui.theme.WarmOrange
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class ReminderAlertActivity : ComponentActivity() {
     
@@ -38,6 +41,7 @@ class ReminderAlertActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        val medId = intent.getIntExtra("MED_ID", 0)
         val medName = intent.getStringExtra("MED_NAME") ?: "该吃药了"
         val medDosage = intent.getStringExtra("MED_DOSAGE") ?: ""
 
@@ -50,10 +54,35 @@ class ReminderAlertActivity : ComponentActivity() {
                     medDosage = medDosage,
                     onConfirmed = {
                         stopRingtone()
+                        // 标记药品为已服用
+                        markMedicationAsTaken(medId)
                         finish()
-                        // In a real app, we would mark it as taken in DB here
                     }
                 )
+            }
+        }
+    }
+
+    /**
+     * 将药品标记为今日已服用
+     */
+    private fun markMedicationAsTaken(medId: Int) {
+        if (medId <= 0) return
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val dao = SilverLinkApp.database.medicationDao()
+                // 查询该药品并更新状态
+                dao.getAllMedications().collect { medications ->
+                    val medication = medications.find { it.id == medId }
+                    if (medication != null && !medication.isTakenToday) {
+                        val updated = medication.copy(isTakenToday = true)
+                        dao.updateMedication(updated)
+                    }
+                    return@collect
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }

@@ -1,23 +1,43 @@
 package com.silverlink.app.ui.chat
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.silverlink.app.data.remote.RetrofitClient
 import com.silverlink.app.data.remote.model.Input
 import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.data.remote.model.QwenRequest
+import com.silverlink.app.feature.chat.AudioRecorder
+import com.silverlink.app.feature.chat.SpeechRecognitionService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class ChatViewModel : ViewModel() {
+/**
+ * 语音识别状态
+ */
+sealed class VoiceState {
+    object Idle : VoiceState()
+    object Recording : VoiceState()
+    object Recognizing : VoiceState()
+    data class Error(val message: String) : VoiceState()
+}
+
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _voiceState = MutableStateFlow<VoiceState>(VoiceState.Idle)
+    val voiceState: StateFlow<VoiceState> = _voiceState.asStateFlow()
+
+    private val audioRecorder = AudioRecorder(application)
+    private val speechService = SpeechRecognitionService()
+    private var currentAudioFile: String? = null
 
     private val systemPrompt = Message(
         role = "system",
@@ -31,6 +51,65 @@ class ChatViewModel : ViewModel() {
         )
     }
 
+    /**
+     * 开始录音
+     */
+    fun startRecording() {
+        val filePath = audioRecorder.startRecording()
+        if (filePath != null) {
+            currentAudioFile = filePath
+            _voiceState.value = VoiceState.Recording
+        } else {
+            _voiceState.value = VoiceState.Error("无法启动录音")
+        }
+    }
+
+    /**
+     * 停止录音并开始识别
+     */
+    fun stopRecordingAndRecognize() {
+        val filePath = audioRecorder.stopRecording()
+        if (filePath == null) {
+            _voiceState.value = VoiceState.Error("录音失败")
+            return
+        }
+
+        _voiceState.value = VoiceState.Recognizing
+
+        viewModelScope.launch {
+            val result = speechService.recognize(filePath)
+            
+            result.fold(
+                onSuccess = { text ->
+                    _voiceState.value = VoiceState.Idle
+                    // 自动发送识别的文字
+                    sendMessage(text)
+                },
+                onFailure = { error ->
+                    _voiceState.value = VoiceState.Error(error.message ?: "识别失败")
+                }
+            )
+        }
+    }
+
+    /**
+     * 取消录音
+     */
+    fun cancelRecording() {
+        audioRecorder.cancelRecording()
+        _voiceState.value = VoiceState.Idle
+    }
+
+    /**
+     * 重置语音状态
+     */
+    fun resetVoiceState() {
+        _voiceState.value = VoiceState.Idle
+    }
+
+    /**
+     * 发送消息
+     */
     fun sendMessage(content: String) {
         if (content.isBlank()) return
 

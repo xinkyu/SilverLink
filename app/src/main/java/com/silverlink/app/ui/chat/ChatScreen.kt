@@ -1,11 +1,12 @@
 package com.silverlink.app.ui.chat
 
-import android.app.Activity
-import android.content.Intent
-import android.speech.RecognizerIntent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,20 +53,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.ui.theme.CalmContainer
 import com.silverlink.app.ui.theme.CalmOnSecondary
 import com.silverlink.app.ui.theme.WarmContainer
 import com.silverlink.app.ui.theme.WarmOnPrimary
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,23 +75,44 @@ fun ChatScreen(
     modifier: Modifier = Modifier,
     viewModel: ChatViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val voiceState by viewModel.voiceState.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Voice Input Launcher
-    val speechRecognizerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-            val results = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val spokenText = results?.get(0)
-            if (!spokenText.isNullOrBlank()) {
-                inputText = spokenText
-            }
+    // 录音权限状态
+    var hasAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) 
+                == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    // 录音权限请求
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasAudioPermission = granted
+        if (!granted) {
+            Toast.makeText(context, "需要录音权限才能使用语音输入", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 显示错误提示
+    LaunchedEffect(voiceState) {
+        if (voiceState is VoiceState.Error) {
+            Toast.makeText(context, (voiceState as VoiceState.Error).message, Toast.LENGTH_SHORT).show()
+            viewModel.resetVoiceState()
+        }
+    }
+
+    // 首次请求录音权限
+    LaunchedEffect(Unit) {
+        if (!hasAudioPermission) {
+            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
@@ -135,23 +158,24 @@ fun ChatScreen(
         // Input Area
         ChatInputArea(
             text = inputText,
+            voiceState = voiceState,
             onTextChanged = { inputText = it },
             onSendClick = {
-                viewModel.sendMessage(inputText)
-                inputText = ""
-                keyboardController?.hide()
+                if (inputText.isNotBlank()) {
+                    viewModel.sendMessage(inputText)
+                    inputText = ""
+                    keyboardController?.hide()
+                }
             },
-            onVoiceClick = {
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话...")
+            onVoiceStart = {
+                if (hasAudioPermission) {
+                    viewModel.startRecording()
+                } else {
+                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 }
-                try {
-                    speechRecognizerLauncher.launch(intent)
-                } catch (e: Exception) {
-                    // Handle error
-                }
+            },
+            onVoiceEnd = {
+                viewModel.stopRecordingAndRecognize()
             }
         )
     }
@@ -164,8 +188,6 @@ fun ChatBubble(message: Message) {
     // Polished Colors
     val bubbleColor = if (isUser) CalmContainer else WarmContainer
     val textColor = if (isUser) CalmOnSecondary else WarmOnPrimary
-    
-    val align = if (isUser) Alignment.End else Alignment.Start
     
     // Unified large rounded corners (24dp)
     val shape = if (isUser) {
@@ -198,10 +220,15 @@ fun ChatBubble(message: Message) {
 @Composable
 fun ChatInputArea(
     text: String,
+    voiceState: VoiceState,
     onTextChanged: (String) -> Unit,
     onSendClick: () -> Unit,
-    onVoiceClick: () -> Unit
+    onVoiceStart: () -> Unit,
+    onVoiceEnd: () -> Unit
 ) {
+    val isRecording = voiceState is VoiceState.Recording
+    val isRecognizing = voiceState is VoiceState.Recognizing
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -255,24 +282,81 @@ fun ChatInputArea(
         
         Spacer(modifier = Modifier.height(12.dp))
         
-        Button(
-            onClick = onVoiceClick,
+        // 语音按钮 - 按住说话
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+                .height(72.dp)
+                .background(
+                    color = when {
+                        isRecording -> MaterialTheme.colorScheme.error
+                        isRecognizing -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.secondaryContainer
+                    },
+                    shape = RoundedCornerShape(20.dp)
+                )
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = {
+                            // 按下时开始录音
+                            onVoiceStart()
+                            // 等待释放
+                            tryAwaitRelease()
+                            // 释放时停止录音并识别
+                            onVoiceEnd()
+                        }
+                    )
+                },
+            contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Filled.Mic,
-                contentDescription = null,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "按住说话 / 点击说话", style = MaterialTheme.typography.titleMedium)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                when {
+                    isRecognizing -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onTertiary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "正在识别...",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onTertiary
+                        )
+                    }
+                    isRecording -> {
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
+                            tint = MaterialTheme.colorScheme.onError
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "松开发送",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onError
+                        )
+                    }
+                    else -> {
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "按住说话",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+            }
         }
     }
 }

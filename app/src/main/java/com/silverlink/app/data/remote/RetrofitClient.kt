@@ -1,6 +1,7 @@
 package com.silverlink.app.data.remote
 
 import com.silverlink.app.data.remote.api.QwenApi
+import com.silverlink.app.data.remote.api.QwenAsrApi
 import com.silverlink.app.data.remote.api.QwenVisionApi
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -12,7 +13,7 @@ object RetrofitClient {
     private const val BASE_URL = "https://dashscope.aliyuncs.com/"
     
     // TODO: Replace with your actual API Key
-    private const val API_KEY = "sk-7d4acccd5a5b48a7b82d0143b5f04ce1" 
+    private const val API_KEY = "YOUR-API-KEY-HERE" 
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -48,5 +49,8 @@ object RetrofitClient {
     val visionApi: QwenVisionApi by lazy {
         retrofit.create(QwenVisionApi::class.java)
     }
-}
 
+    val asrApi: QwenAsrApi by lazy {
+        retrofit.create(QwenAsrApi::class.java)
+    }
+}
