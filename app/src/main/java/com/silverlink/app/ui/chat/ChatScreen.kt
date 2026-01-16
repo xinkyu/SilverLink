@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +31,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,17 +44,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,15 +69,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.silverlink.app.data.local.ConversationEntity
 import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.ui.theme.CalmContainer
 import com.silverlink.app.ui.theme.CalmOnSecondary
 import com.silverlink.app.ui.theme.WarmContainer
 import com.silverlink.app.ui.theme.WarmOnPrimary
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,9 +97,16 @@ fun ChatScreen(
     val voiceState by viewModel.voiceState.collectAsState()
     val currentEmotion by viewModel.currentEmotion.collectAsState()
     val ttsState by viewModel.ttsState.collectAsState()
+    val conversations by viewModel.conversations.collectAsState()
+    val currentConversationId by viewModel.currentConversationId.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
+    
+    // 会话列表底部弹窗状态
+    var showConversationSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
 
     // 录音权限状态
     var hasAudioPermission by remember {
@@ -144,7 +166,23 @@ fun ChatScreen(
                     Text(
                         text = "🔊",
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(end = 16.dp)
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+                // 新对话按钮
+                IconButton(onClick = { viewModel.createNewConversation() }) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = "新对话",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                // 历史会话按钮
+                IconButton(onClick = { showConversationSheet = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.History,
+                        contentDescription = "历史会话",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -196,6 +234,36 @@ fun ChatScreen(
                 viewModel.stopRecordingAndRecognize()
             }
         )
+    }
+    
+    // 历史会话列表底部弹窗
+    if (showConversationSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showConversationSheet = false },
+            sheetState = sheetState
+        ) {
+            ConversationListSheet(
+                conversations = conversations,
+                currentConversationId = currentConversationId,
+                onConversationClick = { conversationId ->
+                    viewModel.switchConversation(conversationId)
+                    scope.launch {
+                        sheetState.hide()
+                        showConversationSheet = false
+                    }
+                },
+                onDeleteClick = { conversationId ->
+                    viewModel.deleteConversation(conversationId)
+                },
+                onNewConversationClick = {
+                    viewModel.createNewConversation()
+                    scope.launch {
+                        sheetState.hide()
+                        showConversationSheet = false
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -408,6 +476,182 @@ fun EmotionBadge(emotion: Emotion) {
                 style = MaterialTheme.typography.labelMedium,
                 color = color
             )
+        }
+    }
+}
+
+/**
+ * 历史会话列表弹窗
+ */
+@Composable
+fun ConversationListSheet(
+    conversations: List<ConversationEntity>,
+    currentConversationId: Long?,
+    onConversationClick: (Long) -> Unit,
+    onDeleteClick: (Long) -> Unit,
+    onNewConversationClick: () -> Unit
+) {
+    var showDeleteDialog by remember { mutableStateOf<Long?>(null) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 32.dp)
+    ) {
+        // 标题栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "历史会话",
+                style = MaterialTheme.typography.titleLarge
+            )
+            Button(
+                onClick = onNewConversationClick,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("新对话")
+            }
+        }
+        
+        if (conversations.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "暂无历史会话",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) {
+                items(conversations, key = { it.id }) { conversation ->
+                    ConversationItem(
+                        conversation = conversation,
+                        isSelected = conversation.id == currentConversationId,
+                        onClick = { onConversationClick(conversation.id) },
+                        onDeleteClick = { showDeleteDialog = conversation.id }
+                    )
+                }
+            }
+        }
+    }
+    
+    // 删除确认对话框
+    showDeleteDialog?.let { conversationId ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { Text("删除会话") },
+            text = { Text("确定要删除这个会话吗？删除后无法恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteClick(conversationId)
+                        showDeleteDialog = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = null }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * 单个会话项
+ */
+@Composable
+fun ConversationItem(
+    conversation: ConversationEntity,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }
+    val timeText = remember(conversation.updatedAt) {
+        dateFormat.format(Date(conversation.updatedAt))
+    }
+    
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = conversation.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = timeText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+            IconButton(
+                onClick = onDeleteClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "删除",
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

@@ -4,6 +4,9 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.silverlink.app.data.local.AppDatabase
+import com.silverlink.app.data.local.ChatMessageEntity
+import com.silverlink.app.data.local.ConversationEntity
 import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.data.remote.RetrofitClient
 import com.silverlink.app.data.remote.model.Input
@@ -18,9 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * 语音识别状态
- */
+private const val TAG = "ChatViewModel"
+
 sealed class VoiceState {
     object Idle : VoiceState()
     object Recording : VoiceState()
@@ -28,9 +30,6 @@ sealed class VoiceState {
     data class Error(val message: String) : VoiceState()
 }
 
-/**
- * TTS 播放状态
- */
 sealed class TtsState {
     object Idle : TtsState()
     object Synthesizing : TtsState()
@@ -39,10 +38,6 @@ sealed class TtsState {
 }
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
-
-    companion object {
-        private const val TAG = "ChatViewModel"
-    }
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages.asStateFlow()
@@ -53,20 +48,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _voiceState = MutableStateFlow<VoiceState>(VoiceState.Idle)
     val voiceState: StateFlow<VoiceState> = _voiceState.asStateFlow()
 
+    private val _currentEmotion = MutableStateFlow(Emotion.NEUTRAL)
+    val currentEmotion: StateFlow<Emotion> = _currentEmotion.asStateFlow()
+
     private val _ttsState = MutableStateFlow<TtsState>(TtsState.Idle)
     val ttsState: StateFlow<TtsState> = _ttsState.asStateFlow()
 
-    // 当前用户情绪状态
-    private val _currentEmotion = MutableStateFlow(Emotion.NEUTRAL)
-    val currentEmotion: StateFlow<Emotion> = _currentEmotion.asStateFlow()
+    // 会话管理
+    private val _conversations = MutableStateFlow<List<ConversationEntity>>(emptyList())
+    val conversations: StateFlow<List<ConversationEntity>> = _conversations.asStateFlow()
+
+    private val _currentConversationId = MutableStateFlow<Long?>(null)
+    val currentConversationId: StateFlow<Long?> = _currentConversationId.asStateFlow()
+
+    // 防止重复初始化的标记
+    private var isInitialized = false
+    private var isCreatingConversation = false
 
     private val audioRecorder = AudioRecorder(application)
     private val speechService = SpeechRecognitionService()
     private val ttsService = TextToSpeechService()
     private val audioPlayer = AudioPlayerHelper(application)
     private var currentAudioFile: String? = null
+    
+    // 数据库访问
+    private val chatDao = AppDatabase.getInstance(application).chatDao()
 
-    // 基础 System Prompt
     private val baseSystemPrompt = """
         你叫'小银'，是一个温柔、耐心的年轻人，专门陪伴老人。
         你的回答要简短、温暖，不要使用复杂的网络用语。
@@ -75,10 +82,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     """.trimIndent()
 
     init {
-        // Initial welcome message
-        _messages.value = listOf(
-            Message("assistant", "爷爷奶奶好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？")
-        )
+        // 加载会话列表
+        loadConversations()
 
         // 设置音频播放完成监听器
         audioPlayer.setOnCompletionListener {
@@ -86,6 +91,130 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         audioPlayer.setOnErrorListener { errorMsg ->
             _ttsState.value = TtsState.Error(errorMsg)
+        }
+    }
+
+    private fun loadConversations() {
+        if (isInitialized) return
+        isInitialized = true
+        
+        viewModelScope.launch {
+            val list = chatDao.getConversationList()
+            _conversations.value = list
+            
+            if (list.isNotEmpty()) {
+                // 默认选中最近的一个
+                switchConversation(list.first().id)
+            } else {
+                // 如果没有任何会话，创建一个新的
+                createNewConversation()
+            }
+        }
+    }
+    
+    /**
+     * 刷新会话列表（不触发自动切换）
+     */
+    private suspend fun refreshConversationList() {
+        val list = chatDao.getConversationList()
+        _conversations.value = list
+    }
+
+    fun createNewConversation() {
+        if (isCreatingConversation) return
+        isCreatingConversation = true
+        
+        viewModelScope.launch {
+            try {
+                val newConversation = ConversationEntity()
+                val id = chatDao.insertConversation(newConversation)
+                
+                // 刷新会话列表
+                refreshConversationList()
+                
+                // 切换到新会话
+                _currentConversationId.value = id
+                
+                // 显示欢迎语（不保存到数据库，等用户发送第一条消息时再保存）
+                val welcomeMessage = Message("assistant", "爷爷奶奶好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？")
+                _messages.value = listOf(welcomeMessage)
+                saveMessageToDb(welcomeMessage, null)
+            } finally {
+                isCreatingConversation = false
+            }
+        }
+    }
+
+    fun switchConversation(conversationId: Long) {
+        if (_currentConversationId.value == conversationId) return
+        
+        _currentConversationId.value = conversationId
+        _messages.value = emptyList() // 清空当前显示，避免闪烁
+        loadChatHistory(conversationId)
+    }
+    
+    fun deleteConversation(conversationId: Long) {
+        viewModelScope.launch {
+            val isCurrentConversation = _currentConversationId.value == conversationId
+            
+            chatDao.deleteConversation(conversationId)
+            
+            // 刷新会话列表
+            refreshConversationList()
+            
+            // 如果删除的是当前会话，需要切换
+            if (isCurrentConversation) {
+                val remainingList = _conversations.value
+                if (remainingList.isNotEmpty()) {
+                    // 切换到第一个会话
+                    _currentConversationId.value = null // 先清空，确保 switchConversation 能执行
+                    switchConversation(remainingList.first().id)
+                } else {
+                    // 没有会话了，创建新的
+                    _currentConversationId.value = null
+                    createNewConversation()
+                }
+            }
+        }
+    }
+
+    private fun loadChatHistory(conversationId: Long) {
+        viewModelScope.launch {
+            // 使用一次性查询，避免 Flow 持续监听导致循环
+            val entities = chatDao.getMessageList(conversationId)
+            if (entities.isNotEmpty()) {
+                _messages.value = entities.map { Message(it.role, it.content) }
+            } else {
+                // 新会话，显示欢迎语并保存
+                val welcomeMessage = Message("assistant", "爷爷奶奶好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？")
+                _messages.value = listOf(welcomeMessage)
+                saveMessageToDb(welcomeMessage, null)
+            }
+        }
+    }
+
+    private suspend fun saveMessageToDb(message: Message, emotion: Emotion?) {
+        val conversationId = _currentConversationId.value ?: return
+        try {
+            val entity = ChatMessageEntity(
+                conversationId = conversationId,
+                role = message.role,
+                content = message.content,
+                emotion = emotion?.name
+            )
+            chatDao.insertMessage(entity)
+            
+            // 如果是新会话的第一条用户消息，更新标题
+            val conversation = chatDao.getConversation(conversationId)
+            if (conversation != null && conversation.title == "新对话" && message.role == "user") {
+                val newTitle = if (message.content.length > 10) message.content.take(10) + "..." else message.content
+                chatDao.updateConversation(conversation.copy(title = newTitle, updatedAt = System.currentTimeMillis()))
+            } else if (conversation != null) {
+                // 仅更新时间
+                chatDao.updateConversation(conversation.copy(updatedAt = System.currentTimeMillis()))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save message", e)
         }
     }
 
@@ -103,15 +232,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 根据情绪获取 TTS 语速 (差异加大以便感知)
+     * 根据情绪获取 TTS 语速
      */
     private fun getTtsRateForEmotion(emotion: Emotion): Double {
         return when (emotion) {
-            Emotion.SAD -> 0.75       // 明显放慢，更温柔
-            Emotion.ANXIOUS -> 0.8    // 放慢，更平静
-            Emotion.ANGRY -> 0.8      // 放慢，更耐心
-            Emotion.HAPPY -> 1.1      // 稍快，更活泼
-            Emotion.NEUTRAL -> 1.0    // 正常语速
+            Emotion.SAD -> 0.75
+            Emotion.ANXIOUS -> 0.8
+            Emotion.ANGRY -> 0.8
+            Emotion.HAPPY -> 1.1
+            Emotion.NEUTRAL -> 1.0
         }
     }
 
@@ -240,13 +369,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 重置 TTS 状态
-     */
-    fun resetTtsState() {
-        _ttsState.value = TtsState.Idle
-    }
-
-    /**
      * 语音朗读文本
      */
     fun speakText(text: String, emotion: Emotion = _currentEmotion.value) {
@@ -297,6 +419,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _messages.value = currentHistory + userMessage
 
         viewModelScope.launch {
+            // 保存用户消息到数据库
+            saveMessageToDb(userMessage, _currentEmotion.value)
+
             _isLoading.value = true
             try {
                 // 使用动态 System Prompt（根据情绪调整）
@@ -319,13 +444,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val assistantMessage = Message("assistant", assistantMessageContent)
                 _messages.value = _messages.value + assistantMessage
 
+                // 保存 AI 回复到数据库
+                saveMessageToDb(assistantMessage, null)
+
                 // 自动播放 AI 回复的语音（根据情绪调整语速）
                 speakText(assistantMessageContent)
 
             } catch (e: Exception) {
                 e.printStackTrace()
                 val errorMessage = "网络好像有点卡，请检查一下网络连接哦。"
-                _messages.value = _messages.value + Message("assistant", errorMessage)
+                val errorMsg = Message("assistant", errorMessage)
+                _messages.value = _messages.value + errorMsg
+                saveMessageToDb(errorMsg, null)
                 speakText(errorMessage)
             } finally {
                 _isLoading.value = false
