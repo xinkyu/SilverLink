@@ -74,6 +74,7 @@ fun FamilySetupScreen(
     
     var currentStep by remember { mutableStateOf(1) }
     var elderName by remember { mutableStateOf("") }
+    var elderProfile by remember { mutableStateOf("") }
     var pairingCode by remember { mutableStateOf("") }
     var qrContent by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -112,16 +113,18 @@ fun FamilySetupScreen(
             1 -> ElderInfoStep(
                 elderName = elderName,
                 onNameChange = { elderName = it },
+                elderProfile = elderProfile,
+                onProfileChange = { elderProfile = it },
                 onNext = {
                     if (elderName.isNotBlank() && !isLoading) {
                         isLoading = true
                         // 创建配对码并同步到云端
                         CoroutineScope(Dispatchers.Main).launch {
-                            val result = syncRepository.createPairingCodeOnCloud(elderName)
+                            val result = syncRepository.createPairingCodeOnCloud(elderName, elderProfile)
                             result.onSuccess { code ->
                                 pairingCode = code
                                 // 生成二维码内容（包含配对码和长辈称呼）
-                                qrContent = userPreferences.generateQRContent(code, elderName)
+                                qrContent = userPreferences.generateQRContent(code, elderName, elderProfile)
                                 currentStep = 2
                             }
                             isLoading = false
@@ -148,6 +151,8 @@ fun FamilySetupScreen(
 fun ElderInfoStep(
     elderName: String,
     onNameChange: (String) -> Unit,
+    elderProfile: String,
+    onProfileChange: (String) -> Unit,
     onNext: () -> Unit
 ) {
     Column(
@@ -204,6 +209,26 @@ fun ElderInfoStep(
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.Words
             )
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        OutlinedTextField(
+            value = elderProfile,
+            onValueChange = onProfileChange,
+            label = { Text("长辈信息（可选）", fontSize = 18.sp) },
+            placeholder = { Text("如：家乡/兴趣/身体状况/忌口", fontSize = 18.sp) },
+            textStyle = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFFFFB74D),
+                unfocusedBorderColor = Color(0xFFBCAAA4),
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White
+            ),
+            minLines = 3,
+            maxLines = 5
         )
         
         Spacer(modifier = Modifier.weight(1f))

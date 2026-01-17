@@ -31,10 +31,11 @@ class SyncRepository(private val context: Context) {
      * 创建配对码并同步到云端（家人端调用）
      */
     suspend fun createPairingCodeOnCloud(
-        elderName: String
+        elderName: String,
+        elderProfile: String = ""
     ): Result<String> = withContext(Dispatchers.IO) {
         // 生成本地配对码
-        val code = userPrefs.completeFamilySetup(elderName)
+        val code = userPrefs.completeFamilySetup(elderName, elderProfile)
         val cleanCode = code.replace(" ", "")
         
         // 同步到云端

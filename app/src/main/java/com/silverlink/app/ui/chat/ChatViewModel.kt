@@ -84,6 +84,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     """.trimIndent()
 
     private fun getElderName(): String = userPrefs.userConfig.value.elderName.trim()
+    private fun getElderProfile(): String = userPrefs.userConfig.value.elderProfile.trim()
 
     private fun buildGreeting(): String {
         val elderName = getElderName()
@@ -237,15 +238,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun buildSystemPrompt(): Message {
         val emotionHint = _currentEmotion.value.promptHint
         val elderName = getElderName()
+        val elderProfile = getElderProfile()
         val nameHint = if (elderName.isNotBlank()) {
             "用户称呼为“$elderName”，回复时请优先使用该称呼，避免使用“爷爷奶奶”等泛称。"
         } else {
             "请避免使用“爷爷奶奶”等泛称，改用“您”进行称呼。"
         }
-        val fullPrompt = if (emotionHint.isNotBlank()) {
-            "$baseSystemPrompt\n\n【称呼提示】$nameHint\n\n【用户情绪提示】$emotionHint"
+        val profileHint = if (elderProfile.isNotBlank()) {
+            "【长辈信息】$elderProfile。请据此进行更有针对性的回应。"
         } else {
-            "$baseSystemPrompt\n\n【称呼提示】$nameHint"
+            ""
+        }
+        val fullPrompt = if (emotionHint.isNotBlank()) {
+            "$baseSystemPrompt\n\n【称呼提示】$nameHint\n${profileHint.ifBlank { "" }}${if (profileHint.isNotBlank()) "\n" else ""}\n【用户情绪提示】$emotionHint"
+        } else {
+            "$baseSystemPrompt\n\n【称呼提示】$nameHint${if (profileHint.isNotBlank()) "\n$profileHint" else ""}"
         }
         return Message(role = "system", content = fullPrompt)
     }
