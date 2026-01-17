@@ -107,6 +107,60 @@ class AlarmScheduler(private val context: Context) {
         alarmManager.cancel(pendingIntent)
     }
 
+    /**
+     * 设置稍后提醒（推迟10分钟）
+     * 这是一次性的提醒，不会影响原有的定时闹钟
+     * @param medId 药品ID
+     * @param medName 药品名称
+     * @param medDosage 药品剂量
+     */
+    fun scheduleSnooze(medId: Int, medName: String, medDosage: String) {
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra("MED_ID", medId)
+            putExtra("MED_NAME", medName)
+            putExtra("MED_DOSAGE", medDosage)
+            putExtra("IS_SNOOZE", true)
+        }
+
+        // 10分钟后提醒
+        val triggerTime = System.currentTimeMillis() + 10 * 60 * 1000
+
+        // 使用特殊的 requestCode，避免与正常闹钟冲突
+        // 使用 medId * 100 + 99 作为 snooze 的唯一ID
+        val requestCode = medId * 100 + 99
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                    Log.d("AlarmScheduler", "Snooze scheduled for $medName in 10 minutes")
+                } else {
+                    Log.e("AlarmScheduler", "Cannot schedule exact alarms for snooze")
+                }
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+                Log.d("AlarmScheduler", "Snooze scheduled for $medName in 10 minutes")
+            }
+        } catch (e: SecurityException) {
+            Log.e("AlarmScheduler", "Failed to schedule snooze", e)
+        }
+    }
+
     // 保留旧方法的兼容性，内部调用新方法
     fun schedule(medication: Medication) {
         scheduleAll(medication)

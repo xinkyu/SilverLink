@@ -1,0 +1,9 @@
+{
+  "name": "mood-log",
+  "version": "1.0.0",
+  "description": "记录情绪日志云函数",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.0.0"
+  }
+}

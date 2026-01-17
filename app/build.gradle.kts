@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
@@ -78,6 +79,12 @@ dependencies {
 
     // WorkManager
     implementation(libs.androidx.work.runtime)
+    
+    // ZXing for QR code generation
+    implementation("com.google.zxing:core:3.5.2")
+    
+    // kotlinx-serialization for JSON
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

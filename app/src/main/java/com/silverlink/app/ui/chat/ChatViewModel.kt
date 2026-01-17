@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.ChatMessageEntity
 import com.silverlink.app.data.local.ConversationEntity
+import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.data.remote.RetrofitClient
 import com.silverlink.app.data.remote.model.Input
@@ -73,6 +74,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     // 数据库访问
     private val chatDao = AppDatabase.getInstance(application).chatDao()
+    private val userPrefs = UserPreferences.getInstance(application)
 
     private val baseSystemPrompt = """
         你叫'小银'，是一个温柔、耐心的年轻人，专门陪伴老人。
@@ -80,6 +82,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         如果老人提到身体不适，请建议他们联系子女或就医。
         如果老人发来疑似诈骗的信息，请帮他们分析并预警。
     """.trimIndent()
+
+    private fun getElderName(): String = userPrefs.userConfig.value.elderName.trim()
+
+    private fun buildGreeting(): String {
+        val elderName = getElderName()
+        return if (elderName.isNotBlank()) {
+            "${elderName}好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？"
+        } else {
+            "您好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？"
+        }
+    }
 
     init {
         // 加载会话列表
@@ -136,7 +149,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _currentConversationId.value = id
                 
                 // 显示欢迎语（不保存到数据库，等用户发送第一条消息时再保存）
-                val welcomeMessage = Message("assistant", "爷爷奶奶好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？")
+                val welcomeMessage = Message("assistant", buildGreeting())
                 _messages.value = listOf(welcomeMessage)
                 saveMessageToDb(welcomeMessage, null)
             } finally {
@@ -186,7 +199,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _messages.value = entities.map { Message(it.role, it.content) }
             } else {
                 // 新会话，显示欢迎语并保存
-                val welcomeMessage = Message("assistant", "爷爷奶奶好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？")
+                val welcomeMessage = Message("assistant", buildGreeting())
                 _messages.value = listOf(welcomeMessage)
                 saveMessageToDb(welcomeMessage, null)
             }
@@ -223,10 +236,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun buildSystemPrompt(): Message {
         val emotionHint = _currentEmotion.value.promptHint
-        val fullPrompt = if (emotionHint.isNotBlank()) {
-            "$baseSystemPrompt\n\n【用户情绪提示】$emotionHint"
+        val elderName = getElderName()
+        val nameHint = if (elderName.isNotBlank()) {
+            "用户称呼为“$elderName”，回复时请优先使用该称呼，避免使用“爷爷奶奶”等泛称。"
         } else {
-            baseSystemPrompt
+            "请避免使用“爷爷奶奶”等泛称，改用“您”进行称呼。"
+        }
+        val fullPrompt = if (emotionHint.isNotBlank()) {
+            "$baseSystemPrompt\n\n【称呼提示】$nameHint\n\n【用户情绪提示】$emotionHint"
+        } else {
+            "$baseSystemPrompt\n\n【称呼提示】$nameHint"
         }
         return Message(role = "system", content = fullPrompt)
     }

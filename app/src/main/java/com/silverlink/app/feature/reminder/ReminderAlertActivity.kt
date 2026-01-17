@@ -57,10 +57,24 @@ class ReminderAlertActivity : ComponentActivity() {
                         // 标记药品为已服用
                         markMedicationAsTaken(medId)
                         finish()
+                    },
+                    onSnooze = {
+                        stopRingtone()
+                        // 设置10分钟后再次提醒
+                        scheduleSnooze(medId, medName, medDosage)
+                        finish()
                     }
                 )
             }
         }
+    }
+
+    /**
+     * 设置稍后提醒（10分钟后）
+     */
+    private fun scheduleSnooze(medId: Int, medName: String, medDosage: String) {
+        val alarmScheduler = AlarmScheduler(this)
+        alarmScheduler.scheduleSnooze(medId, medName, medDosage)
     }
 
     /**
@@ -111,7 +125,8 @@ class ReminderAlertActivity : ComponentActivity() {
 fun ReminderAlertScreen(
     medName: String,
     medDosage: String,
-    onConfirmed: () -> Unit
+    onConfirmed: () -> Unit,
+    onSnooze: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -154,7 +169,7 @@ fun ReminderAlertScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(64.dp))
+        Spacer(modifier = Modifier.height(48.dp))
         
         Button(
             onClick = onConfirmed,
@@ -170,6 +185,25 @@ fun ReminderAlertScreen(
             Text(
                 text = "我吃过了",
                 style = MaterialTheme.typography.headlineMedium
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Button(
+            onClick = onSnooze,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White.copy(alpha = 0.3f),
+                contentColor = Color.White
+            )
+        ) {
+            Text(
+                text = "稍后提醒（10分钟）",
+                style = MaterialTheme.typography.titleLarge
             )
         }
     }

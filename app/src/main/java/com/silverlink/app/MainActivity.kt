@@ -10,10 +10,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.silverlink.app.ui.theme.SilverLinkTheme
 import com.silverlink.app.ui.MainScreen
+import com.silverlink.app.ui.onboarding.OnboardingNavigation
 
 class MainActivity : ComponentActivity() {
     
@@ -30,8 +35,20 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             SilverLinkTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    MainScreen(modifier = Modifier.padding(innerPadding))
+                var showOnboarding by remember { mutableStateOf(true) }
+                
+                if (showOnboarding) {
+                    // 显示引导流程
+                    OnboardingNavigation(
+                        onOnboardingComplete = {
+                            showOnboarding = false
+                        }
+                    )
+                } else {
+                    // 显示主应用
+                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                        MainScreen(modifier = Modifier.padding(innerPadding))
+                    }
                 }
             }
         }
