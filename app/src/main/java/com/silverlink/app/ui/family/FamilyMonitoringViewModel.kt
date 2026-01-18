@@ -3,19 +3,26 @@ package com.silverlink.app.ui.family
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.silverlink.app.data.remote.MedicationData
 import com.silverlink.app.data.remote.MedicationLogData
 import com.silverlink.app.data.remote.MoodLogData
 import com.silverlink.app.data.repository.SyncRepository
+import com.silverlink.app.ui.components.ChartType
+import com.silverlink.app.ui.components.MedicationStatus
+import com.silverlink.app.ui.components.MoodTimePoint
+import com.silverlink.app.ui.components.TimeRange
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
- * 家人端某天的摘要数据
+ * 家人端某天的摘要数据（保留兼容）
  */
 data class FamilyDaySummary(
     val date: String,
@@ -38,12 +45,15 @@ sealed class LoadingState {
 
 /**
  * 家人端监控ViewModel
- * 从云端获取已配对长辈的服药和情绪记录
+ * 从云端获取已配对长辈的服药和情绪记录（统一UI风格）
  */
 class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(application) {
     
     private val syncRepository = SyncRepository.getInstance(application)
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+    }
     
     // 加载状态
     private val _loadingState = MutableStateFlow<LoadingState>(LoadingState.Idle)
@@ -53,25 +63,37 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     private val _isPaired = MutableStateFlow(false)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
     
+    // 时间范围
+    private val _selectedRange = MutableStateFlow(TimeRange.DAY)
+    val selectedRange: StateFlow<TimeRange> = _selectedRange.asStateFlow()
+    
     // 选中的日期
-    private val _selectedDate = MutableStateFlow(dateFormat.format(java.util.Date()))
-    val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
+    private val _selectedDate = MutableStateFlow(Date())
+    val selectedDate: StateFlow<Date> = _selectedDate.asStateFlow()
     
-    // 当月摘要
-    private val _monthSummaries = MutableStateFlow<Map<String, FamilyDaySummary>>(emptyMap())
-    val monthSummaries: StateFlow<Map<String, FamilyDaySummary>> = _monthSummaries.asStateFlow()
+    // 图表类型
+    private val _chartType = MutableStateFlow(ChartType.MOOD)
+    val chartType: StateFlow<ChartType> = _chartType.asStateFlow()
     
-    // 选中日期的服药记录
-    private val _medicationLogs = MutableStateFlow<List<MedicationLogData>>(emptyList())
-    val medicationLogs: StateFlow<List<MedicationLogData>> = _medicationLogs.asStateFlow()
+    // 情绪数据点
+    private val _moodPoints = MutableStateFlow<List<MoodTimePoint>>(emptyList())
+    val moodPoints: StateFlow<List<MoodTimePoint>> = _moodPoints.asStateFlow()
     
-    // 选中日期的情绪记录
-    private val _moodLogs = MutableStateFlow<List<MoodLogData>>(emptyList())
-    val moodLogs: StateFlow<List<MoodLogData>> = _moodLogs.asStateFlow()
+    // 药品服用状态
+    private val _medicationStatuses = MutableStateFlow<List<MedicationStatus>>(emptyList())
+    val medicationStatuses: StateFlow<List<MedicationStatus>> = _medicationStatuses.asStateFlow()
     
-    // 当前显示的年月
-    private val _currentMonth = MutableStateFlow(Calendar.getInstance())
-    val currentMonth: StateFlow<Calendar> = _currentMonth.asStateFlow()
+    // 当前情绪
+    private val _currentMood = MutableStateFlow<String?>(null)
+    val currentMood: StateFlow<String?> = _currentMood.asStateFlow()
+    
+    // 最新时间
+    private val _latestTime = MutableStateFlow<String?>(null)
+    val latestTime: StateFlow<String?> = _latestTime.asStateFlow()
+    
+    // 选中的情绪点（用于显示详情）
+    private val _selectedMoodPoint = MutableStateFlow<MoodTimePoint?>(null)
+    val selectedMoodPoint: StateFlow<MoodTimePoint?> = _selectedMoodPoint.asStateFlow()
     
     // 长辈名字
     private val _elderName = MutableStateFlow("")
@@ -81,6 +103,24 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         loadData()
     }
     
+    fun setTimeRange(range: TimeRange) {
+        _selectedRange.value = range
+        loadData()
+    }
+    
+    fun setSelectedDate(date: Date) {
+        _selectedDate.value = date
+        loadData()
+    }
+    
+    fun setChartType(type: ChartType) {
+        _chartType.value = type
+    }
+    
+    fun selectMoodPoint(point: MoodTimePoint?) {
+        _selectedMoodPoint.value = point
+    }
+    
     /**
      * 加载数据
      */
@@ -88,12 +128,21 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         viewModelScope.launch {
             _loadingState.value = LoadingState.Loading
             
-            // 获取服药记录（会自动获取配对的长辈设备ID）
-            val medicationResult = syncRepository.getElderMedicationLogs(date = null)
-            val moodResult = syncRepository.getElderMoodLogs(days = 30)
+            val dateStr = dateFormat.format(_selectedDate.value)
+            
+            // 获取服药记录
+            val medicationResult = syncRepository.getElderMedicationLogs(date = dateStr)
+            val medicationListResult = syncRepository.getElderMedicationsList()
+            // 获取情绪记录（根据时间范围确定天数）
+            val days = when (_selectedRange.value) {
+                TimeRange.DAY -> 1
+                TimeRange.WEEK -> 7
+                TimeRange.MONTH -> 30
+                TimeRange.YEAR -> 365
+            }
+            val moodResult = syncRepository.getElderMoodLogs(days = days)
             
             if (medicationResult.isFailure && moodResult.isFailure) {
-                // 两者都失败，可能未配对
                 val errorMsg = medicationResult.exceptionOrNull()?.message ?: "未知错误"
                 if (errorMsg.contains("未找到已配对")) {
                     _isPaired.value = false
@@ -106,89 +155,138 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             
             _isPaired.value = true
             
-            // 处理服药记录
-            val allMedLogs = medicationResult.getOrDefault(emptyList())
+            // 处理情绪数据
             val allMoodLogs = moodResult.getOrDefault(emptyList())
+            processMoodData(allMoodLogs, dateStr)
             
-            // 按日期分组生成摘要
-            val medByDate = allMedLogs.groupBy { it.date }
-            val moodByDate = allMoodLogs.groupBy { it.date }
-            
-            val allDates = (medByDate.keys + moodByDate.keys).distinct()
-            
-            val summaries = allDates.associateWith { date ->
-                val meds = medByDate[date] ?: emptyList()
-                val moods = moodByDate[date] ?: emptyList()
-                
-                FamilyDaySummary(
-                    date = date,
-                    takenCount = meds.count { it.status == "taken" },
-                    totalCount = meds.size,
-                    dominantMood = moods.maxByOrNull { m -> moods.count { it.mood == m.mood } }?.mood,
-                    hasMedicationLogs = meds.isNotEmpty(),
-                    hasMoodLogs = moods.isNotEmpty()
-                )
-            }
-            
-            _monthSummaries.value = summaries
-            
-            // 加载选中日期的详细记录
-            loadSelectedDateLogs(allMedLogs, allMoodLogs)
+            // 处理用药数据
+            val allMedLogs = medicationResult.getOrDefault(emptyList())
+            val allMedications = medicationListResult.getOrDefault(emptyList())
+            processMedicationData(allMedLogs, allMedications)
             
             _loadingState.value = LoadingState.Success()
         }
     }
     
-    /**
-     * 选择日期
-     */
-    fun selectDate(date: String) {
-        _selectedDate.value = date
-        // 从已加载的数据中筛选
-        viewModelScope.launch {
-            val medicationResult = syncRepository.getElderMedicationLogs(date = date)
-            val moodResult = syncRepository.getElderMoodLogs(days = 30)
+    private fun processMoodData(moodLogs: List<MoodLogData>, dateStr: String) {
+        // 筛选当天的情绪记录
+        val todayLogs = moodLogs.filter { it.date == dateStr }
+        
+        val points = todayLogs.map { log ->
+            val timestamp = parseCreatedAtToMillis(log.createdAt)
+            val time = formatTimeFromCreatedAt(log.createdAt, timestamp)
             
-            if (medicationResult.isSuccess) {
-                _medicationLogs.value = medicationResult.getOrDefault(emptyList())
-                    .filter { it.date == date }
+            MoodTimePoint(
+                time = time,
+                mood = log.mood,
+                note = log.note,
+                timestamp = timestamp ?: 0L
+            )
+        }.sortedBy { it.timestamp }
+        
+        _moodPoints.value = points
+        
+        // 设置当前情绪（最新的）
+        val latest = points.lastOrNull()
+        _currentMood.value = latest?.mood
+        _latestTime.value = latest?.time
+    }
+
+    private fun parseCreatedAtToMillis(raw: String): Long? {
+        val numeric = raw.trim().toLongOrNull()
+        if (numeric != null) {
+            return if (numeric in 1L..9_999_999_999L) numeric * 1000L else numeric
+        }
+
+        val patterns = listOf(
+            "EEE MMM dd yyyy HH:mm:ss 'GMT'Z (zzzz)",
+            "EEE MMM dd yyyy HH:mm:ss 'GMT'Z (z)",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSX",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy/MM/dd HH:mm:ss"
+        )
+
+        patterns.forEach { pattern ->
+            try {
+                val sdf = SimpleDateFormat(pattern, Locale.ENGLISH)
+                sdf.isLenient = true
+                sdf.timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+                val date = sdf.parse(raw)
+                if (date != null) return date.time
+            } catch (_: Exception) {
             }
-            
-            if (moodResult.isSuccess) {
-                _moodLogs.value = moodResult.getOrDefault(emptyList())
-                    .filter { it.date == date }
+        }
+
+        return null
+    }
+
+    private fun formatTimeFromCreatedAt(raw: String, millis: Long?): String {
+        return try {
+            if (raw.contains("GMT+0800") || raw.contains("China Standard Time")) {
+                val regex = Regex("\\d{2}:\\d{2}")
+                return regex.find(raw)?.value ?: "00:00"
             }
+
+            if (raw.contains("T") && raw.contains("Z")) {
+                val match = Regex("T(\\d{2}):(\\d{2})").find(raw)
+                if (match != null) {
+                    val hour = match.groupValues[1].toIntOrNull() ?: 0
+                    val minute = match.groupValues[2].toIntOrNull() ?: 0
+                    val converted = (hour + 8) % 24
+                    return String.format(Locale.getDefault(), "%02d:%02d", converted, minute)
+                }
+            }
+
+            if (millis != null && millis > 0) {
+                timeFormat.format(Date(millis))
+            } else {
+                val regex = Regex("\\d{2}:\\d{2}")
+                regex.find(raw)?.value ?: "00:00"
+            }
+        } catch (e: Exception) {
+            "00:00"
         }
     }
     
-    /**
-     * 加载选中日期的记录
-     */
-    private fun loadSelectedDateLogs(
-        allMedLogs: List<MedicationLogData>,
-        allMoodLogs: List<MoodLogData>
+    private fun processMedicationData(
+        medLogs: List<MedicationLogData>,
+        medications: List<MedicationData>
     ) {
-        val date = _selectedDate.value
-        _medicationLogs.value = allMedLogs.filter { it.date == date }
-        _moodLogs.value = allMoodLogs.filter { it.date == date }
-    }
-    
-    /**
-     * 上个月
-     */
-    fun previousMonth() {
-        val newMonth = _currentMonth.value.clone() as Calendar
-        newMonth.add(Calendar.MONTH, -1)
-        _currentMonth.value = newMonth
-    }
-    
-    /**
-     * 下个月
-     */
-    fun nextMonth() {
-        val newMonth = _currentMonth.value.clone() as Calendar
-        newMonth.add(Calendar.MONTH, 1)
-        _currentMonth.value = newMonth
+        val logsByMedication = medLogs.groupBy { it.medicationName }
+
+        val statusesFromList = medications.map { med ->
+            val logs = logsByMedication[med.name] ?: emptyList()
+            val takenTimes = logs.filter { it.status == "taken" }.map { it.scheduledTime }.toSet()
+            val times = med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            
+            MedicationStatus(
+                name = med.name,
+                dosage = med.dosage,
+                times = times,
+                takenTimes = takenTimes
+            )
+        }
+
+        // 兜底：如果列表为空但有日志，仍然显示日志中的药品
+        val statusesFromLogs = logsByMedication.map { (name, logs) ->
+            val firstLog = logs.first()
+            val takenTimes = logs.filter { it.status == "taken" }.map { it.scheduledTime }.toSet()
+            val allTimes = logs.map { it.scheduledTime }.distinct()
+            
+            MedicationStatus(
+                name = name,
+                dosage = firstLog.dosage,
+                times = allTimes,
+                takenTimes = takenTimes
+            )
+        }
+
+        _medicationStatuses.value = if (statusesFromList.isNotEmpty()) {
+            statusesFromList
+        } else {
+            statusesFromLogs
+        }
     }
     
     /**
