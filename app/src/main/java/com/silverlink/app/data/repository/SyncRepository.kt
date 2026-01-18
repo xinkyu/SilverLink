@@ -147,6 +147,15 @@ class SyncRepository(private val context: Context) {
         // 传递 familyDeviceId 进行配对验证
         cloudBase.getMedicationLogs(targetDeviceId, currentDeviceId, date)
     }
+
+    /**
+     * 长辈端获取自己的服药记录（不需要配对验证）
+     */
+    suspend fun getSelfMedicationLogs(
+        date: String? = null
+    ): Result<List<MedicationLogData>> = withContext(Dispatchers.IO) {
+        cloudBase.getMedicationLogs(currentDeviceId, null, date)
+    }
     
     // ==================== 情绪记录同步 ====================
     
@@ -192,6 +201,15 @@ class SyncRepository(private val context: Context) {
         
         // 传递 familyDeviceId 进行配对验证
         cloudBase.getMoodLogs(targetDeviceId, currentDeviceId, days)
+    }
+
+    /**
+     * 长辈端获取自己的情绪记录（不需要配对验证）
+     */
+    suspend fun getSelfMoodLogs(
+        days: Int = 7
+    ): Result<List<MoodLogData>> = withContext(Dispatchers.IO) {
+        cloudBase.getMoodLogs(currentDeviceId, null, days)
     }
     
     // ==================== 药品管理 ====================
@@ -247,6 +265,13 @@ class SyncRepository(private val context: Context) {
         }
         
         cloudBase.getMedicationList(elderDeviceId)
+    }
+
+    /**
+     * 长辈端获取自己的药品列表（不需要配对验证）
+     */
+    suspend fun getSelfMedicationsList(): Result<List<MedicationData>> = withContext(Dispatchers.IO) {
+        cloudBase.getMedicationList(currentDeviceId)
     }
     
     /**
@@ -305,6 +330,126 @@ class SyncRepository(private val context: Context) {
             android.util.Log.e("SyncRepository", "同步药品失败: ${e.message}")
             Result.failure(e)
         }
+    }
+    
+    /**
+     * 从云端同步服药记录到本地（长辈端调用）
+     */
+    suspend fun syncMedicationLogsFromCloud(
+        historyDao: com.silverlink.app.data.local.dao.HistoryDao,
+        date: String? = null
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            android.util.Log.d("SyncRepository", "开始同步服药记录, elderDeviceId=$currentDeviceId, date=$date")
+            
+            // 长辈端直接用自己的设备ID获取服药记录，不需要配对验证
+            val cloudLogs = cloudBase.getMedicationLogs(currentDeviceId, null, date).getOrNull()
+                ?: return@withContext Result.success(0)
+            
+            android.util.Log.d("SyncRepository", "从云端获取到 ${cloudLogs.size} 条服药记录")
+            
+            var syncedCount = 0
+            for (cloudLog in cloudLogs) {
+                // 检查本地是否已存在该记录（根据日期、药品名和时间点）
+                val existingCount = historyDao.getMedicationLogCount(
+                    date = cloudLog.date,
+                    medicationId = cloudLog.medicationId,
+                    scheduledTime = cloudLog.scheduledTime
+                )
+                
+                if (existingCount == 0) {
+                    val localLog = com.silverlink.app.data.local.entity.MedicationLogEntity(
+                        medicationId = cloudLog.medicationId,
+                        medicationName = cloudLog.medicationName,
+                        dosage = cloudLog.dosage,
+                        scheduledTime = cloudLog.scheduledTime,
+                        status = cloudLog.status,
+                        date = cloudLog.date
+                    )
+                    historyDao.insertMedicationLog(localLog)
+                    syncedCount++
+                    android.util.Log.d("SyncRepository", "同步服药记录: ${cloudLog.medicationName} @ ${cloudLog.scheduledTime}")
+                }
+            }
+            
+            android.util.Log.d("SyncRepository", "服药记录同步完成, 新增 $syncedCount 条")
+            Result.success(syncedCount)
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "同步服药记录失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 从云端同步情绪记录到本地（长辈端调用）
+     */
+    suspend fun syncMoodLogsFromCloud(
+        historyDao: com.silverlink.app.data.local.dao.HistoryDao,
+        days: Int = 30
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            android.util.Log.d("SyncRepository", "开始同步情绪记录, elderDeviceId=$currentDeviceId")
+            
+            // 长辈端直接用自己的设备ID获取情绪记录
+            val cloudLogs = cloudBase.getMoodLogs(currentDeviceId, null, days).getOrNull()
+                ?: return@withContext Result.success(0)
+            
+            android.util.Log.d("SyncRepository", "从云端获取到 ${cloudLogs.size} 条情绪记录")
+            
+            var syncedCount = 0
+            for (cloudLog in cloudLogs) {
+                // 解析 createdAt 为时间戳
+                val timestamp = parseCreatedAtToMillis(cloudLog.createdAt)
+                
+                // 简单去重：检查相同日期和情绪的记录数
+                val existingLogs = historyDao.getMoodLogsByDate(cloudLog.date)
+                val isDuplicate = existingLogs.any { existing ->
+                    existing.mood.equals(cloudLog.mood, ignoreCase = true) &&
+                    existing.note == cloudLog.note
+                }
+                
+                if (!isDuplicate) {
+                    val localLog = com.silverlink.app.data.local.entity.MoodLogEntity(
+                        mood = cloudLog.mood.uppercase(),
+                        note = cloudLog.note,
+                        date = cloudLog.date,
+                        createdAt = timestamp ?: System.currentTimeMillis()
+                    )
+                    historyDao.insertMoodLog(localLog)
+                    syncedCount++
+                    android.util.Log.d("SyncRepository", "同步情绪记录: ${cloudLog.mood} @ ${cloudLog.date}")
+                }
+            }
+            
+            android.util.Log.d("SyncRepository", "情绪记录同步完成, 新增 $syncedCount 条")
+            Result.success(syncedCount)
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "同步情绪记录失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
+    private fun parseCreatedAtToMillis(raw: String): Long? {
+        val numeric = raw.trim().toLongOrNull()
+        if (numeric != null) {
+            return if (numeric in 1L..9_999_999_999L) numeric * 1000L else numeric
+        }
+        
+        try {
+            // ISO 8601 格式
+            if (raw.contains("T") && raw.contains("Z")) {
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+                sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                return sdf.parse(raw)?.time
+            }
+            if (raw.contains("T") && raw.endsWith("Z")) {
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                return sdf.parse(raw)?.time
+            }
+        } catch (_: Exception) {}
+        
+        return null
     }
     
     // ==================== 工具方法 ====================

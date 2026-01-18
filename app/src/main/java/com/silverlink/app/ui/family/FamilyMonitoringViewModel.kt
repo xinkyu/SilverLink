@@ -6,9 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.silverlink.app.data.remote.MedicationData
 import com.silverlink.app.data.remote.MedicationLogData
 import com.silverlink.app.data.remote.MoodLogData
+import com.silverlink.app.data.remote.RetrofitClient
+import com.silverlink.app.data.remote.model.Input
+import com.silverlink.app.data.remote.model.Message
+import com.silverlink.app.data.remote.model.QwenRequest
 import com.silverlink.app.data.repository.SyncRepository
 import com.silverlink.app.ui.components.ChartType
 import com.silverlink.app.ui.components.MedicationStatus
+import com.silverlink.app.ui.components.MedicationSummary
 import com.silverlink.app.ui.components.MoodTimePoint
 import com.silverlink.app.ui.components.TimeRange
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +25,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.max
 
 /**
  * 家人端某天的摘要数据（保留兼容）
@@ -82,6 +88,10 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     // 药品服用状态
     private val _medicationStatuses = MutableStateFlow<List<MedicationStatus>>(emptyList())
     val medicationStatuses: StateFlow<List<MedicationStatus>> = _medicationStatuses.asStateFlow()
+
+    // 用药统计（周/月/年）
+    private val _medicationSummary = MutableStateFlow<MedicationSummary?>(null)
+    val medicationSummary: StateFlow<MedicationSummary?> = _medicationSummary.asStateFlow()
     
     // 当前情绪
     private val _currentMood = MutableStateFlow<String?>(null)
@@ -94,6 +104,14 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     // 选中的情绪点（用于显示详情）
     private val _selectedMoodPoint = MutableStateFlow<MoodTimePoint?>(null)
     val selectedMoodPoint: StateFlow<MoodTimePoint?> = _selectedMoodPoint.asStateFlow()
+
+    // 情绪分析（周/月/年）
+    private val _moodAnalysis = MutableStateFlow<String?>(null)
+    val moodAnalysis: StateFlow<String?> = _moodAnalysis.asStateFlow()
+
+    // 情绪分析加载状态
+    private val _isAnalyzing = MutableStateFlow(false)
+    val isAnalyzing: StateFlow<Boolean> = _isAnalyzing.asStateFlow()
     
     // 长辈名字
     private val _elderName = MutableStateFlow("")
@@ -105,11 +123,13 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     
     fun setTimeRange(range: TimeRange) {
         _selectedRange.value = range
+        _selectedMoodPoint.value = null
         loadData()
     }
     
     fun setSelectedDate(date: Date) {
         _selectedDate.value = date
+        _selectedMoodPoint.value = null
         loadData()
     }
     
@@ -129,18 +149,25 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             _loadingState.value = LoadingState.Loading
             
             val dateStr = dateFormat.format(_selectedDate.value)
+            val (startDate, endDate) = getDateRange()
             
             // 获取服药记录
-            val medicationResult = syncRepository.getElderMedicationLogs(date = dateStr)
+            val medicationResult = if (_selectedRange.value == TimeRange.DAY) {
+                syncRepository.getElderMedicationLogs(date = dateStr)
+            } else {
+                syncRepository.getElderMedicationLogs(date = null)
+            }
             val medicationListResult = syncRepository.getElderMedicationsList()
             // 获取情绪记录（根据时间范围确定天数）
-            val days = when (_selectedRange.value) {
+            val rangeDays = when (_selectedRange.value) {
                 TimeRange.DAY -> 1
                 TimeRange.WEEK -> 7
                 TimeRange.MONTH -> 30
                 TimeRange.YEAR -> 365
             }
-            val moodResult = syncRepository.getElderMoodLogs(days = days)
+            val todayStr = dateFormat.format(Date())
+            val daysForQuery = max(rangeDays, daysBetweenInclusive(startDate, todayStr))
+            val moodResult = syncRepository.getElderMoodLogs(days = daysForQuery)
             
             if (medicationResult.isFailure && moodResult.isFailure) {
                 val errorMsg = medicationResult.exceptionOrNull()?.message ?: "未知错误"
@@ -157,22 +184,37 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             
             // 处理情绪数据
             val allMoodLogs = moodResult.getOrDefault(emptyList())
-            processMoodData(allMoodLogs, dateStr)
+            val points = processMoodData(allMoodLogs, startDate, endDate, _selectedRange.value)
             
             // 处理用药数据
             val allMedLogs = medicationResult.getOrDefault(emptyList())
             val allMedications = medicationListResult.getOrDefault(emptyList())
-            processMedicationData(allMedLogs, allMedications)
+            processMedicationData(allMedLogs, allMedications, startDate, endDate, _selectedRange.value)
             
+            // 周/月/年范围：进行情绪备注分析
+            if (_selectedRange.value != TimeRange.DAY) {
+                analyzeMoodNotes(points, _selectedRange.value)
+            } else {
+                _moodAnalysis.value = null
+            }
+
             _loadingState.value = LoadingState.Success()
         }
     }
     
-    private fun processMoodData(moodLogs: List<MoodLogData>, dateStr: String) {
-        // 筛选当天的情绪记录
-        val todayLogs = moodLogs.filter { it.date == dateStr }
+    private fun processMoodData(
+        moodLogs: List<MoodLogData>,
+        startDate: String,
+        endDate: String,
+        range: TimeRange
+    ): List<MoodTimePoint> {
+        val filteredLogs = if (range == TimeRange.DAY) {
+            moodLogs.filter { it.date == startDate }
+        } else {
+            moodLogs.filter { it.date >= startDate && it.date <= endDate }
+        }
         
-        val points = todayLogs.map { log ->
+        val points = filteredLogs.map { log ->
             val timestamp = parseCreatedAtToMillis(log.createdAt)
             val time = formatTimeFromCreatedAt(log.createdAt, timestamp)
             
@@ -190,6 +232,8 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         val latest = points.lastOrNull()
         _currentMood.value = latest?.mood
         _latestTime.value = latest?.time
+
+        return points
     }
 
     private fun parseCreatedAtToMillis(raw: String): Long? {
@@ -248,12 +292,84 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             "00:00"
         }
     }
+
+    private suspend fun analyzeMoodNotes(points: List<MoodTimePoint>, range: TimeRange) {
+        val notesByMood = points
+            .filter { it.note.isNotBlank() }
+            .groupBy { it.mood.uppercase() }
+
+        if (notesByMood.isEmpty()) {
+            _moodAnalysis.value = "暂无可分析的情绪备注"
+            return
+        }
+
+        _isAnalyzing.value = true
+
+        try {
+            val rangeLabel = when (range) {
+                TimeRange.WEEK -> "本周"
+                TimeRange.MONTH -> "本月"
+                TimeRange.YEAR -> "本年"
+                else -> "近期"
+            }
+
+            val notesSection = buildString {
+                notesByMood.forEach { (mood, pointsForMood) ->
+                    append("情绪: ").append(mood).append("\n")
+                    pointsForMood.take(8).forEachIndexed { index, point ->
+                        append("  ").append(index + 1).append(". ")
+                            .append(point.note.replace("\n", " "))
+                            .append("\n")
+                    }
+                    append("\n")
+                }
+            }
+
+            val prompt = """
+你是一名养老照护助手。请根据以下情绪备注，分析${rangeLabel}老人主要情绪分布的可能原因，并给出简短的关怀建议。
+要求：
+1) 按情绪分类输出原因分析（比如愉悦/平静/不愉悦/焦虑/生气等）。
+2) 每个情绪给出1-2条原因推测（不要涉及诊断）。
+3) 最后给出1-2条总体关怀建议。
+
+情绪备注：
+$notesSection
+""".trimIndent()
+
+            val request = QwenRequest(
+                input = Input(
+                    messages = listOf(
+                        Message(role = "user", content = prompt)
+                    )
+                )
+            )
+
+            val response = RetrofitClient.api.chat(request)
+            val content = response.output.choices?.firstOrNull()?.message?.content
+                ?: response.output.text
+                ?: "暂无分析结果"
+
+            _moodAnalysis.value = content
+        } catch (_: Exception) {
+            _moodAnalysis.value = "情绪分析暂不可用，请稍后重试。"
+        } finally {
+            _isAnalyzing.value = false
+        }
+    }
     
     private fun processMedicationData(
         medLogs: List<MedicationLogData>,
-        medications: List<MedicationData>
+        medications: List<MedicationData>,
+        startDate: String,
+        endDate: String,
+        range: TimeRange
     ) {
-        val logsByMedication = medLogs.groupBy { it.medicationName }
+        val filteredLogs = if (range == TimeRange.DAY) {
+            medLogs.filter { it.date == startDate }
+        } else {
+            medLogs.filter { it.date >= startDate && it.date <= endDate }
+        }
+        val logsByMedication = filteredLogs.groupBy { it.medicationName }
 
         val statusesFromList = medications.map { med ->
             val logs = logsByMedication[med.name] ?: emptyList()
@@ -286,6 +402,77 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             statusesFromList
         } else {
             statusesFromLogs
+        }
+
+        // 统计
+        val daysCount = daysBetweenInclusive(startDate, endDate).coerceAtLeast(1)
+        val totalCount = medications.sumOf { med ->
+            med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size * daysCount
+        }
+        val takenCount = filteredLogs.count { it.status == "taken" }
+
+        val takenByMed = filteredLogs
+            .filter { it.status == "taken" }
+            .groupBy { it.medicationName }
+            .mapValues { it.value.size }
+
+        val missedByMedication = medications.mapNotNull { med ->
+            val timesCount = med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size
+            val expected = timesCount * daysCount
+            val taken = takenByMed[med.name] ?: 0
+            val missed = (expected - taken).coerceAtLeast(0)
+            if (missed > 0) med.name to missed else null
+        }
+
+        _medicationSummary.value = MedicationSummary(
+            takenCount = takenCount,
+            totalCount = totalCount,
+            missedByMedication = missedByMedication
+        )
+    }
+
+    private fun getDateRange(): Pair<String, String> {
+        val cal = Calendar.getInstance()
+        cal.time = _selectedDate.value
+
+        return when (_selectedRange.value) {
+            TimeRange.DAY -> {
+                val date = dateFormat.format(cal.time)
+                date to date
+            }
+            TimeRange.WEEK -> {
+                cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
+                val start = dateFormat.format(cal.time)
+                cal.add(Calendar.DAY_OF_WEEK, 6)
+                val end = dateFormat.format(cal.time)
+                start to end
+            }
+            TimeRange.MONTH -> {
+                cal.set(Calendar.DAY_OF_MONTH, 1)
+                val start = dateFormat.format(cal.time)
+                cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
+                val end = dateFormat.format(cal.time)
+                start to end
+            }
+            TimeRange.YEAR -> {
+                cal.set(Calendar.DAY_OF_YEAR, 1)
+                val start = dateFormat.format(cal.time)
+                cal.set(Calendar.DAY_OF_YEAR, cal.getActualMaximum(Calendar.DAY_OF_YEAR))
+                val end = dateFormat.format(cal.time)
+                start to end
+            }
+        }
+    }
+
+    private fun daysBetweenInclusive(startDate: String, endDate: String): Int {
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val start = sdf.parse(startDate) ?: return 1
+            val end = sdf.parse(endDate) ?: return 1
+            val diff = end.time - start.time
+            (diff / (24 * 60 * 60 * 1000L)).toInt() + 1
+        } catch (_: Exception) {
+            1
         }
     }
     

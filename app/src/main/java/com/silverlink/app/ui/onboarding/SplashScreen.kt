@@ -2,6 +2,7 @@ package com.silverlink.app.ui.onboarding
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,14 +19,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-// 暖杏色背景
-val WarmApricot = Color(0xFFFDDCAF)
+// 橙色系背景
+val WarmApricot = Color(0xFFF59A1B)
 
 /**
  * 启动页
@@ -36,10 +39,15 @@ fun SplashScreen(
     onSplashFinished: () -> Unit
 ) {
     val alpha = remember { Animatable(0f) }
+    val scale = remember { Animatable(0.9f) }
     
     LaunchedEffect(Unit) {
         // 淡入动画
         alpha.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 1000)
+        )
+        scale.animateTo(
             targetValue = 1f,
             animationSpec = tween(durationMillis = 1000)
         )
@@ -60,10 +68,13 @@ fun SplashScreen(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.alpha(alpha.value)
         ) {
-            // Logo - 两只手相握的简笔画图标
-            HandsLogoIcon(
-                modifier = Modifier.size(160.dp),
-                tint = Color(0xFF8D6E63) // 温暖的棕色
+            // Logo - 使用新图标
+            Image(
+                painter = painterResource(id = com.silverlink.app.R.drawable.ic_app_logo),
+                contentDescription = "银龄守护Logo",
+                modifier = Modifier
+                    .size(180.dp)
+                    .scale(scale.value)
             )
             
             Spacer(modifier = Modifier.height(32.dp))
@@ -73,7 +84,7 @@ fun SplashScreen(
                 text = "SilverLink",
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Light,
-                color = Color(0xFF5D4037),
+                color = Color.White,
                 letterSpacing = 2.sp
             )
             
@@ -83,7 +94,7 @@ fun SplashScreen(
                 text = "银龄守护",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Normal,
-                color = Color(0xFF8D6E63),
+                color = Color.White.copy(alpha = 0.9f),
                 letterSpacing = 4.sp
             )
         }

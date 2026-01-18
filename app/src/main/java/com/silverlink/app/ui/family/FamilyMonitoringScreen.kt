@@ -49,7 +49,10 @@ import com.silverlink.app.ui.components.HealthTopBar
 import com.silverlink.app.ui.components.HeroStatusDisplay
 import com.silverlink.app.ui.components.MedicationFormDialog
 import com.silverlink.app.ui.components.MedicationStatusDisplay
+import com.silverlink.app.ui.components.MedicationSummaryCard
+import com.silverlink.app.ui.components.MoodAnalysisCard
 import com.silverlink.app.ui.components.MoodDetailCard
+import com.silverlink.app.ui.components.MoodDistributionDonutChart
 import com.silverlink.app.ui.components.MoodTimelineChart
 import com.silverlink.app.ui.components.TimeRangeSelector
 
@@ -69,9 +72,12 @@ fun FamilyMonitoringScreen(
     val chartType by viewModel.chartType.collectAsState()
     val moodPoints by viewModel.moodPoints.collectAsState()
     val medicationStatuses by viewModel.medicationStatuses.collectAsState()
+    val medicationSummary by viewModel.medicationSummary.collectAsState()
     val currentMood by viewModel.currentMood.collectAsState()
     val latestTime by viewModel.latestTime.collectAsState()
     val selectedMoodPoint by viewModel.selectedMoodPoint.collectAsState()
+    val moodAnalysis by viewModel.moodAnalysis.collectAsState()
+    val isAnalyzing by viewModel.isAnalyzing.collectAsState()
     val addMedicationState by viewModel.addMedicationState.collectAsState()
     
     var showAddDialog by remember { mutableStateOf(false) }
@@ -195,16 +201,28 @@ fun FamilyMonitoringScreen(
                                 exit = fadeOut() + shrinkVertically()
                             ) {
                                 Column {
-                                    MoodTimelineChart(
-                                        moodPoints = moodPoints,
-                                        onPointClick = { viewModel.selectMoodPoint(it) }
-                                    )
-                                    
-                                    selectedMoodPoint?.let { point ->
+                                    if (selectedRange == com.silverlink.app.ui.components.TimeRange.DAY) {
+                                        MoodTimelineChart(
+                                            moodPoints = moodPoints,
+                                            onPointClick = { viewModel.selectMoodPoint(it) }
+                                        )
+                                        
+                                        selectedMoodPoint?.let { point ->
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            MoodDetailCard(
+                                                moodPoint = point,
+                                                onDismiss = { viewModel.selectMoodPoint(null) }
+                                            )
+                                        }
+                                    } else {
+                                        MoodDistributionDonutChart(
+                                            moodPoints = moodPoints
+                                        )
+                                        
                                         Spacer(modifier = Modifier.height(16.dp))
-                                        MoodDetailCard(
-                                            moodPoint = point,
-                                            onDismiss = { viewModel.selectMoodPoint(null) }
+                                        MoodAnalysisCard(
+                                            analysis = moodAnalysis,
+                                            isLoading = isAnalyzing
                                         )
                                     }
                                 }
@@ -216,9 +234,15 @@ fun FamilyMonitoringScreen(
                                 enter = fadeIn() + expandVertically(),
                                 exit = fadeOut() + shrinkVertically()
                             ) {
-                                MedicationStatusDisplay(
-                                    medicationStatuses = medicationStatuses
-                                )
+                                if (selectedRange == com.silverlink.app.ui.components.TimeRange.DAY) {
+                                    MedicationStatusDisplay(
+                                        medicationStatuses = medicationStatuses
+                                    )
+                                } else {
+                                    MedicationSummaryCard(
+                                        summary = medicationSummary
+                                    )
+                                }
                             }
                             
                             // 无数据提示
@@ -226,8 +250,15 @@ fun FamilyMonitoringScreen(
                                 EmptyStateHint(type = "情绪")
                             }
                             
-                            if (chartType == ChartType.MEDICATION && medicationStatuses.isEmpty()) {
-                                EmptyStateHint(type = "用药")
+                            if (chartType == ChartType.MEDICATION) {
+                                val showEmpty = if (selectedRange == com.silverlink.app.ui.components.TimeRange.DAY) {
+                                    medicationStatuses.isEmpty()
+                                } else {
+                                    medicationSummary == null || (medicationSummary?.totalCount ?: 0) == 0
+                                }
+                                if (showEmpty) {
+                                    EmptyStateHint(type = "用药")
+                                }
                             }
                             
                             Spacer(modifier = Modifier.height(80.dp)) // FAB空间

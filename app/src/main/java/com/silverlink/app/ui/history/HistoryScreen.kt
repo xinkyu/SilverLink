@@ -35,7 +35,10 @@ import com.silverlink.app.ui.components.ChartTypeToggle
 import com.silverlink.app.ui.components.HealthTopBar
 import com.silverlink.app.ui.components.HeroStatusDisplay
 import com.silverlink.app.ui.components.MedicationStatusDisplay
+import com.silverlink.app.ui.components.MedicationSummaryCard
+import com.silverlink.app.ui.components.MoodAnalysisCard
 import com.silverlink.app.ui.components.MoodDetailCard
+import com.silverlink.app.ui.components.MoodDistributionDonutChart
 import com.silverlink.app.ui.components.MoodTimelineChart
 import com.silverlink.app.ui.components.TimeRange
 import com.silverlink.app.ui.components.TimeRangeSelector
@@ -55,9 +58,12 @@ fun HistoryScreen(
     val chartType by viewModel.chartType.collectAsState()
     val moodPoints by viewModel.moodPoints.collectAsState()
     val medicationStatuses by viewModel.medicationStatuses.collectAsState()
+    val medicationSummary by viewModel.medicationSummary.collectAsState()
     val currentMood by viewModel.currentMood.collectAsState()
     val latestTime by viewModel.latestTime.collectAsState()
     val selectedMoodPoint by viewModel.selectedMoodPoint.collectAsState()
+    val moodAnalysis by viewModel.moodAnalysis.collectAsState()
+    val isAnalyzing by viewModel.isAnalyzing.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     
     val gradientBrush = Brush.verticalGradient(
@@ -127,18 +133,31 @@ fun HistoryScreen(
                         exit = fadeOut() + shrinkVertically()
                     ) {
                         Column {
-                            // 情绪时间轴图表
-                            MoodTimelineChart(
-                                moodPoints = moodPoints,
-                                onPointClick = { viewModel.selectMoodPoint(it) }
-                            )
-                            
-                            // E: 选中情绪点的详情卡片
-                            selectedMoodPoint?.let { point ->
+                            if (selectedRange == TimeRange.DAY) {
+                                // 情绪时间轴图表
+                                MoodTimelineChart(
+                                    moodPoints = moodPoints,
+                                    onPointClick = { viewModel.selectMoodPoint(it) }
+                                )
+                                
+                                // 选中情绪点的详情卡片
+                                selectedMoodPoint?.let { point ->
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    MoodDetailCard(
+                                        moodPoint = point,
+                                        onDismiss = { viewModel.selectMoodPoint(null) }
+                                    )
+                                }
+                            } else {
+                                // 周/月/年：情绪分布环形图 + AI分析
+                                MoodDistributionDonutChart(
+                                    moodPoints = moodPoints
+                                )
+                                
                                 Spacer(modifier = Modifier.height(16.dp))
-                                MoodDetailCard(
-                                    moodPoint = point,
-                                    onDismiss = { viewModel.selectMoodPoint(null) }
+                                MoodAnalysisCard(
+                                    analysis = moodAnalysis,
+                                    isLoading = isAnalyzing
                                 )
                             }
                         }
@@ -149,10 +168,15 @@ fun HistoryScreen(
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically()
                     ) {
-                        // 用药状态显示
-                        MedicationStatusDisplay(
-                            medicationStatuses = medicationStatuses
-                        )
+                        if (selectedRange == TimeRange.DAY) {
+                            MedicationStatusDisplay(
+                                medicationStatuses = medicationStatuses
+                            )
+                        } else {
+                            MedicationSummaryCard(
+                                summary = medicationSummary
+                            )
+                        }
                     }
                     
                     // 无数据提示
@@ -160,8 +184,15 @@ fun HistoryScreen(
                         EmptyStateHint(type = "情绪")
                     }
                     
-                    if (chartType == ChartType.MEDICATION && medicationStatuses.isEmpty()) {
-                        EmptyStateHint(type = "用药")
+                    if (chartType == ChartType.MEDICATION) {
+                        val showEmpty = if (selectedRange == TimeRange.DAY) {
+                            medicationStatuses.isEmpty()
+                        } else {
+                            medicationSummary == null || (medicationSummary?.totalCount ?: 0) == 0
+                        }
+                        if (showEmpty) {
+                            EmptyStateHint(type = "用药")
+                        }
                     }
                     
                     Spacer(modifier = Modifier.height(32.dp))

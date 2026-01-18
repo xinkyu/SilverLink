@@ -300,8 +300,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun saveMoodLog(emotion: Emotion, triggerText: String) {
         try {
-            val currentDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+            val currentDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                 .format(java.util.Date())
+            
+            Log.d(TAG, "Saving mood log: emotion=${emotion.name}, date=$currentDate, text=${triggerText.take(50)}")
             
             // 保存到本地历史记录
             val moodLogEntity = com.silverlink.app.data.local.entity.MoodLogEntity(
@@ -309,7 +311,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 note = triggerText.take(100), // 截取前100个字符作为摘要
                 date = currentDate
             )
-            historyDao.insertMoodLog(moodLogEntity)
+            val insertedId = historyDao.insertMoodLog(moodLogEntity)
+            Log.d(TAG, "Mood log saved to local database with id: $insertedId")
             
             // 同步到云端（静默失败）
             syncRepository.syncMoodLog(

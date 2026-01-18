@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +31,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -38,7 +40,7 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
@@ -54,15 +56,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -86,6 +93,18 @@ data class MedicationStatus(
     val dosage: String,
     val times: List<String>,        // ["08:00", "12:00", "18:00"]
     val takenTimes: Set<String>     // 已服用的时间点
+)
+
+data class MedicationSummary(
+    val takenCount: Int,
+    val totalCount: Int,
+    val missedByMedication: List<Pair<String, Int>>
+)
+
+data class MoodDistributionSlice(
+    val label: String,
+    val count: Int,
+    val color: Color
 )
 
 // ==================== 颜色定义 ====================
@@ -118,6 +137,133 @@ fun getMoodDisplayText(mood: String): String {
     }
 }
 
+private fun markdownToAnnotatedString(text: String) = buildAnnotatedString {
+    val lines = text.trim().lines()
+    var inCodeBlock = false
+
+    fun appendInlineMarkdown(line: String) {
+        var i = 0
+        while (i < line.length) {
+            when {
+                line.startsWith("**", i) -> {
+                    val end = line.indexOf("**", i + 2)
+                    if (end != -1) {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                            append(line.substring(i + 2, end))
+                        }
+                        i = end + 2
+                    } else {
+                        append(line[i])
+                        i++
+                    }
+                }
+                line.startsWith("`", i) -> {
+                    val end = line.indexOf('`', i + 1)
+                    if (end != -1) {
+                        withStyle(SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)) {
+                            append(line.substring(i + 1, end))
+                        }
+                        i = end + 1
+                    } else {
+                        append(line[i])
+                        i++
+                    }
+                }
+                line.startsWith("*", i) -> {
+                    val end = line.indexOf('*', i + 1)
+                    if (end != -1) {
+                        withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) {
+                            append(line.substring(i + 1, end))
+                        }
+                        i = end + 1
+                    } else {
+                        append(line[i])
+                        i++
+                    }
+                }
+                line.startsWith("__", i) -> {
+                    val end = line.indexOf("__", i + 2)
+                    if (end != -1) {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                            append(line.substring(i + 2, end))
+                        }
+                        i = end + 2
+                    } else {
+                        append(line[i])
+                        i++
+                    }
+                }
+                else -> {
+                    append(line[i])
+                    i++
+                }
+            }
+        }
+    }
+
+    lines.forEachIndexed { index, rawLine ->
+        var line = rawLine
+
+        if (line.startsWith("```")) {
+            inCodeBlock = !inCodeBlock
+            return@forEachIndexed
+        }
+
+        if (inCodeBlock) {
+            withStyle(SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)) {
+                append(line)
+            }
+        } else {
+            when {
+                line.startsWith("# ") -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)) {
+                        append(line.removePrefix("# "))
+                    }
+                }
+                line.startsWith("## ") -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp)) {
+                        append(line.removePrefix("## "))
+                    }
+                }
+                line.startsWith("### ") -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp)) {
+                        append(line.removePrefix("### "))
+                    }
+                }
+                line.matches(Regex("^[-*+]\\s+.*")) -> {
+                    append("• ")
+                    appendInlineMarkdown(line.replace(Regex("^[-*+]\\s+"), ""))
+                }
+                line.matches(Regex("^\\d+\\.\\s+.*")) -> {
+                    val number = line.substringBefore('.')
+                    append(number)
+                    append(". ")
+                    appendInlineMarkdown(line.replace(Regex("^\\d+\\.\\s+"), ""))
+                }
+                else -> appendInlineMarkdown(line)
+            }
+        }
+
+        if (index != lines.lastIndex) {
+            append("\n")
+        }
+    }
+}
+
+private fun buildMoodDistribution(points: List<MoodTimePoint>): List<MoodDistributionSlice> {
+    val grouped = points.groupBy { getMoodDisplayText(it.mood) }
+    val order = listOf("愉悦", "平静", "不愉悦", "焦虑", "生气")
+    return order.mapNotNull { label ->
+        val count = grouped[label]?.size ?: 0
+        if (count <= 0) return@mapNotNull null
+        MoodDistributionSlice(
+            label = label,
+            count = count,
+            color = getMoodColor(label)
+        )
+    }
+}
+
 // ==================== A. 顶栏导航 ====================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -127,16 +273,14 @@ fun HealthTopBar(
     onRefresh: () -> Unit,
     primaryColor: Color = MaterialTheme.colorScheme.primary
 ) {
-    TopAppBar(
+    CenterAlignedTopAppBar(
         title = {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold
-                    )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold
                 )
-            }
+            )
         },
         actions = {
             IconButton(onClick = onRefresh) {
@@ -319,6 +463,35 @@ private fun sanitizeTime(raw: String): String {
     return regex.find(raw)?.value ?: raw.takeLast(5)
 }
 
+private fun minutesOfDay(point: MoodTimePoint): Int {
+    // 优先使用 time 字符串（已经是格式化好的本地时间）
+    val normalized = point.time.replace("：", ":")
+    val match = Regex("(\\d{1,2}):(\\d{2})").find(normalized)
+    if (match != null) {
+        val hours = match.groupValues[1].toIntOrNull() ?: 0
+        val minutes = match.groupValues[2].toIntOrNull() ?: 0
+        if (hours in 0..23 && minutes in 0..59) {
+            return hours * 60 + minutes
+        }
+    }
+
+    // 回退到时间戳计算
+    if (point.timestamp > 0) {
+        val millis = if (point.timestamp in 1L..9_999_999_999L) {
+            point.timestamp * 1000L
+        } else {
+            point.timestamp
+        }
+        val cal = Calendar.getInstance().apply {
+            timeZone = TimeZone.getTimeZone("GMT+8")
+            timeInMillis = millis
+        }
+        return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+    }
+
+    return 0
+}
+
 // ==================== D. 时间轴分布图 ====================
 
 enum class ChartType(val label: String) {
@@ -372,7 +545,9 @@ fun MoodTimelineChart(
     onPointClick: (MoodTimePoint) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val timeLabels = listOf("00:00", "06:00", "12:00", "18:00", "24:00")
+    val timeLabels = listOf(
+        "00:00", "06:00", "12:00", "18:00", "24:00"
+    )
     val lanes = listOf(
         "愉悦" to MoodColorHappy,
         "平静" to MoodColorNeutral,
@@ -386,40 +561,12 @@ fun MoodTimelineChart(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Row(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .width(56.dp)
-                        .height(120.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    lanes.forEach { (label, color) ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(color)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .pointerInput(moodPoints) {
+                    .height(140.dp)
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .pointerInput(moodPoints) {
                             detectTapGestures { offset ->
                                 if (moodPoints.isEmpty()) return@detectTapGestures
                                 val width = size.width
@@ -427,10 +574,7 @@ fun MoodTimelineChart(
                                 val laneHeight = height / lanes.size
 
                                 fun pointToX(point: MoodTimePoint): Float {
-                                    val timeParts = point.time.split(":")
-                                    val hours = timeParts.getOrNull(0)?.toIntOrNull() ?: 0
-                                    val minutes = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
-                                    val totalMinutes = hours * 60 + minutes
+                                    val totalMinutes = minutesOfDay(point)
                                     val xRatio = totalMinutes / (24f * 60f)
                                     return width * xRatio
                                 }
@@ -466,7 +610,7 @@ fun MoodTimelineChart(
                         val height = size.height
                         val laneHeight = height / lanes.size
 
-                        lanes.forEachIndexed { index, (_, color) ->
+                        lanes.forEachIndexed { index, _ ->
                             val y = laneHeight * (index + 0.5f)
                             drawLine(
                                 color = Color.Gray.copy(alpha = 0.2f),
@@ -477,11 +621,20 @@ fun MoodTimelineChart(
                             )
                         }
 
+                        // 垂直时间参考线（每3小时）
+                        timeLabels.forEachIndexed { index, _ ->
+                            val x = width * (index / (timeLabels.size - 1f))
+                            drawLine(
+                                color = Color.Gray.copy(alpha = 0.15f),
+                                start = Offset(x, 0f),
+                                end = Offset(x, height),
+                                strokeWidth = 1.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 10f))
+                            )
+                        }
+
                         moodPoints.forEach { point ->
-                            val timeParts = point.time.split(":")
-                            val hours = timeParts.getOrNull(0)?.toIntOrNull() ?: 0
-                            val minutes = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
-                            val totalMinutes = hours * 60 + minutes
+                            val totalMinutes = minutesOfDay(point)
                             val xRatio = totalMinutes / (24f * 60f)
                             val x = width * xRatio
 
@@ -503,9 +656,32 @@ fun MoodTimelineChart(
                     }
                 }
             }
-        }
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // 时间标签 - 使用与图表相同的 padding，并精确定位每个标签
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+        ) {
+            val totalWidth = maxWidth
+            timeLabels.forEachIndexed { index, label ->
+                val fraction = index / (timeLabels.size - 1f)
+                val offsetX = totalWidth * fraction
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .width(48.dp)
+                        .offset(x = offsetX - 24.dp) // 居中对齐，减去一半宽度
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         Row(
             modifier = Modifier
@@ -513,12 +689,184 @@ fun MoodTimelineChart(
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            timeLabels.forEach { label ->
+            lanes.forEach { (label, color) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(color)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MoodDistributionDonutChart(
+    moodPoints: List<MoodTimePoint>,
+    modifier: Modifier = Modifier
+) {
+    val slices = buildMoodDistribution(moodPoints)
+    val total = slices.sumOf { it.count }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "情绪分布",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (total == 0) {
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "暂无情绪记录",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val strokeWidth = 24.dp.toPx()
+                        var startAngle = -90f
+                        slices.forEach { slice ->
+                            val sweep = (slice.count / total.toFloat()) * 360f
+                            drawArc(
+                                color = slice.color,
+                                startAngle = startAngle,
+                                sweepAngle = sweep,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                            startAngle += sweep
+                        }
+                    }
+
+                    Text(
+                        text = "$total 条",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    slices.forEach { slice ->
+                        val percent = (slice.count * 100f / total).coerceAtMost(100f)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(slice.color)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = slice.label,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = String.format(Locale.getDefault(), "%.0f%%", percent),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = percent / 100f,
+                            color = slice.color,
+                            trackColor = slice.color.copy(alpha = 0.15f),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MoodAnalysisCard(
+    analysis: String?,
+    isLoading: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "AI 情绪分析",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            when {
+                isLoading -> {
+                    Text(
+                        text = "正在分析情绪备注…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                analysis.isNullOrBlank() -> {
+                    Text(
+                        text = "暂无可分析的情绪备注",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                else -> {
+                    Text(
+                        text = markdownToAnnotatedString(analysis),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }
@@ -551,6 +899,92 @@ fun MedicationStatusDisplay(
         } else {
             medicationStatuses.forEach { med ->
                 MedicationStatusCard(medication = med)
+            }
+        }
+    }
+}
+
+@Composable
+fun MedicationSummaryCard(
+    summary: MedicationSummary?,
+    modifier: Modifier = Modifier
+) {
+    if (summary == null) return
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "用药统计",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val total = summary.totalCount.coerceAtLeast(0)
+            val taken = summary.takenCount.coerceAtLeast(0).coerceAtMost(total)
+            val progress = if (total == 0) 0f else taken / total.toFloat()
+
+            Text(
+                text = "已服用 $taken / $total 次",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LinearProgressIndicator(
+                progress = progress,
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFF4CAF50),
+                trackColor = Color(0xFF4CAF50).copy(alpha = 0.15f)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "未按时服用（药品/次数）",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            if (summary.missedByMedication.isEmpty()) {
+                Text(
+                    text = "暂无未按时服用记录",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                summary.missedByMedication.forEach { (name, count) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "$count",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFF44336)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
             }
         }
     }
@@ -655,8 +1089,7 @@ fun MoodDetailCard(
     if (moodPoint != null) {
         Card(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             ),
