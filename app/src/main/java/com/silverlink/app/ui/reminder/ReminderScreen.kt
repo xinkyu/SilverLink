@@ -31,12 +31,14 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,6 +74,7 @@ import com.silverlink.app.feature.reminder.RecognizedMedication
 import com.silverlink.app.ui.theme.SuccessGreen
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReminderScreen(
     modifier: Modifier = Modifier,
@@ -80,9 +83,14 @@ fun ReminderScreen(
     val context = LocalContext.current
     val medications by viewModel.medications.collectAsState()
     val recognitionState by viewModel.recognitionState.collectAsState()
+    val syncState by viewModel.syncState.collectAsState()
+    val takenTimes by viewModel.takenTimes.collectAsState()
     
     var showAddDialog by remember { mutableStateOf(false) }
     var editingMedication by remember { mutableStateOf<Medication?>(null) }
+    
+    // 刷新状态
+    val isRefreshing = syncState is SyncState.Syncing
     
     // 相机拍照相关
     var photoFile by remember { mutableStateOf<File?>(null) }
@@ -132,7 +140,7 @@ fun ReminderScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "点右下角添加，或拍照识别", 
+                        text = "点刷新按钮同步，或点右下角添加",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     )
@@ -146,7 +154,8 @@ fun ReminderScreen(
                 items(medications) { med ->
                     MedicationItem(
                         medication = med,
-                        onToggle = { viewModel.toggleTaken(med) },
+                        takenTimes = takenTimes[med.id].orEmpty(),
+                        onToggleTime = { time -> viewModel.markMedicationTimeTaken(med, time) },
                         onEdit = { editingMedication = med },
                         onDelete = { viewModel.deleteMedication(med) }
                     )
@@ -154,7 +163,7 @@ fun ReminderScreen(
             }
         }
 
-        // FAB 区域 - 两个按钮
+        // FAB 区域 - 三个按钮
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -162,6 +171,23 @@ fun ReminderScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.End
         ) {
+            // 刷新按钮
+            SmallFloatingActionButton(
+                onClick = { viewModel.refresh() },
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            ) {
+                if (isRefreshing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新同步")
+                }
+            }
+            
             // 拍照识别按钮
             SmallFloatingActionButton(
                 onClick = {
@@ -445,7 +471,8 @@ fun ErrorDialog(
 @Composable
 fun MedicationItem(
     medication: Medication,
-    onToggle: () -> Unit,
+    takenTimes: Set<String>,
+    onToggleTime: (String) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -489,19 +516,6 @@ fun MedicationItem(
                     )
                 }
                 
-                // 吃药状态按钮
-                IconButton(
-                    onClick = onToggle,
-                    modifier = Modifier.size(56.dp)
-                ) {
-                    Icon(
-                        imageVector = if (medication.isTakenToday) Icons.Default.CheckCircle else Icons.Outlined.CheckCircle,
-                        contentDescription = "吃药状态",
-                        tint = if (medication.isTakenToday) SuccessGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
-                
                 // 编辑按钮
                 IconButton(onClick = onEdit) {
                     Icon(
@@ -528,17 +542,33 @@ fun MedicationItem(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 medication.getTimeList().forEach { time ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(8.dp)
+                    val isTaken = takenTimes.contains(time)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = time,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
+                        Surface(
+                            color = if (isTaken) SuccessGreen.copy(alpha = 0.2f) else MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = time,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (isTaken) SuccessGreen else MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { if (!isTaken) onToggleTime(time) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isTaken) Icons.Default.CheckCircle else Icons.Outlined.CheckCircle,
+                                contentDescription = if (isTaken) "已服药" else "标记已服药",
+                                tint = if (isTaken) SuccessGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
                 }
             }

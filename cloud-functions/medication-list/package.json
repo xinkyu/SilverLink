@@ -1,0 +1,9 @@
+{
+  "name": "medication-list",
+  "version": "1.0.0",
+  "description": "查询用药列表云函数",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.0.0"
+  }
+}

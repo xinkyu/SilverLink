@@ -32,10 +32,31 @@ exports.main = async (event) => {
     // HTTP 触发时，参数在 body 中
     const params = getParams(event);
 
-    const { elderDeviceId, date } = params;
+    const { elderDeviceId, familyDeviceId, date } = params;
 
     if (!elderDeviceId) {
       return { success: false, message: "参数不完整" };
+    }
+
+    // 如果提供了 familyDeviceId，验证配对关系
+    if (familyDeviceId) {
+      const pairingCheck = await db
+        .collection("pairing_codes")
+        .where({
+          elderDeviceId: elderDeviceId,
+          familyDeviceId: familyDeviceId,
+          status: "paired",
+        })
+        .limit(1)
+        .get();
+
+      if (!pairingCheck.data || pairingCheck.data.length === 0) {
+        return {
+          success: false,
+          message: "未与该长辈配对",
+          errorCode: "NOT_PAIRED",
+        };
+      }
     }
 
     const query = { elderDeviceId };

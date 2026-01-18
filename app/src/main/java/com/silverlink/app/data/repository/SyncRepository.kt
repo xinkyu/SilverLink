@@ -6,6 +6,7 @@ import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.UserRole
 import com.silverlink.app.data.local.PairingInfo
 import com.silverlink.app.data.remote.CloudBaseService
+import com.silverlink.app.data.remote.MedicationData
 import com.silverlink.app.data.remote.MedicationLogData
 import com.silverlink.app.data.remote.MoodLogData
 import kotlinx.coroutines.Dispatchers
@@ -127,6 +128,7 @@ class SyncRepository(private val context: Context) {
     
     /**
      * 获取长辈的服药记录（家人端调用）
+     * 会传递 familyDeviceId 进行配对验证，确保只能获取已配对长辈的数据
      */
     suspend fun getElderMedicationLogs(
         elderDeviceId: String? = null,
@@ -142,7 +144,8 @@ class SyncRepository(private val context: Context) {
             return@withContext Result.failure(Exception("未找到已配对的长辈"))
         }
         
-        cloudBase.getMedicationLogs(targetDeviceId, date)
+        // 传递 familyDeviceId 进行配对验证
+        cloudBase.getMedicationLogs(targetDeviceId, currentDeviceId, date)
     }
     
     // ==================== 情绪记录同步 ====================
@@ -171,6 +174,7 @@ class SyncRepository(private val context: Context) {
     
     /**
      * 获取长辈的情绪记录（家人端调用）
+     * 会传递 familyDeviceId 进行配对验证，确保只能获取已配对长辈的数据
      */
     suspend fun getElderMoodLogs(
         elderDeviceId: String? = null,
@@ -186,7 +190,121 @@ class SyncRepository(private val context: Context) {
             return@withContext Result.failure(Exception("未找到已配对的长辈"))
         }
         
-        cloudBase.getMoodLogs(targetDeviceId, days)
+        // 传递 familyDeviceId 进行配对验证
+        cloudBase.getMoodLogs(targetDeviceId, currentDeviceId, days)
+    }
+    
+    // ==================== 药品管理 ====================
+    
+    /**
+     * 为长辈添加药品（家人端调用）
+     */
+    suspend fun addMedicationForElder(
+        name: String,
+        dosage: String,
+        times: String
+    ): Result<MedicationData> = withContext(Dispatchers.IO) {
+        // 获取已配对的长辈设备ID
+        val elderDeviceId = cloudBase.getPairedElderDeviceId(currentDeviceId).getOrNull()
+        
+        if (elderDeviceId == null) {
+            return@withContext Result.failure(Exception("未找到已配对的长辈"))
+        }
+        
+        cloudBase.addMedication(
+            elderDeviceId = elderDeviceId,
+            familyDeviceId = currentDeviceId,
+            name = name,
+            dosage = dosage,
+            times = times
+        )
+    }
+
+    /**
+     * 更新长辈药品时间（长辈端调用）
+     */
+    suspend fun updateMedicationTimesForElder(
+        name: String,
+        dosage: String,
+        times: String
+    ): Result<MedicationData> = withContext(Dispatchers.IO) {
+        cloudBase.updateMedicationTimes(
+            elderDeviceId = currentDeviceId,
+            name = name,
+            dosage = dosage,
+            times = times
+        )
+    }
+    
+    /**
+     * 获取长辈的药品列表（家人端调用）
+     */
+    suspend fun getElderMedicationsList(): Result<List<MedicationData>> = withContext(Dispatchers.IO) {
+        val elderDeviceId = cloudBase.getPairedElderDeviceId(currentDeviceId).getOrNull()
+        
+        if (elderDeviceId == null) {
+            return@withContext Result.failure(Exception("未找到已配对的长辈"))
+        }
+        
+        cloudBase.getMedicationList(elderDeviceId)
+    }
+    
+    /**
+     * 从云端同步药品到本地（长辈端调用）
+     */
+    suspend fun syncMedicationsFromCloud(
+        medicationDao: com.silverlink.app.data.local.dao.MedicationDao
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val cloudMedications = cloudBase.getMedicationList(currentDeviceId).getOrNull()
+                ?: return@withContext Result.success(0)
+            
+            var syncedCount = 0
+            for (cloudMed in cloudMedications) {
+                // 检查本地是否已存在同名同剂量的药品，避免重复插入
+                val existingMed = medicationDao.getMedicationByNameAndDosage(cloudMed.name, cloudMed.dosage)
+                
+                if (existingMed == null) {
+                    // 不存在则插入
+                    val localMedication = com.silverlink.app.data.local.entity.Medication(
+                        name = cloudMed.name,
+                        dosage = cloudMed.dosage,
+                        times = cloudMed.times,
+                        isTakenToday = false
+                    )
+                    medicationDao.insertMedication(localMedication)
+                    syncedCount++
+                    android.util.Log.d("SyncRepository", "同步新药品: ${cloudMed.name}")
+                } else if (existingMed.times != cloudMed.times) {
+                    // 存在但时间不同，合并时间并更新
+                    val localTimes = existingMed.getTimeList()
+                    val cloudTimes = cloudMed.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    val mergedTimes = (localTimes + cloudTimes).distinct().sorted()
+                    val mergedTimesStr = mergedTimes.joinToString(",")
+
+                    if (existingMed.times != mergedTimesStr) {
+                        val updatedMed = existingMed.copy(times = mergedTimesStr)
+                        medicationDao.updateMedication(updatedMed)
+                        android.util.Log.d("SyncRepository", "合并药品时间: ${cloudMed.name}")
+                    }
+
+                    // 如果本地合并后时间与云端不同，长辈端尝试回写云端
+                    if (isElderDevice() && cloudMed.times != mergedTimesStr) {
+                        cloudBase.updateMedicationTimes(
+                            elderDeviceId = currentDeviceId,
+                            name = cloudMed.name,
+                            dosage = cloudMed.dosage,
+                            times = mergedTimesStr
+                        )
+                    }
+                }
+            }
+            
+            Result.success(syncedCount)
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "同步药品失败: ${e.message}")
+            Result.failure(e)
+        }
     }
     
     // ==================== 工具方法 ====================
@@ -221,3 +339,4 @@ class SyncRepository(private val context: Context) {
         }
     }
 }
+

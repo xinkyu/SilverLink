@@ -35,3 +35,9 @@ val TextWhite = Color(0xFFFFFFFF)
 // Alert
 val AlertRed = Color(0xFFD32F2F)
 val SuccessGreen = Color(0xFF388E3C)
+
+// Reminder Screen Gradient
+val GradientStart = Color(0xFFFFB74D) // lighter orange
+val GradientEnd = Color(0xFFFF7043)   // deeper red-orange
+val CardSurface = Color.White
+val TextPrimary = Color(0xFF3E2723)   // Dark brown/black for readability

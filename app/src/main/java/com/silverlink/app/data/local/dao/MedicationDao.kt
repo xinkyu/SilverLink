@@ -15,6 +15,9 @@ interface MedicationDao {
 
     @Query("SELECT * FROM medication WHERE times LIKE '%' || :time || '%'")
     suspend fun getMedicationsByTime(time: String): List<Medication>
+    
+    @Query("SELECT * FROM medication WHERE name = :name AND dosage = :dosage LIMIT 1")
+    suspend fun getMedicationByNameAndDosage(name: String, dosage: String): Medication?
 
     @Insert
     suspend fun insertMedication(medication: Medication): Long

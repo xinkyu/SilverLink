@@ -74,7 +74,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     // 数据库访问
     private val chatDao = AppDatabase.getInstance(application).chatDao()
+    private val historyDao = AppDatabase.getInstance(application).historyDao()
     private val userPrefs = UserPreferences.getInstance(application)
+    private val syncRepository = com.silverlink.app.data.repository.SyncRepository.getInstance(application)
 
     private val baseSystemPrompt = """
         你叫'小银'，是一个温柔、耐心的年轻人，专门陪伴老人。
@@ -272,6 +274,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * 根据文字输入检测情绪 (使用 AI 分析)
+     * 同时保存到本地历史和上传到云端
      */
     private fun detectEmotionFromText(text: String) {
         viewModelScope.launch {
@@ -279,11 +282,43 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val emotion = analyzeTextEmotionWithAI(text)
                 _currentEmotion.value = emotion
                 Log.d(TAG, "AI emotion detected: ${emotion.name} from: $text")
+                
+                // 保存情绪记录到本地
+                saveMoodLog(emotion, text)
             } catch (e: Exception) {
                 Log.e(TAG, "AI emotion analysis failed, using fallback", e)
                 // 失败时使用关键词匹配作为备用
-                _currentEmotion.value = guessEmotionFromKeywords(text)
+                val fallbackEmotion = guessEmotionFromKeywords(text)
+                _currentEmotion.value = fallbackEmotion
+                saveMoodLog(fallbackEmotion, text)
             }
+        }
+    }
+    
+    /**
+     * 保存情绪记录到本地并同步到云端
+     */
+    private suspend fun saveMoodLog(emotion: Emotion, triggerText: String) {
+        try {
+            val currentDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                .format(java.util.Date())
+            
+            // 保存到本地历史记录
+            val moodLogEntity = com.silverlink.app.data.local.entity.MoodLogEntity(
+                mood = emotion.name,
+                note = triggerText.take(100), // 截取前100个字符作为摘要
+                date = currentDate
+            )
+            historyDao.insertMoodLog(moodLogEntity)
+            
+            // 同步到云端（静默失败）
+            syncRepository.syncMoodLog(
+                mood = emotion.name,
+                note = triggerText.take(100),
+                conversationSummary = ""
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save mood log", e)
         }
     }
 

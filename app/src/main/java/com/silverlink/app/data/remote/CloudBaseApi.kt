@@ -58,6 +58,36 @@ interface CloudBaseApi {
     @retrofit2.http.Headers("Content-Type: application/json")
     @POST("pairing/get-elder")
     suspend fun getPairedElderDeviceId(@Body request: GetPairedElderRequest): ApiResponse<String?>
+    
+    // ==================== 药品管理 ====================
+    
+    /**
+     * 添加药品（家人端为长辈添加）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("medication/add")
+    suspend fun addMedication(@Body request: AddMedicationRequest): ApiResponse<MedicationData>
+    
+    /**
+     * 获取药品列表
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("medication/list")
+    suspend fun getMedicationList(@Body request: GetMedicationListRequest): ApiResponse<List<MedicationData>>
+
+    /**
+     * 更新药品时间
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("medication/update")
+    suspend fun updateMedication(@Body request: UpdateMedicationRequest): ApiResponse<MedicationData>
+    
+    /**
+     * 删除药品
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("medication/delete")
+    suspend fun deleteMedication(@Body request: DeleteMedicationRequest): ApiResponse<Unit>
 }
 
 // ==================== 请求数据类 ====================
@@ -90,6 +120,7 @@ data class MedicationLogRequest(
 @Serializable
 data class QueryMedicationRequest(
     val elderDeviceId: String,
+    val familyDeviceId: String? = null,
     val date: String? = null
 )
 
@@ -105,12 +136,41 @@ data class MoodLogRequest(
 @Serializable
 data class QueryMoodRequest(
     val elderDeviceId: String,
+    val familyDeviceId: String? = null,
     val days: Int = 7
 )
 
 @Serializable
 data class GetPairedElderRequest(
     val familyDeviceId: String
+)
+
+@Serializable
+data class AddMedicationRequest(
+    val elderDeviceId: String,
+    val familyDeviceId: String,
+    val name: String,
+    val dosage: String,
+    val times: String  // 逗号分隔的时间，如 "08:00,12:00,18:00"
+)
+
+@Serializable
+data class UpdateMedicationRequest(
+    val elderDeviceId: String,
+    val name: String,
+    val dosage: String,
+    val times: String
+)
+
+@Serializable
+data class GetMedicationListRequest(
+    val elderDeviceId: String
+)
+
+@Serializable
+data class DeleteMedicationRequest(
+    val elderDeviceId: String,
+    val medicationId: String
 )
 
 // ==================== 响应数据类 ====================
@@ -158,3 +218,14 @@ data class MoodLogData(
     val date: String,
     val createdAt: String
 )
+
+@Serializable
+data class MedicationData(
+    val id_: String,
+    val name: String,
+    val dosage: String,
+    val times: String,
+    val createdAt: String,
+    val createdBy: String  // "family" | "elder"
+)
+

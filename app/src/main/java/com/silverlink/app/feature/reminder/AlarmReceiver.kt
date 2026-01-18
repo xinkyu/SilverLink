@@ -25,6 +25,7 @@ class AlarmReceiver : BroadcastReceiver() {
             putExtra("MED_ID", medId)
             putExtra("MED_NAME", medName)
             putExtra("MED_DOSAGE", medDosage)
+            putExtra("MED_TIME", intent.getStringExtra("MED_TIME") ?: "")
         }
 
         val fullScreenPendingIntent = PendingIntent.getActivity(

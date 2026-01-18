@@ -171,11 +171,16 @@ object CloudBaseService {
      */
     suspend fun getMedicationLogs(
         elderDeviceId: String,
+        familyDeviceId: String? = null,
         date: String? = null
     ): Result<List<MedicationLogData>> {
         return try {
             val response = api.getMedicationLogs(
-                QueryMedicationRequest(elderDeviceId = elderDeviceId, date = date)
+                QueryMedicationRequest(
+                    elderDeviceId = elderDeviceId,
+                    familyDeviceId = familyDeviceId,
+                    date = date
+                )
             )
             if (response.success && response.data != null) {
                 Result.success(response.data)
@@ -222,16 +227,129 @@ object CloudBaseService {
      */
     suspend fun getMoodLogs(
         elderDeviceId: String,
+        familyDeviceId: String? = null,
         days: Int = 7
     ): Result<List<MoodLogData>> {
         return try {
             val response = api.getMoodLogs(
-                QueryMoodRequest(elderDeviceId = elderDeviceId, days = days)
+                QueryMoodRequest(
+                    elderDeviceId = elderDeviceId,
+                    familyDeviceId = familyDeviceId,
+                    days = days
+                )
             )
             if (response.success && response.data != null) {
                 Result.success(response.data)
             } else {
                 Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    // ==================== 药品管理 ====================
+    
+    /**
+     * 添加药品（家人端为长辈添加）
+     */
+    suspend fun addMedication(
+        elderDeviceId: String,
+        familyDeviceId: String,
+        name: String,
+        dosage: String,
+        times: String
+    ): Result<MedicationData> {
+        return try {
+            Log.d("CloudBase", "添加药品: name=$name, dosage=$dosage, times=$times")
+            val response = api.addMedication(
+                AddMedicationRequest(
+                    elderDeviceId = elderDeviceId,
+                    familyDeviceId = familyDeviceId,
+                    name = name,
+                    dosage = dosage,
+                    times = times
+                )
+            )
+            if (response.success && response.data != null) {
+                Log.d("CloudBase", "添加药品成功: ${response.data}")
+                Result.success(response.data)
+            } else {
+                Log.e("CloudBase", "添加药品失败: ${response.message}")
+                Result.failure(Exception(response.message ?: "添加药品失败"))
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "添加药品异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 更新药品时间（长辈端/家人端）
+     */
+    suspend fun updateMedicationTimes(
+        elderDeviceId: String,
+        name: String,
+        dosage: String,
+        times: String
+    ): Result<MedicationData> {
+        return try {
+            val response = api.updateMedication(
+                UpdateMedicationRequest(
+                    elderDeviceId = elderDeviceId,
+                    name = name,
+                    dosage = dosage,
+                    times = times
+                )
+            )
+            if (response.success && response.data != null) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message ?: "更新药品失败"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 获取药品列表
+     */
+    suspend fun getMedicationList(
+        elderDeviceId: String
+    ): Result<List<MedicationData>> {
+        return try {
+            val response = api.getMedicationList(
+                GetMedicationListRequest(elderDeviceId = elderDeviceId)
+            )
+            if (response.success && response.data != null) {
+                Result.success(response.data)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 删除药品
+     */
+    suspend fun deleteMedication(
+        elderDeviceId: String,
+        medicationId: String
+    ): Result<Unit> {
+        return try {
+            val response = api.deleteMedication(
+                DeleteMedicationRequest(
+                    elderDeviceId = elderDeviceId,
+                    medicationId = medicationId
+                )
+            )
+            if (response.success) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(response.message ?: "删除药品失败"))
             }
         } catch (e: Exception) {
             Result.failure(e)
