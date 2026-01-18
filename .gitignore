@@ -10,6 +10,12 @@ local.properties
 .idea/
 *.iml
 
+# VS Code
+.vscode/
+
+# Demo/temp docs
+银龄守护demo.md
+
 # Kotlin/Java
 *.class
 
