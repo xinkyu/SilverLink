@@ -1,5 +1,6 @@
 package com.silverlink.app.data.remote
 
+import com.silverlink.app.BuildConfig
 import com.silverlink.app.data.remote.api.QwenApi
 import com.silverlink.app.data.remote.api.QwenAsrApi
 import com.silverlink.app.data.remote.api.QwenVisionApi
@@ -12,8 +13,8 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
     private const val BASE_URL = "https://dashscope.aliyuncs.com/"
     
-    // TODO: Replace with your actual API Key
-    private const val API_KEY = "sk-fb607ee1b6164b349ef0751c1d26e0b4" 
+    // API Key is loaded from BuildConfig (set in local.properties)
+    private val API_KEY: String = BuildConfig.QWEN_API_KEY
 
     fun getApiKey(): String = API_KEY 
 

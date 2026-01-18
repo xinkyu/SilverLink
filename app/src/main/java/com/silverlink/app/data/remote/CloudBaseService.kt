@@ -1,6 +1,7 @@
 package com.silverlink.app.data.remote
 
 import android.util.Log
+import com.silverlink.app.BuildConfig
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -25,9 +26,8 @@ import java.util.concurrent.TimeUnit
  */
 object CloudBaseService {
     
-    // TODO: 替换为你的 CloudBase 云函数 HTTP 访问地址
-    // 格式: https://<环境ID>-<appid>.<region>.app.tcloudbase.com/
-    private const val CLOUD_BASE_URL = "https://silverlink-9gdqj1ne4d834dab-1396514174.ap-shanghai.app.tcloudbase.com/"
+    // CloudBase URL is loaded from BuildConfig (set in local.properties)
+    private val CLOUD_BASE_URL: String = BuildConfig.CLOUDBASE_URL
     
     private val json = Json {
         ignoreUnknownKeys = true

@@ -1,0 +1,69 @@
+﻿To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.0-milestone-1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateDebugBuildConfig
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs NO-SOURCE
+> Task :app:stripDebugDebugSymbols NO-SOURCE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/feature/reminder/ReminderAlertActivity.kt:190:65 '@Deprecated(...) static field FLAG_SHOW_WHEN_LOCKED: Int' is deprecated. Deprecated in Java.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/feature/reminder/ReminderAlertActivity.kt:191:65 '@Deprecated(...) static field FLAG_TURN_SCREEN_ON: Int' is deprecated. Deprecated in Java.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/components/HealthRecordComponents.kt:807:25 '@Deprecated(...) @Composable() @ComposableTarget(...) fun LinearProgressIndicator(progress: Float, modifier: Modifier = ..., color: Color = ..., trackColor: Color = ..., strokeCap: StrokeCap = ...): Unit' is deprecated. Use the overload that takes `progress` as a lambda.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/components/HealthRecordComponents.kt:946:13 '@Deprecated(...) @Composable() @ComposableTarget(...) fun LinearProgressIndicator(progress: Float, modifier: Modifier = ..., color: Color = ..., trackColor: Color = ..., strokeCap: StrokeCap = ...): Unit' is deprecated. Use the overload that takes `progress` as a lambda.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/onboarding/ElderActivationScreen.kt:65:8 '@Deprecated(...) class IntentIntegrator : Any' is deprecated. Deprecated in Java.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/onboarding/ElderActivationScreen.kt:99:26 '@Deprecated(...) class IntentIntegrator : Any' is deprecated. Deprecated in Java.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/onboarding/ElderActivationScreen.kt:136:44 '@property:Deprecated(...) val Icons.Filled.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/onboarding/ElderActivationScreen.kt:233:38 'constructor(p0: Activity!): IntentIntegrator' is deprecated. Deprecated in Java.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/onboarding/ElderActivationScreen.kt:234:55 '@Deprecated(...) class IntentIntegrator : Any' is deprecated. Deprecated in Java.
+w: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/onboarding/FamilySetupScreen.kt:103:40 '@property:Deprecated(...) val Icons.Filled.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:processDebugJavaRes
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:dexBuilderDebug
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleDebug
+
+[Incubating] Problems report is available at: file:///E:/SilverLink/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.0-milestone-1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 46s
+35 actionable tasks: 8 executed, 27 up-to-date

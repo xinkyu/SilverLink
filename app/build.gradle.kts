@@ -1,9 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+}
+
+// Load local.properties for API keys
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
 }
 
 android {
@@ -21,6 +30,15 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        
+        // Build config fields for API keys (read from local.properties)
+        buildConfigField("String", "QWEN_API_KEY", "\"${localProperties.getProperty("QWEN_API_KEY", "")}\"")
+        buildConfigField("String", "CLOUDBASE_URL", "\"${localProperties.getProperty("CLOUDBASE_URL", "")}\"")
+    }
+    
+    buildFeatures {
+        compose = true
+        buildConfig = true
     }
 
     buildTypes {
@@ -38,12 +56,6 @@ android {
     }
     kotlinOptions {
         jvmTarget = "1.8"
-    }
-    buildFeatures {
-        compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
     }
     packaging {
         resources {
