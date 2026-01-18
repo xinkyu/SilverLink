@@ -41,6 +41,12 @@
             android:theme="@style/Theme.SilverLink"
             android:showOnLockScreen="true"
             android:launchMode="singleTop" />
+
+        <activity
+            android:name=".ui.onboarding.QrScanPortraitActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.SilverLink" />
         
         <!-- Receiver for Alarm -->
         <receiver android:name=".feature.reminder.AlarmReceiver" 

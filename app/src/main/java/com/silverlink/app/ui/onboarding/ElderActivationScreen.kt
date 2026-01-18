@@ -1,5 +1,6 @@
 package com.silverlink.app.ui.onboarding
 
+import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -7,6 +8,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,6 +62,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.zxing.integration.android.IntentIntegrator
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.repository.SyncRepository
 import kotlinx.coroutines.CoroutineScope
@@ -87,6 +91,26 @@ fun ElderActivationScreen(
     var showSuccess by remember { mutableStateOf(false) }
     var elderName by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+
+    val activity = context as? Activity
+    val scanLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val scanResult = IntentIntegrator.parseActivityResult(result.resultCode, result.data)
+        val contents = scanResult?.contents
+        if (!contents.isNullOrBlank()) {
+            val parsed = userPreferences.parseQRContent(contents)
+            val code = parsed?.code ?: contents.filter { it.isDigit() }.take(6)
+            if (code.length == 6) {
+                pairingCode = code
+                isError = false
+                errorMessage = ""
+            } else {
+                isError = true
+                errorMessage = "二维码内容无效，请重试"
+            }
+        }
+    }
     
     if (showSuccess) {
         SuccessScreen(
@@ -193,6 +217,41 @@ fun ElderActivationScreen(
                             cursorColor = Color(0xFFFFB74D)
                         ),
                         isError = isError
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 扫码按钮
+                Button(
+                    onClick = {
+                        if (activity == null) {
+                            isError = true
+                            errorMessage = "无法启动扫码，请重试"
+                            return@Button
+                        }
+                        val intent = IntentIntegrator(activity)
+                            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+                            .setPrompt("扫描家人端二维码")
+                            .setBeepEnabled(true)
+                            .setOrientationLocked(true)
+                            .setCaptureActivity(QrScanPortraitActivity::class.java)
+                            .createScanIntent()
+                        scanLauncher.launch(intent)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color(0xFF5D4037)
+                    )
+                ) {
+                    Text(
+                        text = "扫码配对",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 }
                 
