@@ -44,8 +44,23 @@ data class DaySummary(
 )
 
 /**
+ * 缓存数据包装类
+ */
+private data class CachedData<T>(
+    val data: T,
+    val timestamp: Long = System.currentTimeMillis()
+) {
+    fun isExpired(ttlMs: Long): Boolean = System.currentTimeMillis() - timestamp > ttlMs
+}
+
+/**
  * 历史记录ViewModel
  * 用于老人端查看服药和情绪历史（统一UI风格）
+ * 
+ * 性能优化：
+ * - 内存缓存：情绪/用药数据缓存5分钟
+ * - AI分析缓存：按时间范围缓存分析结果
+ * - Stale-while-revalidate：显示缓存数据同时后台刷新
  */
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
     
@@ -56,6 +71,23 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val timeFormat = SimpleDateFormat("HH:mm", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("Asia/Shanghai")
     }
+    
+    // ========== 缓存配置 ==========
+    companion object {
+        private const val CACHE_TTL_MS = 5 * 60 * 1000L  // 5分钟缓存过期时间
+    }
+    
+    // 云端数据缓存
+    private var cachedMoodLogs: CachedData<List<MoodLogData>>? = null
+    private var cachedMedicationLogs: CachedData<List<MedicationLogData>>? = null
+    private var cachedMedications: CachedData<List<MedicationData>>? = null
+    
+    // AI 分析结果缓存（按时间范围+日期缓存）
+    private val analysisCache = mutableMapOf<String, String>()
+    
+    // 后台刷新状态（区分首次加载和后台刷新）
+    private val _isBackgroundRefreshing = MutableStateFlow(false)
+    val isBackgroundRefreshing: StateFlow<Boolean> = _isBackgroundRefreshing.asStateFlow()
     
     // 时间范围
     private val _selectedRange = MutableStateFlow(TimeRange.DAY)
@@ -130,13 +162,39 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
     
     fun refresh() {
-        loadData()
+        // 强制刷新：清除缓存
+        invalidateCache()
+        loadData(forceRefresh = true)
     }
     
-    private fun loadData() {
+    /**
+     * 清除所有缓存
+     */
+    private fun invalidateCache() {
+        cachedMoodLogs = null
+        cachedMedicationLogs = null
+        cachedMedications = null
+        analysisCache.clear()
+    }
+    
+    /**
+     * 获取缓存键（用于AI分析缓存）
+     */
+    private fun getAnalysisCacheKey(range: TimeRange, startDate: String): String {
+        return "${range.name}_$startDate"
+    }
+    
+    /**
+     * 检查缓存是否有效
+     */
+    private fun hasFreshCache(): Boolean {
+        return cachedMoodLogs?.isExpired(CACHE_TTL_MS) == false &&
+               cachedMedicationLogs?.isExpired(CACHE_TTL_MS) == false &&
+               cachedMedications?.isExpired(CACHE_TTL_MS) == false
+    }
+    
+    private fun loadData(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _isLoading.value = true
-            
             val (startDate, endDate) = getDateRange()
             val dateStr = startDate
             val rangeDays = when (_selectedRange.value) {
@@ -147,33 +205,100 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             }
             val todayStr = dateFormat.format(Date())
             val daysForQuery = max(rangeDays, daysBetweenInclusive(startDate, todayStr))
-
-            // 直接从云端拉取（与家人端一致）
-            val moodResult = syncRepository.getSelfMoodLogs(days = daysForQuery)
-            val medicationResult = if (_selectedRange.value == TimeRange.DAY) {
-                syncRepository.getSelfMedicationLogs(date = dateStr)
-            } else {
-                syncRepository.getSelfMedicationLogs(date = null)
-            }
-            val medicationListResult = syncRepository.getSelfMedicationsList()
-
-            // 处理情绪记录
-            val moodLogs = moodResult.getOrDefault(emptyList())
-            val points = processMoodData(moodLogs, startDate, endDate, _selectedRange.value)
-
-            // 处理用药记录
-            val medLogs = medicationResult.getOrDefault(emptyList())
-            val medications = medicationListResult.getOrDefault(emptyList())
-            processMedicationData(medLogs, medications, startDate, endDate, _selectedRange.value)
-
-            // 周/月/年范围：进行情绪备注分析
-            if (_selectedRange.value != TimeRange.DAY) {
-                analyzeMoodNotes(points, _selectedRange.value)
-            } else {
-                _moodAnalysis.value = null
-            }
             
-            _isLoading.value = false
+            // 检查是否有有效缓存
+            val hasCache = hasFreshCache()
+            
+            if (hasCache && !forceRefresh) {
+                // 使用缓存数据立即渲染，不显示loading
+                renderFromCache(startDate, endDate, _selectedRange.value)
+                
+                // 检查是否需要后台刷新
+                val cacheAge = System.currentTimeMillis() - (cachedMoodLogs?.timestamp ?: 0)
+                if (cacheAge > CACHE_TTL_MS / 2) {
+                    // 缓存超过一半时间，后台刷新
+                    _isBackgroundRefreshing.value = true
+                    refreshFromCloud(daysForQuery, dateStr, startDate, endDate)
+                    _isBackgroundRefreshing.value = false
+                }
+            } else {
+                // 无缓存或强制刷新，显示loading
+                _isLoading.value = true
+                refreshFromCloud(daysForQuery, dateStr, startDate, endDate)
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    /**
+     * 从缓存渲染数据
+     */
+    private fun renderFromCache(startDate: String, endDate: String, range: TimeRange) {
+        val moodLogs = cachedMoodLogs?.data ?: emptyList()
+        val medLogs = cachedMedicationLogs?.data ?: emptyList()
+        val medications = cachedMedications?.data ?: emptyList()
+        
+        val points = processMoodData(moodLogs, startDate, endDate, range)
+        processMedicationData(medLogs, medications, startDate, endDate, range)
+        
+        // 检查AI分析缓存
+        if (range != TimeRange.DAY) {
+            val cacheKey = getAnalysisCacheKey(range, startDate)
+            val cachedAnalysis = analysisCache[cacheKey]
+            if (cachedAnalysis != null) {
+                _moodAnalysis.value = cachedAnalysis
+            } else {
+                // 无缓存，需要调用AI分析
+                viewModelScope.launch {
+                    analyzeMoodNotes(points, range, startDate)
+                }
+            }
+        } else {
+            _moodAnalysis.value = null
+        }
+    }
+    
+    /**
+     * 从云端刷新数据并更新缓存
+     */
+    private suspend fun refreshFromCloud(
+        daysForQuery: Int,
+        dateStr: String,
+        startDate: String,
+        endDate: String
+    ) {
+        val range = _selectedRange.value
+        
+        // 从云端拉取数据
+        val moodResult = syncRepository.getSelfMoodLogs(days = daysForQuery)
+        val medicationResult = if (range == TimeRange.DAY) {
+            syncRepository.getSelfMedicationLogs(date = dateStr)
+        } else {
+            syncRepository.getSelfMedicationLogs(date = null)
+        }
+        val medicationListResult = syncRepository.getSelfMedicationsList()
+
+        // 更新缓存
+        val moodLogs = moodResult.getOrDefault(emptyList())
+        val medLogs = medicationResult.getOrDefault(emptyList())
+        val medications = medicationListResult.getOrDefault(emptyList())
+        
+        cachedMoodLogs = CachedData(moodLogs)
+        cachedMedicationLogs = CachedData(medLogs)
+        cachedMedications = CachedData(medications)
+
+        // 处理数据
+        val points = processMoodData(moodLogs, startDate, endDate, range)
+        processMedicationData(medLogs, medications, startDate, endDate, range)
+
+        // 周/月/年范围：进行情绪备注分析
+        if (range != TimeRange.DAY) {
+            val cacheKey = getAnalysisCacheKey(range, startDate)
+            if (!analysisCache.containsKey(cacheKey)) {
+                analyzeMoodNotes(points, range, startDate)
+            }
+        } else {
+            _moodAnalysis.value = null
         }
     }
     
@@ -404,7 +529,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private suspend fun analyzeMoodNotes(points: List<MoodTimePoint>, range: TimeRange) {
+    private suspend fun analyzeMoodNotes(points: List<MoodTimePoint>, range: TimeRange, startDate: String? = null) {
         val notesByMood = points
             .filter { it.note.isNotBlank() }
             .groupBy { it.mood.uppercase() }
@@ -461,6 +586,12 @@ $notesSection
                 ?: "暂无分析结果"
 
             _moodAnalysis.value = content
+            
+            // 缓存分析结果
+            if (startDate != null) {
+                val cacheKey = getAnalysisCacheKey(range, startDate)
+                analysisCache[cacheKey] = content
+            }
         } catch (e: Exception) {
             _moodAnalysis.value = "情绪分析暂不可用，请稍后重试。"
         } finally {
