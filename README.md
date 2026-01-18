@@ -119,15 +119,20 @@ cloud-functions/
 - JDK 17
 - Android SDK 34
 
-### 1) 配置 AI Key
+### 1) 配置 API Key 与 CloudBase 地址
 
-在 [app/src/main/java/com/silverlink/app/data/remote/RetrofitClient.kt](app/src/main/java/com/silverlink/app/data/remote/RetrofitClient.kt) 中替换 `API_KEY` 为你的阿里云 DashScope Key。
+在项目根目录的 `local.properties` 文件中添加以下配置（该文件已被 `.gitignore` 忽略，不会提交到仓库）：
 
-### 2) 配置 CloudBase 访问地址
+```properties
+# 阿里云 DashScope API Key（用于 AI 对话、语音识别、视觉识别）
+QWEN_API_KEY=你的DashScope_API_Key
 
-在 [app/src/main/java/com/silverlink/app/data/remote/CloudBaseService.kt](app/src/main/java/com/silverlink/app/data/remote/CloudBaseService.kt) 中替换 `CLOUD_BASE_URL` 为你的云函数 HTTP 访问地址。
+# 腾讯云 CloudBase 云函数访问地址
+CLOUDBASE_URL=https://你的环境ID-你的appid.ap-shanghai.app.tcloudbase.com/
+```
 
-### 3) 运行 Android 客户端
+
+### 2) 运行 Android 客户端
 
 1. 打开 Android Studio → **Open** → 选择项目根目录 SilverLink
 2. 等待 Gradle Sync 完成（首次可能较慢）
@@ -140,13 +145,13 @@ cloud-functions/
 - 语音输入会请求录音权限
 - 拍照识别会请求相机权限
 
-### 4) 部署云函数（可选，但建议）
+### 3) 部署云函数（可选，但建议）
 
 参考 [cloud-functions/README.md](cloud-functions/README.md) 完成 CloudBase 环境创建、数据库集合与云函数部署。
 
 ## 🔐 安全与隐私
 
-- 建议将 API Key 与 CloudBase 地址放入安全配置（如 `local.properties` 或 CI Secret），避免硬编码提交
+- API Key 与 CloudBase 地址通过 `local.properties` 配置，构建时自动注入 `BuildConfig`，源码中不包含敏感信息
 - 上传云端的用药/情绪日志建议进行脱敏与最小化字段存储
 
 ## 📄 License
