@@ -30,3 +30,9 @@ Thumbs.db
 
 # Heap dumps
 *.hprof
+
+# Build logs
+build_log*.txt
+
+# Node modules (cloud functions)
+**/node_modules/
