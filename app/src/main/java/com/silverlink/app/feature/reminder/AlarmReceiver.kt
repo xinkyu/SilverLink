@@ -36,6 +36,13 @@ class AlarmReceiver : BroadcastReceiver() {
 
         createReminderChannel(context)
 
+        // Try to start activity directly (works best if app is in foreground)
+        try {
+            context.startActivity(fullScreenIntent)
+        } catch (e: Exception) {
+            Log.e("AlarmReceiver", "Failed to start activity directly: ${e.message}")
+        }
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("该吃药了")

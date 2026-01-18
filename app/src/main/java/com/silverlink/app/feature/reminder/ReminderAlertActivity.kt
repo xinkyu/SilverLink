@@ -1,5 +1,8 @@
 package com.silverlink.app.feature.reminder
 
+import android.app.KeyguardManager
+import android.app.NotificationManager
+import android.content.Context
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Bundle
@@ -46,6 +49,13 @@ class ReminderAlertActivity : ComponentActivity() {
         val medDosage = intent.getStringExtra("MED_DOSAGE") ?: ""
 
         playRingtone()
+
+        // 唤醒屏幕并显示在锁屏之上
+        turnScreenOnAndKeyguard()
+
+        // 取消通知（因为已经全屏显示了）
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(medId)
 
         setContent {
             SilverLinkTheme {
@@ -118,6 +128,25 @@ class ReminderAlertActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         stopRingtone()
+    }
+
+    private fun turnScreenOnAndKeyguard() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                        android.view.WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
+                        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+
+        val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            keyguardManager.requestDismissKeyguard(this, null)
+        }
     }
 }
 
