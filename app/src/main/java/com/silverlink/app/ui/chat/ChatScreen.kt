@@ -126,8 +126,8 @@ fun ChatScreen(
         )
     }
     
-    // 相机拍照相关
-    var photoFile by remember { mutableStateOf<java.io.File?>(null) }
+    // 显示实时相机界面
+    var showPillCameraScreen by remember { mutableStateOf(false) }
 
     // 录音权限请求
     val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -144,33 +144,25 @@ fun ChatScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
-        if (!granted) {
+        if (granted) {
+            showPillCameraScreen = true
+        } else {
             Toast.makeText(context, "需要相机权限才能拍照找药", Toast.LENGTH_SHORT).show()
         }
     }
     
-    // 拍照启动器
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success && photoFile != null) {
-            val bitmap = android.graphics.BitmapFactory.decodeFile(photoFile!!.absolutePath)
-            if (bitmap != null) {
+    // 显示实时相机界面
+    if (showPillCameraScreen) {
+        com.silverlink.app.ui.reminder.PillCheckCameraScreen(
+            onCapture = { bitmap ->
+                showPillCameraScreen = false
                 viewModel.checkPill(bitmap)
+            },
+            onDismiss = {
+                showPillCameraScreen = false
             }
-        }
-    }
-    
-    // 启动相机拍照找药
-    fun launchPillCamera() {
-        val file = java.io.File(context.cacheDir, "pill_check_${System.currentTimeMillis()}.jpg")
-        photoFile = file
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
         )
-        cameraLauncher.launch(uri)
+        return
     }
 
     // 显示错误提示
@@ -219,7 +211,7 @@ fun ChatScreen(
                 // 找药按钮 - 拍照识别药品
                 IconButton(onClick = { 
                     if (hasCameraPermission) {
-                        launchPillCamera()
+                        showPillCameraScreen = true
                     } else {
                         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                     }

@@ -572,8 +572,13 @@ $notesSection
 
         val statusesFromList = mergedMedications.map { med ->
             val logs = logsByMedication[med.name] ?: emptyList()
-            val takenTimes = logs.filter { it.status == "taken" }.map { it.scheduledTime }.toSet()
             val times = med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            val timeSet = times.toSet()
+            val takenTimes = logs
+                .filter { it.status == "taken" }
+                .map { it.scheduledTime }
+                .filter { it in timeSet }
+                .toSet()
             
             MedicationStatus(
                 name = med.name,

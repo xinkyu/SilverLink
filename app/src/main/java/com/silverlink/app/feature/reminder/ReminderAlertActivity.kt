@@ -327,8 +327,8 @@ fun ReminderAlertScreen(
     var isVerifying by remember { mutableStateOf(false) }
     var verificationMessage by remember { mutableStateOf<String?>(null) }
     
-    // 相机拍照相关
-    var photoFile by remember { mutableStateOf<File?>(null) }
+    // 显示实时相机界面
+    var showCameraScreen by remember { mutableStateOf(false) }
     
     // 相机权限检查
     var hasCameraPermission by remember {
@@ -341,38 +341,28 @@ fun ReminderAlertScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
-    }
-    
-    // 拍照启动器
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success && photoFile != null) {
-            isVerifying = true
-            verificationMessage = "正在识别药品..."
-            val bitmap = BitmapFactory.decodeFile(photoFile!!.absolutePath)
-            if (bitmap != null) {
-                onFindPill(bitmap)
-                // 重置状态（实际语音播报由 Activity 处理）
-                isVerifying = false
-                verificationMessage = null
-            } else {
-                isVerifying = false
-                verificationMessage = "图片加载失败"
-            }
+        if (granted) {
+            showCameraScreen = true
         }
     }
     
-    // 启动相机拍照
-    fun launchCamera() {
-        val file = File(context.cacheDir, "pill_check_${System.currentTimeMillis()}.jpg")
-        photoFile = file
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
+    // 显示实时相机界面
+    if (showCameraScreen) {
+        com.silverlink.app.ui.reminder.PillCheckCameraScreen(
+            onCapture = { bitmap ->
+                showCameraScreen = false
+                isVerifying = true
+                verificationMessage = "正在识别药品..."
+                onFindPill(bitmap)
+                // 重置状态（语音播报由 Activity 处理）
+                isVerifying = false
+                verificationMessage = null
+            },
+            onDismiss = {
+                showCameraScreen = false
+            }
         )
-        cameraLauncher.launch(uri)
+        return
     }
     
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -529,7 +519,7 @@ fun ReminderAlertScreen(
                 Button(
                     onClick = {
                         if (hasCameraPermission) {
-                            launchCamera()
+                            showCameraScreen = true
                         } else {
                             permissionLauncher.launch(Manifest.permission.CAMERA)
                         }
