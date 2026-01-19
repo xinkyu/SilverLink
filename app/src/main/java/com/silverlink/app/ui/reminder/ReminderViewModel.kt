@@ -14,11 +14,13 @@ import com.silverlink.app.data.repository.SyncRepository
 import com.silverlink.app.feature.reminder.AlarmScheduler
 import com.silverlink.app.feature.reminder.MedicationRecognitionService
 import com.silverlink.app.feature.reminder.RecognizedMedication
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -77,6 +79,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             if (userPreferences.userConfig.value.role == UserRole.ELDER) {
                 syncMedicationsFromCloud()
+                // 同步今日服药记录，恢复打勾状态
+                syncMedicationLogsFromCloud(dateFormat.format(java.util.Date()))
             }
         }
     }
@@ -100,12 +104,10 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                         Log.d("ReminderViewModel", "同步成功，新增 $count 条药品")
                         _syncState.value = SyncState.Success(count)
                         
-                        // 同步完成后为新药品设置闹钟
-                        if (count > 0) {
-                            val currentMeds = dao.getAllMedications().first()
-                            currentMeds.forEach { med ->
-                                alarmScheduler.scheduleAll(med)
-                            }
+                        // 同步完成后为所有药品重新设置闹钟（包含时间合并后的新增时间点）
+                        val currentMeds = dao.getAllMedications().first()
+                        currentMeds.forEach { med ->
+                            alarmScheduler.scheduleAll(med)
                         }
                     },
                     onFailure = { error ->
@@ -125,6 +127,26 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      */
     fun refresh() {
         syncMedicationsFromCloud()
+        syncMedicationLogsFromCloud(dateFormat.format(java.util.Date()))
+    }
+
+    /**
+     * 从云端同步服药记录到本地（老人端调用）
+     */
+    fun syncMedicationLogsFromCloud(date: String? = null) {
+        if (userPreferences.userConfig.value.role != UserRole.ELDER) {
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                syncRepository.syncMedicationLogsFromCloud(historyDao, date)
+            } catch (_: Exception) {
+                // 忽略同步失败，不影响本地显示
+            } finally {
+                loadTodayTakenTimes()
+            }
+        }
     }
 
     fun addMedication(name: String, dosage: String, times: List<String>) {
@@ -191,48 +213,71 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         if (medication.id <= 0 || time.isBlank()) return
 
         viewModelScope.launch {
+            // 先乐观更新 UI，避免点击卡顿
+            val currentMap = _takenTimes.value
+            val currentSet = currentMap[medication.id].orEmpty()
+            if (!currentSet.contains(time)) {
+                val updatedSet = currentSet.toMutableSet().apply { add(time) }
+                val updatedMap = currentMap.toMutableMap().apply { put(medication.id, updatedSet) }
+                _takenTimes.value = updatedMap
+            }
+
             val date = dateFormat.format(java.util.Date())
-            val existingCount = historyDao.getMedicationLogCount(date, medication.id, time)
-            if (existingCount > 0) return@launch
+            val inserted = withContext(Dispatchers.IO) {
+                val existingCount = historyDao.getMedicationLogCount(date, medication.id, time)
+                if (existingCount > 0) return@withContext false
 
-            val logEntity = MedicationLogEntity(
-                medicationId = medication.id,
-                medicationName = medication.name,
-                dosage = medication.dosage,
-                scheduledTime = time,
-                status = "taken",
-                date = date
-            )
-            historyDao.insertMedicationLog(logEntity)
+                val logEntity = MedicationLogEntity(
+                    medicationId = medication.id,
+                    medicationName = medication.name,
+                    dosage = medication.dosage,
+                    scheduledTime = time,
+                    status = "taken",
+                    date = date
+                )
+                historyDao.insertMedicationLog(logEntity)
 
-            syncRepository.syncMedicationTaken(
-                medicationId = medication.id,
-                medicationName = medication.name,
-                dosage = medication.dosage,
-                scheduledTime = time,
-                status = "taken"
-            )
+                syncRepository.syncMedicationTaken(
+                    medicationId = medication.id,
+                    medicationName = medication.name,
+                    dosage = medication.dosage,
+                    scheduledTime = time,
+                    status = "taken"
+                )
+                true
+            }
 
-            loadTodayTakenTimes()
+            if (inserted) {
+                loadTodayTakenTimes()
+            }
         }
     }
 
     private fun loadTodayTakenTimes() {
         viewModelScope.launch {
             val date = dateFormat.format(java.util.Date())
-            val logs = historyDao.getMedicationLogsByDate(date)
-            val map = logs.groupBy { it.medicationId }
-                .mapValues { entry -> entry.value.map { it.scheduledTime }.toSet() }
+            val result = withContext(Dispatchers.IO) {
+                val logs = historyDao.getMedicationLogsByDate(date)
+                val map = logs.groupBy { it.medicationId }
+                    .mapValues { entry -> entry.value.map { it.scheduledTime }.toSet() }
+
+                val currentMeds = dao.getAllMedications().first()
+                Triple(map, currentMeds, date)
+            }
+
+            val map = result.first
+            val currentMeds = result.second
 
             _takenTimes.value = map
 
             // 更新药品的 isTakenToday 状态
-            val currentMeds = dao.getAllMedications().first()
-            currentMeds.forEach { med ->
-                val takenSet = map[med.id].orEmpty()
-                val allTaken = med.getTimeList().all { it in takenSet }
-                if (med.isTakenToday != allTaken) {
-                    dao.updateMedication(med.copy(isTakenToday = allTaken))
+            withContext(Dispatchers.IO) {
+                currentMeds.forEach { med ->
+                    val takenSet = map[med.id].orEmpty()
+                    val allTaken = med.getTimeList().all { it in takenSet }
+                    if (med.isTakenToday != allTaken) {
+                        dao.updateMedication(med.copy(isTakenToday = allTaken))
+                    }
                 }
             }
         }

@@ -394,6 +394,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         endDate: String,
         range: TimeRange
     ) {
+        val mergedMedications = mergeMedicationsByNameAndDosage(medications)
         val filteredLogs = if (range == TimeRange.DAY) {
             medLogs.filter { it.date == startDate }
         } else {
@@ -402,7 +403,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
 
         val logsByMedication = filteredLogs.groupBy { it.medicationName }
 
-        val statusesFromList = medications.map { med ->
+        // 用于统计的去重（同一天同一时间点同一药品多条记录只计一次）
+        val uniqueLogsForStats = filteredLogs.distinctBy { log ->
+            "${log.date}|${log.medicationName}|${log.scheduledTime}|${log.status}"
+        }
+
+        val statusesFromList = mergedMedications.map { med ->
             val logs = logsByMedication[med.name] ?: emptyList()
             val takenTimes = logs.filter { it.status == "taken" }.map { it.scheduledTime }.toSet()
             val times = med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }
@@ -435,17 +441,17 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         }
 
         val daysCount = daysBetweenInclusive(startDate, endDate).coerceAtLeast(1)
-        val totalCount = medications.sumOf { med ->
+        val totalCount = mergedMedications.sumOf { med ->
             med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size * daysCount
         }
-        val takenCount = filteredLogs.count { it.status == "taken" }
+        val takenCount = uniqueLogsForStats.count { it.status == "taken" }
 
-        val takenByMed = filteredLogs
+        val takenByMed = uniqueLogsForStats
             .filter { it.status == "taken" }
             .groupBy { it.medicationName }
             .mapValues { it.value.size }
 
-        val missedByMedication = medications.mapNotNull { med ->
+        val missedByMedication = mergedMedications.mapNotNull { med ->
             val timesCount = med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size
             val expected = timesCount * daysCount
             val taken = takenByMed[med.name] ?: 0
@@ -458,6 +464,33 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             totalCount = totalCount,
             missedByMedication = missedByMedication
         )
+    }
+
+    private fun normalizeTimes(raw: String): List<String> {
+        return raw.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+    }
+
+    private fun mergeMedicationsByNameAndDosage(
+        medications: List<MedicationData>
+    ): List<MedicationData> {
+        return medications
+            .groupBy { "${it.name.trim()}__${it.dosage.trim()}" }
+            .map { (_, group) ->
+                val first = group.first()
+                val mergedTimes = group
+                    .flatMap { normalizeTimes(it.times) }
+                    .distinct()
+                    .sorted()
+                    .joinToString(",")
+
+                first.copy(
+                    name = first.name.trim(),
+                    dosage = first.dosage.trim(),
+                    times = mergedTimes
+                )
+            }
     }
 
     private fun parseCreatedAtToMillis(raw: String): Long? {
@@ -539,6 +572,11 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             return
         }
 
+        if (RetrofitClient.getApiKey().isBlank()) {
+            _moodAnalysis.value = "AI 功能未配置，请在 local.properties 填写 QWEN_API_KEY"
+            return
+        }
+
         _isAnalyzing.value = true
 
         try {
@@ -593,6 +631,7 @@ $notesSection
                 analysisCache[cacheKey] = content
             }
         } catch (e: Exception) {
+            android.util.Log.e("HistoryViewModel", "情绪分析失败: ${e.message}")
             _moodAnalysis.value = "情绪分析暂不可用，请稍后重试。"
         } finally {
             _isAnalyzing.value = false

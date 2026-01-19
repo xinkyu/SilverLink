@@ -253,6 +253,28 @@ class SyncRepository(private val context: Context) {
             times = times
         )
     }
+
+    /**
+     * 更新长辈药品时间（家人端调用）
+     */
+    suspend fun updateMedicationTimesForPairedElder(
+        name: String,
+        dosage: String,
+        times: String
+    ): Result<MedicationData> = withContext(Dispatchers.IO) {
+        val elderDeviceId = cloudBase.getPairedElderDeviceId(currentDeviceId).getOrNull()
+
+        if (elderDeviceId == null) {
+            return@withContext Result.failure(Exception("未找到已配对的长辈"))
+        }
+
+        cloudBase.updateMedicationTimes(
+            elderDeviceId = elderDeviceId,
+            name = name,
+            dosage = dosage,
+            times = times
+        )
+    }
     
     /**
      * 获取长辈的药品列表（家人端调用）

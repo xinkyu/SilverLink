@@ -430,6 +430,11 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             return
         }
 
+        if (RetrofitClient.getApiKey().isBlank()) {
+            _moodAnalysis.value = "AI 功能未配置，请在 local.properties 填写 QWEN_API_KEY"
+            return
+        }
+
         _isAnalyzing.value = true
 
         try {
@@ -483,7 +488,8 @@ $notesSection
                 val cacheKey = getAnalysisCacheKey(range, startDate)
                 analysisCache[cacheKey] = content
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("FamilyMonitoringViewModel", "情绪分析失败: ${e.message}")
             _moodAnalysis.value = "情绪分析暂不可用，请稍后重试。"
         } finally {
             _isAnalyzing.value = false
@@ -497,6 +503,7 @@ $notesSection
         endDate: String,
         range: TimeRange
     ) {
+        val mergedMedications = mergeMedicationsByNameAndDosage(medications)
         val filteredLogs = if (range == TimeRange.DAY) {
             medLogs.filter { it.date == startDate }
         } else {
@@ -504,7 +511,12 @@ $notesSection
         }
         val logsByMedication = filteredLogs.groupBy { it.medicationName }
 
-        val statusesFromList = medications.map { med ->
+        // 用于统计的去重（同一天同一时间点同一药品多条记录只计一次）
+        val uniqueLogsForStats = filteredLogs.distinctBy { log ->
+            "${log.date}|${log.medicationName}|${log.scheduledTime}|${log.status}"
+        }
+
+        val statusesFromList = mergedMedications.map { med ->
             val logs = logsByMedication[med.name] ?: emptyList()
             val takenTimes = logs.filter { it.status == "taken" }.map { it.scheduledTime }.toSet()
             val times = med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }
@@ -539,17 +551,17 @@ $notesSection
 
         // 统计
         val daysCount = daysBetweenInclusive(startDate, endDate).coerceAtLeast(1)
-        val totalCount = medications.sumOf { med ->
+        val totalCount = mergedMedications.sumOf { med ->
             med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size * daysCount
         }
-        val takenCount = filteredLogs.count { it.status == "taken" }
+        val takenCount = uniqueLogsForStats.count { it.status == "taken" }
 
-        val takenByMed = filteredLogs
+        val takenByMed = uniqueLogsForStats
             .filter { it.status == "taken" }
             .groupBy { it.medicationName }
             .mapValues { it.value.size }
 
-        val missedByMedication = medications.mapNotNull { med ->
+        val missedByMedication = mergedMedications.mapNotNull { med ->
             val timesCount = med.times.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size
             val expected = timesCount * daysCount
             val taken = takenByMed[med.name] ?: 0
@@ -562,6 +574,33 @@ $notesSection
             totalCount = totalCount,
             missedByMedication = missedByMedication
         )
+    }
+
+    private fun normalizeTimes(raw: String): List<String> {
+        return raw.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+    }
+
+    private fun mergeMedicationsByNameAndDosage(
+        medications: List<MedicationData>
+    ): List<MedicationData> {
+        return medications
+            .groupBy { "${it.name.trim()}__${it.dosage.trim()}" }
+            .map { (_, group) ->
+                val first = group.first()
+                val mergedTimes = group
+                    .flatMap { normalizeTimes(it.times) }
+                    .distinct()
+                    .sorted()
+                    .joinToString(",")
+
+                first.copy(
+                    name = first.name.trim(),
+                    dosage = first.dosage.trim(),
+                    times = mergedTimes
+                )
+            }
     }
 
     private fun getDateRange(): Pair<String, String> {
@@ -630,20 +669,42 @@ $notesSection
     fun addMedication(name: String, dosage: String, times: String) {
         viewModelScope.launch {
             _addMedicationState.value = LoadingState.Loading
-            
-            val result = syncRepository.addMedicationForElder(
-                name = name,
-                dosage = dosage,
-                times = times
-            )
-            
+
+            val normalizedTimes = normalizeTimes(times)
+
+            // 先检查是否已存在同名同剂量药品，存在则合并时间并更新
+            val existing = syncRepository.getElderMedicationsList()
+                .getOrDefault(emptyList())
+                .firstOrNull {
+                    it.name.trim() == name.trim() && it.dosage.trim() == dosage.trim()
+                }
+
+            val result = if (existing != null) {
+                val mergedTimes = (normalizeTimes(existing.times) + normalizedTimes)
+                    .distinct()
+                    .sorted()
+                    .joinToString(",")
+
+                syncRepository.updateMedicationTimesForPairedElder(
+                    name = name,
+                    dosage = dosage,
+                    times = mergedTimes
+                )
+            } else {
+                syncRepository.addMedicationForElder(
+                    name = name,
+                    dosage = dosage,
+                    times = normalizedTimes.joinToString(",")
+                )
+            }
+
             if (result.isSuccess) {
-                _addMedicationState.value = LoadingState.Success("添加成功")
+                _addMedicationState.value = LoadingState.Success("保存成功")
                 // 刷新数据
                 loadData()
             } else {
                 _addMedicationState.value = LoadingState.Error(
-                    result.exceptionOrNull()?.message ?: "添加失败"
+                    result.exceptionOrNull()?.message ?: "保存失败"
                 )
             }
         }

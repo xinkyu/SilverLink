@@ -1,5 +1,6 @@
 package com.silverlink.app.data.remote
 
+import android.util.Log
 import com.silverlink.app.BuildConfig
 import com.silverlink.app.data.remote.api.QwenApi
 import com.silverlink.app.data.remote.api.QwenAsrApi
@@ -13,10 +14,9 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
     private const val BASE_URL = "https://dashscope.aliyuncs.com/"
     
-    // API Key is loaded from BuildConfig (set in local.properties)
     private val API_KEY: String = BuildConfig.QWEN_API_KEY
 
-    fun getApiKey(): String = API_KEY 
+    fun getApiKey(): String = API_KEY
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -26,10 +26,13 @@ object RetrofitClient {
         .addInterceptor(loggingInterceptor)
         .addInterceptor { chain ->
             val original = chain.request()
-            val request = original.newBuilder()
-                .header("Authorization", "Bearer $API_KEY")
-                .method(original.method, original.body)
-                .build()
+            val builder = original.newBuilder()
+            if (API_KEY.isNotBlank()) {
+                builder.header("Authorization", "Bearer $API_KEY")
+            } else {
+                Log.w("RetrofitClient", "QWEN_API_KEY is empty. AI requests may fail.")
+            }
+            val request = builder.method(original.method, original.body).build()
             chain.proceed(request)
         }
         .connectTimeout(60, TimeUnit.SECONDS)
