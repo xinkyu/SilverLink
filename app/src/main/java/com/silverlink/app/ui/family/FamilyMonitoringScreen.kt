@@ -9,20 +9,28 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -55,6 +63,7 @@ import com.silverlink.app.ui.components.MoodDetailCard
 import com.silverlink.app.ui.components.MoodDistributionDonutChart
 import com.silverlink.app.ui.components.MoodTimelineChart
 import com.silverlink.app.ui.components.TimeRangeSelector
+import com.silverlink.app.data.remote.AlertData
 
 /**
  * 家人端监控主屏幕（统一UI设计）
@@ -81,6 +90,9 @@ fun FamilyMonitoringScreen(
     val addMedicationState by viewModel.addMedicationState.collectAsState()
     
     var showAddDialog by remember { mutableStateOf(false) }
+    
+    // 警报状态
+    val alerts by viewModel.alerts.collectAsState()
     
     // 监听添加成功后关闭对话框
     LaunchedEffect(addMedicationState) {
@@ -170,6 +182,15 @@ fun FamilyMonitoringScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // 警报横幅（如果有未读警报）
+                            alerts.forEach { alert ->
+                                AlertBanner(
+                                    alert = alert,
+                                    onDismiss = { viewModel.dismissAlert(alert.id) }
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
                             
                             // 时间范围选择器
                             TimeRangeSelector(
@@ -401,6 +422,63 @@ private fun EmptyStateHint(type: String) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.Gray
             )
+        }
+    }
+}
+
+/**
+ * 警报横幅
+ */
+@Composable
+private fun AlertBanner(
+    alert: AlertData,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFFEBEE)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = "警报",
+                tint = Color(0xFFD32F2F),
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = "⚠️ 长辈状态提醒",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color(0xFFD32F2F)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = alert.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF5D4037)
+                )
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "关闭",
+                    tint = Color.Gray
+                )
+            }
         }
     }
 }

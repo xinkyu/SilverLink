@@ -1,0 +1,9 @@
+{
+  "name": "alert-query",
+  "version": "1.0.0",
+  "description": "查询警报云函数（家人端调用）",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.0.0"
+  }
+}

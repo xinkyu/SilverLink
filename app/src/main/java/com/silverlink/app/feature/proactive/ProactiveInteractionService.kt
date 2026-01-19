@@ -1,0 +1,463 @@
+package com.silverlink.app.feature.proactive
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.silverlink.app.R
+import com.silverlink.app.data.local.AppDatabase
+import com.silverlink.app.data.local.UserPreferences
+import com.silverlink.app.data.local.dao.HistoryDao
+import com.silverlink.app.data.remote.CloudBaseService
+import com.silverlink.app.data.remote.RetrofitClient
+import com.silverlink.app.data.remote.model.Input
+import com.silverlink.app.data.remote.model.Message
+import com.silverlink.app.data.remote.model.QwenRequest
+import com.silverlink.app.feature.chat.AudioPlayerHelper
+import com.silverlink.app.feature.chat.TextToSpeechService
+import kotlinx.coroutines.*
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import android.provider.Settings
+
+/**
+ * 主动关怀服务
+ * 检测老人久坐不动，主动唤醒并播放个性化问候语
+ * 
+ * 特性：
+ * - 前台服务，确保后台持续运行
+ * - 使用 App 统一的阿里云 CosyVoice 语音通道
+ * - AI 生成个性化唤醒词
+ */
+class ProactiveInteractionService : Service(), SensorEventListener {
+
+    companion object {
+        private const val TAG = "ProactiveService"
+        private const val NOTIFICATION_CHANNEL_ID = "proactive_service_channel"
+        private const val NOTIFICATION_ID = 1001
+        
+        private const val CHECK_INTERVAL_MS = 60 * 1000L // Check every 1 minute
+        
+        // Thresholds
+        private const val INACTIVITY_THRESHOLD_MS_DEBUG = 10 * 1000L // 10 seconds for debug
+        private const val INACTIVITY_THRESHOLD_MS_REAL = 3 * 60 * 60 * 1000L // 3 hours
+        
+        // Use debug threshold for demo purposes, switch to REAL for production
+        private const val INACTIVITY_THRESHOLD_MS = INACTIVITY_THRESHOLD_MS_REAL 
+        
+        private const val LIGHT_THRESHOLD_LUX = 10.0f // Threshold for "bright" environment
+        
+        // 连续唤醒失败次数阈值，超过此值向家人发送警报
+        private const val MAX_CONSECUTIVE_FAILURES = 2
+        
+        // 加速度计移动检测阈值 (m/s^2)
+        private const val ACCEL_MOVEMENT_THRESHOLD = 1.5f
+    }
+
+    private lateinit var sensorManager: SensorManager
+    private var stepCounterSensor: Sensor? = null
+    private var lightSensor: Sensor? = null
+    private var accelerometerSensor: Sensor? = null
+
+    // App 统一语音服务（阿里云 CosyVoice）
+    private lateinit var ttsService: TextToSpeechService
+    private lateinit var audioPlayer: AudioPlayerHelper
+    
+    // 用户配置
+    private lateinit var userPreferences: UserPreferences
+    private lateinit var historyDao: HistoryDao
+
+    private var lastMovementTime = AtomicLong(System.currentTimeMillis())
+    private var currentLightLevel = 0f
+
+    private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var checkJob: Job? = null
+
+    // For Step Counter logic
+    private var lastStepCount = -1f
+    
+    // For Accelerometer logic (backup movement detection)
+    private var lastAccelMagnitude = 0f
+    
+    // 连续唤醒失败计数器（唤醒后用户未打开App）
+    private val consecutiveWakeUpFailures = AtomicInteger(0)
+    private var lastWakeUpTime = 0L
+    // 真正的用户移动时间（基于计步器变化，不是定时器重置）
+    private var lastRealMovementTime = AtomicLong(0L)
+    private val deviceId: String by lazy {
+        Settings.Secure.getString(applicationContext.contentResolver, Settings.Secure.ANDROID_ID)
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        Log.d(TAG, "Service Created")
+        
+        // 1. 创建通知渠道并启动前台服务
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, buildNotification("SilverLink 正在守护您..."))
+        
+        // 2. 初始化语音服务（使用 App 统一的 CosyVoice）
+        ttsService = TextToSpeechService()
+        audioPlayer = AudioPlayerHelper(applicationContext)
+        
+        // 3. 初始化用户配置和历史记录访问
+        userPreferences = UserPreferences.getInstance(applicationContext)
+        historyDao = AppDatabase.getInstance(applicationContext).historyDao()
+        
+        // 4. 初始化传感器
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
+        accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+        if (stepCounterSensor == null) {
+            Log.w(TAG, "Step Counter Sensor not found! Using accelerometer as backup.")
+        } else {
+            sensorManager.registerListener(this, stepCounterSensor, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+
+        if (lightSensor == null) {
+            Log.w(TAG, "Light Sensor not found!")
+        } else {
+            sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+        
+        // 加速度传感器作为备用移动检测
+        if (accelerometerSensor != null) {
+            sensorManager.registerListener(this, accelerometerSensor, SensorManager.SENSOR_DELAY_NORMAL)
+            Log.d(TAG, "Accelerometer registered for backup movement detection")
+        }
+
+        startMonitoring()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "主动关怀服务",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "SilverLink 后台守护服务，用于检测久坐并主动关怀"
+            }
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun buildNotification(content: String): Notification {
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("SilverLink")
+            .setContentText(content)
+            .setSmallIcon(R.drawable.ic_app_logo)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    private fun startMonitoring() {
+        checkJob = serviceScope.launch {
+            while (isActive) {
+                checkInactivity()
+                delay(CHECK_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun checkInactivity() {
+        val currentTime = System.currentTimeMillis()
+        val timeSinceLastMove = currentTime - lastMovementTime.get()
+
+        Log.d(TAG, "Checking inactivity: ${timeSinceLastMove / 1000}s elapsed. Light: $currentLightLevel, Threshold: ${INACTIVITY_THRESHOLD_MS / 1000}s")
+
+        if (timeSinceLastMove > INACTIVITY_THRESHOLD_MS) {
+            // Debug 模式下绕过光线检测，方便测试
+            val isDebugMode = INACTIVITY_THRESHOLD_MS == INACTIVITY_THRESHOLD_MS_DEBUG
+            val lightCheckPassed = currentLightLevel > LIGHT_THRESHOLD_LUX || isDebugMode
+            
+            Log.d(TAG, "Inactivity threshold reached! Light check: $lightCheckPassed (debug=$isDebugMode, light=$currentLightLevel)")
+            
+            if (lightCheckPassed) {
+                triggerProactiveInteraction()
+                // Reset timer to avoid spamming
+                lastMovementTime.set(System.currentTimeMillis()) 
+            } else {
+                Log.d(TAG, "Skipping trigger: too dark (light=$currentLightLevel < threshold=$LIGHT_THRESHOLD_LUX)")
+            }
+        }
+    }
+
+    private fun triggerProactiveInteraction() {
+        Log.i(TAG, "Proactive Interaction Triggered!")
+        
+        // 检查上次唤醒后是否有响应（通过检查App是否在前台）
+        checkPreviousWakeUpResponse()
+        
+        // 记录本次唤醒时间
+        lastWakeUpTime = System.currentTimeMillis()
+        
+        // 1. Wake Screen
+        wakeScreen()
+        
+        // 2. Generate and speak personalized greeting
+        speakGreeting()
+        
+        // 3. 增加失败计数（如果用户打开App，会在onResume时重置）
+        val failures = consecutiveWakeUpFailures.incrementAndGet()
+        Log.d(TAG, "Consecutive wake-up failures: $failures")
+        
+        // 4. 连续失败2次，发送警报给家人
+        if (failures >= MAX_CONSECUTIVE_FAILURES) {
+            sendInactivityAlertToFamily()
+            // 重置计数器，避免重复发送
+            consecutiveWakeUpFailures.set(0)
+        }
+    }
+    
+    /**
+     * 检查上次唤醒后是否有响应
+     * 如果用户在上次唤醒后有移动（计步器变化），则重置失败计数
+     */
+    private fun checkPreviousWakeUpResponse() {
+        if (lastWakeUpTime == 0L) return
+        
+        // 只有真正的用户移动（计步器变化）才算响应，不是定时器重置
+        val realMovement = lastRealMovementTime.get()
+        Log.d(TAG, "Checking response: realMovement=$realMovement, lastWakeUp=$lastWakeUpTime")
+        
+        if (realMovement > lastWakeUpTime) {
+            Log.d(TAG, "User responded to previous wake-up (real movement detected), resetting failure count and timer")
+            consecutiveWakeUpFailures.set(0)
+            // 重置计时器从最后一次真实移动的时间开始
+            lastMovementTime.set(realMovement)
+        } else {
+            Log.d(TAG, "No real movement since last wake-up, keeping failure count")
+        }
+    }
+    
+    /**
+     * 发送久坐无响应警报给家人
+     */
+    private fun sendInactivityAlertToFamily() {
+        serviceScope.launch {
+            try {
+                val config = userPreferences.userConfig.value
+                val elderName = config.elderName.ifBlank { "老人" }
+                
+                val message = "您的" + elderName + "已经连续多次久坐无响应，可能需要关注。"
+                
+                Log.w(TAG, "Sending inactivity alert to family: $message")
+                
+                val result = CloudBaseService.sendAlert(
+                    elderDeviceId = deviceId,
+                    alertType = "inactivity",
+                    message = message,
+                    elderName = elderName
+                )
+                
+                if (result.isSuccess) {
+                    Log.i(TAG, "Inactivity alert sent successfully")
+                } else {
+                    Log.e(TAG, "Failed to send inactivity alert: ${result.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending inactivity alert", e)
+            }
+        }
+    }
+
+    private fun wakeScreen() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!powerManager.isInteractive) {
+            @Suppress("DEPRECATION")
+            val wakeLock = powerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "SilverLink:ProactiveWakeLock"
+            )
+            wakeLock.acquire(3000) // Release after 3 seconds
+        }
+    }
+
+    /**
+     * 使用 AI 生成个性化唤醒词并播放
+     */
+    private fun speakGreeting() {
+        serviceScope.launch {
+            try {
+                // 1. 获取用户配置
+                val config = userPreferences.userConfig.value
+                val elderName = config.elderName.ifBlank { "您" }
+                val elderProfile = config.elderProfile
+                
+                // 2. 获取最近一条情绪记录
+                val latestMoodLog = historyDao.getLatestMoodLog()
+                val latestMood = latestMoodLog?.mood ?: "NEUTRAL"
+                val latestMoodNote = latestMoodLog?.note ?: ""
+                
+                Log.d(TAG, "Generating greeting for: name=$elderName, profile=$elderProfile, mood=$latestMood")
+                
+                // 3. 调用 AI 生成个性化唤醒词
+                val greetingText = generateGreetingWithAI(elderName, elderProfile, latestMood, latestMoodNote)
+                Log.d(TAG, "AI generated greeting: $greetingText")
+                
+                // 4. 使用 App 统一的语音服务播放
+                val result = ttsService.synthesize(greetingText)
+                result.fold(
+                    onSuccess = { audioData ->
+                        Log.d(TAG, "TTS synthesis successful, playing audio...")
+                        audioPlayer.play(audioData)
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "TTS synthesis failed: ${error.message}")
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in speakGreeting", e)
+            }
+        }
+    }
+
+    /**
+     * 使用 Qwen AI 生成个性化唤醒词
+     */
+    private suspend fun generateGreetingWithAI(
+        elderName: String,
+        elderProfile: String,
+        latestMood: String,
+        latestMoodNote: String
+    ): String {
+        return try {
+            val systemPrompt = """
+                你是SilverLink陪伴应用的语音助手"小银"。现在需要为久坐的长辈生成一句温暖的唤醒问候语。
+                要求：
+                1. 简短（不超过30字）、温暖、自然
+                2. 建议起身活动，可以结合长辈的兴趣爱好
+                3. 如果有情绪记录，可以适当关心
+                4. 只输出问候语本身，不要有引号或其他格式
+            """.trimIndent()
+            
+            val userPrompt = buildString {
+                append("长辈称呼：$elderName\n")
+                if (elderProfile.isNotBlank()) {
+                    append("长辈信息：$elderProfile\n")
+                }
+                if (latestMoodNote.isNotBlank()) {
+                    append("最近情绪：$latestMood，相关内容：$latestMoodNote\n")
+                }
+                append("请生成唤醒问候语。")
+            }
+            
+            Log.d(TAG, "AI prompt: $userPrompt")
+            
+            val request = QwenRequest(
+                input = Input(
+                    messages = listOf(
+                        Message("system", systemPrompt),
+                        Message("user", userPrompt)
+                    )
+                )
+            )
+            
+            val response = RetrofitClient.api.chat(request)
+            val generatedText = response.output.choices?.firstOrNull()?.message?.content
+                ?: response.output.text
+                ?: getFallbackGreeting(elderName)
+            
+            // 清理可能的引号
+            generatedText.trim().removeSurrounding("\"").removeSurrounding(""", """)
+        } catch (e: Exception) {
+            Log.e(TAG, "AI greeting generation failed", e)
+            getFallbackGreeting(elderName)
+        }
+    }
+
+    /**
+     * 兜底问候语（网络失败时使用）
+     */
+    private fun getFallbackGreeting(elderName: String): String {
+        return "${elderName}，您坐很久了，要不要起来活动一下？"
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        event ?: return
+
+        when (event.sensor.type) {
+            Sensor.TYPE_LIGHT -> {
+                currentLightLevel = event.values[0]
+            }
+            Sensor.TYPE_ACCELEROMETER -> {
+                // 计算加速度的总变化量（去除重力后的运动检测）
+                val x = event.values[0]
+                val y = event.values[1]
+                val z = event.values[2]
+                val magnitude = kotlin.math.sqrt(x * x + y * y + z * z)
+                
+                // 检测加速度显著变化（手机被拿起/移动）
+                val delta = kotlin.math.abs(magnitude - lastAccelMagnitude)
+                if (lastAccelMagnitude > 0 && delta > ACCEL_MOVEMENT_THRESHOLD) {
+                    val now = System.currentTimeMillis()
+                    lastMovementTime.set(now)
+                    lastRealMovementTime.set(now)
+                    Log.d(TAG, "Movement detected via accelerometer (delta: $delta)")
+                }
+                lastAccelMagnitude = magnitude
+            }
+            Sensor.TYPE_STEP_COUNTER -> {
+                val steps = event.values[0]
+                if (lastStepCount == -1f) {
+                    lastStepCount = steps
+                } else {
+                    if (steps != lastStepCount) {
+                        // Steps increased -> Movement detected
+                        val now = System.currentTimeMillis()
+                        lastMovementTime.set(now)
+                        lastRealMovementTime.set(now) // Track real user movement separately
+                        lastStepCount = steps
+                        Log.d(TAG, "Movement detected (steps: $steps)")
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // No-op
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Ensure service stays alive
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        sensorManager.unregisterListener(this)
+        audioPlayer.release()
+        checkJob?.cancel()
+        serviceScope.cancel()
+        Log.d(TAG, "Service Destroyed")
+    }
+
+    // Restart service if task is removed (e.g., app swiped away)
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(TAG, "Task removed, restarting service")
+        val restartIntent = Intent(applicationContext, ProactiveInteractionService::class.java)
+        restartIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        androidx.core.content.ContextCompat.startForegroundService(applicationContext, restartIntent)
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
+    }
+}

@@ -62,4 +62,10 @@ interface HistoryDao {
         LIMIT 1
     """)
     suspend fun getDominantMoodByDate(date: String): String?
+    
+    /**
+     * 获取最近一条情绪记录（用于主动关怀唤醒词生成）
+     */
+    @Query("SELECT * FROM mood_logs ORDER BY createdAt DESC LIMIT 1")
+    suspend fun getLatestMoodLog(): MoodLogEntity?
 }

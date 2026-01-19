@@ -403,6 +403,22 @@ exports.main = async (event) => {
 };
 ```
 
+### 集合：alerts
+
+```json
+{
+  "id_": "自动生成",
+  "elderDeviceId": "android_device_id",
+  "familyDeviceId": "android_device_id",
+  "alertType": "inactivity",
+  "message": "您的张奶奶已经连续多次久坐无响应，可能需要关注。",
+  "elderName": "张奶奶",
+  "isRead": false,
+  "createdAt": "2024-01-17T15:00:00.000Z",
+  "readAt": null
+}
+```
+
 ## 4. 配置 HTTP 访问服务
 
 1. 在控制台 -> HTTP 访问服务 中开启服务
@@ -415,8 +431,15 @@ exports.main = async (event) => {
 | /pairing/get-elder | pairing-get-elder |
 | /medication/log    | medication-log    |
 | /medication/query  | medication-query  |
+| /medication/add    | medication-add    |
+| /medication/list   | medication-list   |
+| /medication/update | medication-update |
+| /medication/delete | medication-delete |
 | /mood/log          | mood-log          |
 | /mood/query        | mood-query        |
+| /alert/send        | alert-send        |
+| /alert/query       | alert-query       |
+| /alert/dismiss     | alert-dismiss     |
 
 3. 获取访问地址，格式为：`https://<环境ID>.service.tcloudbase.com/`
 

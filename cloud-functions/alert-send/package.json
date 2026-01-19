@@ -1,0 +1,9 @@
+{
+  "name": "alert-send",
+  "version": "1.0.0",
+  "description": "发送警报云函数（老人端调用）",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.0.0"
+  }
+}

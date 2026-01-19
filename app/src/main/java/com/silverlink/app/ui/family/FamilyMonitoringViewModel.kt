@@ -3,6 +3,7 @@ package com.silverlink.app.ui.family
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.silverlink.app.data.remote.AlertData
 import com.silverlink.app.data.remote.MedicationData
 import com.silverlink.app.data.remote.MedicationLogData
 import com.silverlink.app.data.remote.MoodLogData
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -149,8 +151,16 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     private val _elderName = MutableStateFlow("")
     val elderName: StateFlow<String> = _elderName.asStateFlow()
     
+    // 警报列表
+    private val _alerts = MutableStateFlow<List<AlertData>>(emptyList())
+    val alerts: StateFlow<List<AlertData>> = _alerts.asStateFlow()
+    
+    // 警报轮询Job
+    private var alertPollingJob: kotlinx.coroutines.Job? = null
+    
     init {
         loadData()
+        startAlertPolling()
     }
     
     fun setTimeRange(range: TimeRange) {
@@ -171,6 +181,50 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     
     fun selectMoodPoint(point: MoodTimePoint?) {
         _selectedMoodPoint.value = point
+    }
+    
+    /**
+     * 开始轮询警报（60秒一次）
+     */
+    private fun startAlertPolling() {
+        alertPollingJob?.cancel()
+        alertPollingJob = viewModelScope.launch {
+            while (true) {
+                fetchAlerts()
+                delay(60_000L) // 每60秒检查一次
+            }
+        }
+    }
+    
+    /**
+     * 获取未读警报
+     */
+    private suspend fun fetchAlerts() {
+        try {
+            val result = syncRepository.getAlerts(unreadOnly = true)
+            if (result.isSuccess) {
+                _alerts.value = result.getOrDefault(emptyList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FamilyMonitoringViewModel", "获取警报失败: ${e.message}")
+        }
+    }
+    
+    /**
+     * 关闭/忽略警报
+     */
+    fun dismissAlert(alertId: String) {
+        viewModelScope.launch {
+            try {
+                val result = syncRepository.dismissAlert(alertId)
+                if (result.isSuccess) {
+                    // 从列表中移除
+                    _alerts.value = _alerts.value.filter { it.id != alertId }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FamilyMonitoringViewModel", "关闭警报失败: ${e.message}")
+            }
+        }
     }
     
     /**

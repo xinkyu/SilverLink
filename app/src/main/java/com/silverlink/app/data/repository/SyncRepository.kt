@@ -495,6 +495,34 @@ class SyncRepository(private val context: Context) {
         return userPrefs.userConfig.value.role == UserRole.FAMILY
     }
     
+    // ==================== 警报相关 ====================
+    
+    /**
+     * 获取未读警报（家人端调用）
+     */
+    suspend fun getAlerts(
+        unreadOnly: Boolean = true
+    ): Result<List<com.silverlink.app.data.remote.AlertData>> = withContext(Dispatchers.IO) {
+        try {
+            cloudBase.getAlerts(currentDeviceId, unreadOnly)
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "获取警报失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 标记警报已读（家人端调用）
+     */
+    suspend fun dismissAlert(alertId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            cloudBase.dismissAlert(alertId, currentDeviceId)
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "标记警报已读失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
     companion object {
         @Volatile
         private var instance: SyncRepository? = null

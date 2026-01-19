@@ -19,6 +19,9 @@ import androidx.core.content.ContextCompat
 import com.silverlink.app.ui.theme.SilverLinkTheme
 import com.silverlink.app.ui.MainScreen
 import com.silverlink.app.ui.onboarding.OnboardingNavigation
+import com.silverlink.app.feature.proactive.ProactiveInteractionService
+import android.content.Intent
+
 
 class MainActivity : ComponentActivity() {
     
@@ -32,16 +35,27 @@ class MainActivity : ComponentActivity() {
         
         // 请求通知权限 (Android 13+)
         requestNotificationPermission()
+
+        // 启动主动闲聊服务（前台服务）- 仅老人端需要
+        val userPrefs = com.silverlink.app.data.local.UserPreferences.getInstance(this)
+        startProactiveServiceIfElder(userPrefs)
+
         
         setContent {
             SilverLinkTheme {
-                var showOnboarding by remember { mutableStateOf(true) }
+                // 检查是否已完成激活
+                val userConfig = userPrefs.userConfig.value
+                var showOnboarding by remember { 
+                    mutableStateOf(!userConfig.isActivated) 
+                }
                 
                 if (showOnboarding) {
                     // 显示引导流程
                     OnboardingNavigation(
                         onOnboardingComplete = {
                             showOnboarding = false
+                            // Onboarding完成后，检查并启动服务（如果是老人端）
+                            startProactiveServiceIfElder(userPrefs)
                         }
                     )
                 } else {
@@ -51,6 +65,22 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+    
+    /**
+     * 如果是老人端且已激活，启动主动关怀服务
+     */
+    private fun startProactiveServiceIfElder(userPrefs: com.silverlink.app.data.local.UserPreferences) {
+        val config = userPrefs.userConfig.value
+        if (config.role == com.silverlink.app.data.local.UserRole.ELDER && config.isActivated) {
+            android.util.Log.d("MainActivity", "Starting ProactiveInteractionService for elder")
+            androidx.core.content.ContextCompat.startForegroundService(
+                this, 
+                Intent(this, ProactiveInteractionService::class.java)
+            )
+        } else {
+            android.util.Log.d("MainActivity", "Skipping ProactiveService: role=${config.role}, activated=${config.isActivated}")
         }
     }
     

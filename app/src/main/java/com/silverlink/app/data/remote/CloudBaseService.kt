@@ -355,4 +355,87 @@ object CloudBaseService {
             Result.failure(e)
         }
     }
+    
+    // ==================== 警报相关 ====================
+    
+    /**
+     * 发送警报（老人端调用）
+     * 用于通知家人端老人长时间无响应等情况
+     */
+    suspend fun sendAlert(
+        elderDeviceId: String,
+        alertType: String,
+        message: String,
+        elderName: String = ""
+    ): Result<Unit> {
+        return try {
+            Log.d("CloudBase", "发送警报: type=$alertType, elderDeviceId=$elderDeviceId")
+            val response = api.sendAlert(
+                SendAlertRequest(
+                    elderDeviceId = elderDeviceId,
+                    alertType = alertType,
+                    message = message,
+                    elderName = elderName
+                )
+            )
+            if (response.success) {
+                Log.d("CloudBase", "警报发送成功")
+                Result.success(Unit)
+            } else {
+                Log.e("CloudBase", "警报发送失败: ${response.message}")
+                Result.failure(Exception(response.message ?: "发送警报失败"))
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "发送警报异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 查询未读警报（家人端调用）
+     */
+    suspend fun getAlerts(
+        familyDeviceId: String,
+        unreadOnly: Boolean = true
+    ): Result<List<AlertData>> {
+        return try {
+            val response = api.getAlerts(
+                QueryAlertRequest(
+                    familyDeviceId = familyDeviceId,
+                    unreadOnly = unreadOnly
+                )
+            )
+            if (response.success && response.data != null) {
+                Result.success(response.data)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 标记警报已读（家人端调用）
+     */
+    suspend fun dismissAlert(
+        alertId: String,
+        familyDeviceId: String
+    ): Result<Unit> {
+        return try {
+            val response = api.dismissAlert(
+                DismissAlertRequest(
+                    alertId = alertId,
+                    familyDeviceId = familyDeviceId
+                )
+            )
+            if (response.success) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(response.message ?: "标记警报失败"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

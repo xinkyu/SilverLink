@@ -88,6 +88,29 @@ interface CloudBaseApi {
     @retrofit2.http.Headers("Content-Type: application/json")
     @POST("medication/delete")
     suspend fun deleteMedication(@Body request: DeleteMedicationRequest): ApiResponse<Unit>
+    
+    // ==================== 警报管理 ====================
+    
+    /**
+     * 发送警报（老人端调用，通知家人端）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("alert/send")
+    suspend fun sendAlert(@Body request: SendAlertRequest): ApiResponse<Unit>
+    
+    /**
+     * 查询警报（家人端轮询）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("alert/query")
+    suspend fun getAlerts(@Body request: QueryAlertRequest): ApiResponse<List<AlertData>>
+    
+    /**
+     * 标记警报已读（家人端调用）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("alert/dismiss")
+    suspend fun dismissAlert(@Body request: DismissAlertRequest): ApiResponse<Unit>
 }
 
 // ==================== 请求数据类 ====================
@@ -173,6 +196,26 @@ data class DeleteMedicationRequest(
     val medicationId: String
 )
 
+@Serializable
+data class SendAlertRequest(
+    val elderDeviceId: String,
+    val alertType: String,      // "inactivity" | "sos" | "medication_missed"
+    val message: String,
+    val elderName: String = ""
+)
+
+@Serializable
+data class QueryAlertRequest(
+    val familyDeviceId: String,
+    val unreadOnly: Boolean = true
+)
+
+@Serializable
+data class DismissAlertRequest(
+    val alertId: String,
+    val familyDeviceId: String
+)
+
 // ==================== 响应数据类 ====================
 
 @Serializable
@@ -229,3 +272,13 @@ data class MedicationData(
     val createdBy: String  // "family" | "elder"
 )
 
+@Serializable
+data class AlertData(
+    val id: String,
+    val alertType: String,
+    val message: String,
+    val elderName: String,
+    val elderDeviceId: String,
+    val isRead: Boolean,
+    val createdAt: String
+)
