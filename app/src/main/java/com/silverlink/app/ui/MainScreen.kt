@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -31,14 +32,17 @@ import com.silverlink.app.data.local.UserRole
 import com.silverlink.app.ui.chat.ChatScreen
 import com.silverlink.app.ui.family.FamilyMonitoringScreen
 import com.silverlink.app.ui.history.HistoryScreen
+import com.silverlink.app.ui.memory.MemoryGalleryScreen
+import com.silverlink.app.ui.memory.MemoryQuizScreen
+import com.silverlink.app.ui.memory.MemoryLibraryScreen
 import com.silverlink.app.ui.reminder.ReminderScreen
 import com.silverlink.app.ui.theme.WarmPrimary
 
 /**
  * 主屏幕
  * 根据用户角色显示不同的标签页：
- * - 老人端：聊天 | 提醒 | 健康记录
- * - 家人端：长辈监控
+ * - 老人端：聊天 | 提醒 | 记忆相册 | 健康记录
+ * - 家人端：长辈健康 | 记忆库
  */
 @Composable
 fun MainScreen(modifier: Modifier = Modifier) {
@@ -53,11 +57,12 @@ fun MainScreen(modifier: Modifier = Modifier) {
 }
 
 /**
- * 老人端主屏幕 - 3个标签
+ * 老人端主屏幕 - 4个标签（新增记忆相册）
  */
 @Composable
 private fun ElderMainScreen(modifier: Modifier = Modifier) {
     var selectedTab by remember { mutableStateOf(0) }
+    var showMemoryQuiz by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -109,6 +114,25 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                     onClick = { selectedTab = 2 },
                     icon = { 
                         Icon(
+                            Icons.Default.PhotoLibrary, 
+                            contentDescription = "相册",
+                            modifier = Modifier.size(26.dp)
+                        ) 
+                    },
+                    label = { 
+                        Text("记忆相册", style = MaterialTheme.typography.labelMedium) 
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = WarmPrimary,
+                        selectedTextColor = WarmPrimary,
+                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    icon = { 
+                        Icon(
                             Icons.Default.DateRange, 
                             contentDescription = "记录",
                             modifier = Modifier.size(26.dp)
@@ -128,16 +152,33 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
-                0 -> ChatScreen()
+                0 -> ChatScreen(
+                    onNavigateToGallery = {
+                        selectedTab = 2
+                        showMemoryQuiz = false
+                    }
+                )
                 1 -> ReminderScreen()
-                2 -> HistoryScreen()
+                2 -> {
+                    if (showMemoryQuiz) {
+                        MemoryQuizScreen(
+                            onBack = { showMemoryQuiz = false }
+                        )
+                    } else {
+                        MemoryGalleryScreen(
+                            onBack = { selectedTab = 0 },
+                            onQuizClick = { showMemoryQuiz = true }
+                        )
+                    }
+                }
+                3 -> HistoryScreen()
             }
         }
     }
 }
 
 /**
- * 家人端主屏幕 - 单标签（监控）
+ * 家人端主屏幕 - 2个标签（健康 + 记忆库）
  */
 @Composable
 private fun FamilyMainScreen(modifier: Modifier = Modifier) {
@@ -169,13 +210,34 @@ private fun FamilyMainScreen(modifier: Modifier = Modifier) {
                         indicatorColor = MaterialTheme.colorScheme.secondaryContainer
                     )
                 )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { 
+                        Icon(
+                            Icons.Default.PhotoLibrary, 
+                            contentDescription = "记忆库",
+                            modifier = Modifier.size(26.dp)
+                        ) 
+                    },
+                    label = { 
+                        Text("记忆库", style = MaterialTheme.typography.labelMedium) 
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF3F51B5),
+                        selectedTextColor = Color(0xFF3F51B5),
+                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                )
             }
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
                 0 -> FamilyMonitoringScreen()
+                1 -> MemoryLibraryScreen(onBack = { selectedTab = 0 })
             }
         }
     }
 }
+

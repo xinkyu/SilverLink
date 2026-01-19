@@ -1,0 +1,9 @@
+{
+  "name": "memory-photo-credentials",
+  "version": "1.0.0",
+  "description": "生成 COS 上传凭证",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

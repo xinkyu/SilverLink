@@ -1,0 +1,9 @@
+{
+  "name": "cognitive-log",
+  "version": "1.0.0",
+  "description": "记录认知评估结果",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

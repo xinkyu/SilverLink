@@ -438,4 +438,333 @@ object CloudBaseService {
             Result.failure(e)
         }
     }
+    
+    // ==================== 记忆照片相关 ====================
+    
+    /**
+     * 获取记忆照片列表
+     * @param elderDeviceId 长辈设备ID
+     * @param familyDeviceId 家人设备ID（可选，用于验证权限）
+     * @param page 页码
+     * @param pageSize 每页数量
+     * @param sinceTimestamp 获取此时间戳之后的照片（用于增量同步）
+     */
+    suspend fun getMemoryPhotos(
+        elderDeviceId: String,
+        familyDeviceId: String? = null,
+        page: Int = 1,
+        pageSize: Int = 20,
+        sinceTimestamp: Long? = null
+    ): Result<List<MemoryPhotoData>> {
+        return try {
+            val response = api.getMemoryPhotos(
+                GetPhotosRequest(
+                    elderDeviceId = elderDeviceId,
+                    familyDeviceId = familyDeviceId,
+                    page = page,
+                    pageSize = pageSize,
+                    sinceTimestamp = sinceTimestamp
+                )
+            )
+            if (response.success && response.data != null) {
+                Result.success(response.data)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "获取照片列表异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 搜索记忆照片（根据自然语言查询）
+     * @param elderDeviceId 长辈设备ID
+     * @param query 查询文本（如"去年去北京"）
+     * @param limit 返回结果数量
+     */
+    suspend fun searchMemoryPhotos(
+        elderDeviceId: String,
+        query: String,
+        limit: Int = 10
+    ): Result<List<MemoryPhotoData>> {
+        return try {
+            Log.d("CloudBase", "搜索照片: query=$query")
+            val response = api.searchMemoryPhotos(
+                SearchPhotosRequest(
+                    elderDeviceId = elderDeviceId,
+                    query = query,
+                    limit = limit
+                )
+            )
+            if (response.success && response.data != null) {
+                Log.d("CloudBase", "搜索到 ${response.data.size} 张照片")
+                Result.success(response.data)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "搜索照片异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    // ==================== 认知评估相关 ====================
+    
+    /**
+     * 记录认知评估结果
+     */
+    suspend fun logCognitiveResult(
+        elderDeviceId: String,
+        photoId: String,
+        questionType: String,
+        expectedAnswer: String,
+        actualAnswer: String,
+        isCorrect: Boolean,
+        responseTimeMs: Long,
+        confidence: Float = 0f
+    ): Result<Unit> {
+        return try {
+            val response = api.logCognitiveResult(
+                CognitiveLogRequest(
+                    elderDeviceId = elderDeviceId,
+                    photoId = photoId,
+                    questionType = questionType,
+                    expectedAnswer = expectedAnswer,
+                    actualAnswer = actualAnswer,
+                    isCorrect = isCorrect,
+                    responseTimeMs = responseTimeMs,
+                    confidence = confidence
+                )
+            )
+            if (response.success) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(response.message ?: "记录认知结果失败"))
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "记录认知结果异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 获取认知评估报告（家人端查看）
+     */
+    suspend fun getCognitiveReport(
+        elderDeviceId: String,
+        familyDeviceId: String,
+        days: Int = 7
+    ): Result<CognitiveReportData?> {
+        return try {
+            val response = api.getCognitiveReport(
+                GetCognitiveReportRequest(
+                    elderDeviceId = elderDeviceId,
+                    familyDeviceId = familyDeviceId,
+                    days = days
+                )
+            )
+            if (response.success) {
+                Result.success(response.data)
+            } else {
+                Result.success(null)
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "获取认知报告异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    // ==================== 直传 COS 相关 ====================
+    
+    /**
+     * 获取照片上传凭证
+     */
+    suspend fun getPhotoUploadCredentials(
+        elderDeviceId: String,
+        familyDeviceId: String,
+        fileExtension: String = "jpg"
+    ): Result<PhotoUploadCredentials> {
+        return try {
+            Log.d("CloudBase", "获取上传凭证: elderDeviceId=$elderDeviceId")
+            val response = api.getPhotoUploadCredentials(
+                PhotoCredentialsRequest(
+                    elderDeviceId = elderDeviceId,
+                    familyDeviceId = familyDeviceId,
+                    fileExtension = fileExtension
+                )
+            )
+            if (response.success && response.data != null) {
+                if (response.data.uploadUrl.isNullOrBlank()) {
+                    Log.e("CloudBase", "获取上传凭证失败: 无法获取上传URL")
+                    Result.failure(Exception(response.data.message ?: "无法获取上传URL"))
+                } else {
+                    Log.d("CloudBase", "获取上传凭证成功: cloudPath=${response.data.cloudPath}")
+                    Result.success(response.data)
+                }
+            } else {
+                Log.e("CloudBase", "获取上传凭证失败: ${response.message}")
+                Result.failure(Exception(response.message ?: "获取上传凭证失败"))
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "获取上传凭证异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 保存照片元数据（图片已直传 COS 后调用）
+     */
+    suspend fun savePhotoMetadata(
+        elderDeviceId: String,
+        familyDeviceId: String,
+        photoId: String,
+        cloudPath: String,
+        fileId: String? = null,
+        description: String = "",
+        aiDescription: String = "",
+        takenDate: String? = null,
+        location: String? = null,
+        people: String? = null,
+        tags: String? = null
+    ): Result<MemoryPhotoData> {
+        return try {
+            Log.d("CloudBase", "保存照片元数据: photoId=$photoId")
+            val response = api.savePhotoMetadata(
+                SavePhotoMetadataRequest(
+                    elderDeviceId = elderDeviceId,
+                    familyDeviceId = familyDeviceId,
+                    photoId = photoId,
+                    cloudPath = cloudPath,
+                    fileId = fileId,
+                    description = description,
+                    aiDescription = aiDescription,
+                    takenDate = takenDate,
+                    location = location,
+                    people = people,
+                    tags = tags
+                )
+            )
+            if (response.success && response.data != null) {
+                Log.d("CloudBase", "保存元数据成功: id=${response.data.id}")
+                Result.success(response.data)
+            } else {
+                Log.e("CloudBase", "保存元数据失败: ${response.message}")
+                Result.failure(Exception(response.message ?: "保存元数据失败"))
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "保存元数据异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 直传照片到 COS（完整流程）
+     * 1. 获取上传凭证
+     * 2. PUT 请求直传图片到 COS
+     * 3. 保存元数据到数据库
+     */
+    suspend fun uploadPhotoDirectToCOS(
+        elderDeviceId: String,
+        familyDeviceId: String,
+        imageBytes: ByteArray,
+        description: String = "",
+        aiDescription: String = "",
+        takenDate: String? = null,
+        location: String? = null,
+        people: String? = null,
+        tags: String? = null
+    ): Result<MemoryPhotoData> {
+        return try {
+            val startTime = System.currentTimeMillis()
+            
+            // 1. 获取上传凭证
+            Log.d("CloudStorage", "步骤1: 获取上传凭证")
+            val credentialsResult = getPhotoUploadCredentials(elderDeviceId, familyDeviceId)
+            val credentials = credentialsResult.getOrElse { 
+                return Result.failure(Exception("获取上传凭证失败: ${it.message}"))
+            }
+            
+            // 2. 直传到 COS
+            Log.d("CloudStorage", "步骤2: 直传云存储, 大小=${imageBytes.size / 1024}KB")
+            val uploadResult = uploadToCOS(
+                uploadUrl = credentials.uploadUrl,
+                authorization = credentials.authorization,
+                token = credentials.token,
+                imageBytes = imageBytes
+            )
+            if (uploadResult.isFailure) {
+                return Result.failure(Exception("直传云存储失败: ${uploadResult.exceptionOrNull()?.message}"))
+            }
+            
+            val uploadTime = System.currentTimeMillis() - startTime
+            Log.d("CloudStorage", "直传成功, 耗时=${uploadTime}ms")
+            
+            // 3. 保存元数据
+            Log.d("CloudStorage", "步骤3: 保存元数据")
+            val photoResult = savePhotoMetadata(
+                elderDeviceId = elderDeviceId,
+                familyDeviceId = familyDeviceId,
+                photoId = credentials.photoId,
+                cloudPath = credentials.cloudPath,
+                fileId = credentials.fileId,
+                description = description,
+                aiDescription = aiDescription,
+                takenDate = takenDate,
+                location = location,
+                people = people,
+                tags = tags
+            )
+            
+            val totalTime = System.currentTimeMillis() - startTime
+            Log.d("CloudStorage", "上传完成, 总耗时=${totalTime}ms")
+            
+            photoResult
+        } catch (e: Exception) {
+            Log.e("CloudStorage", "直传照片异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 使用 PUT 请求直传图片到 COS
+     */
+    private suspend fun uploadToCOS(
+        uploadUrl: String?,
+        authorization: String,
+        token: String,
+        imageBytes: ByteArray
+    ): Result<Unit> {
+        return try {
+            if (uploadUrl.isNullOrBlank()) {
+                return Result.failure(Exception("无法获取上传URL"))
+            }
+            val requestBody = okhttp3.RequestBody.create(
+                "image/jpeg".toMediaType(),
+                imageBytes
+            )
+            
+            val request = okhttp3.Request.Builder()
+                .url(uploadUrl)
+                .put(requestBody)
+                .addHeader("Authorization", authorization)
+                .addHeader("x-cos-security-token", token)
+                .addHeader("Content-Type", "image/jpeg")
+                .build()
+            
+            val response = okHttpClient.newCall(request).execute()
+            
+            if (response.isSuccessful) {
+                Log.d("CloudStorage", "COS PUT 成功, code=${response.code}")
+                Result.success(Unit)
+            } else {
+                val errorBody = response.body?.string() ?: "Unknown error"
+                Log.e("CloudStorage", "COS PUT 失败: ${response.code}, $errorBody")
+                Result.failure(Exception("COS 上传失败: ${response.code}"))
+            }
+        } catch (e: Exception) {
+            Log.e("CloudStorage", "COS PUT 异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }

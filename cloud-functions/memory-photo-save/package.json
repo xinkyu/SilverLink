@@ -1,0 +1,9 @@
+{
+  "name": "memory-photo-save",
+  "version": "1.0.0",
+  "description": "保存照片元数据",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

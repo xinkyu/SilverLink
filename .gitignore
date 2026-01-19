@@ -43,3 +43,4 @@ build_log*.txt
 # Node modules (cloud functions)
 **/node_modules/
 
+build_output.txt

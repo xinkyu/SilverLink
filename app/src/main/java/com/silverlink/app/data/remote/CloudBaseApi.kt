@@ -111,6 +111,52 @@ interface CloudBaseApi {
     @retrofit2.http.Headers("Content-Type: application/json")
     @POST("alert/dismiss")
     suspend fun dismissAlert(@Body request: DismissAlertRequest): ApiResponse<Unit>
+    
+    // ==================== 记忆照片管理 ====================
+    
+    /**
+     * 获取记忆照片列表
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("memory-photo-list")
+    suspend fun getMemoryPhotos(@Body request: GetPhotosRequest): ApiResponse<List<MemoryPhotoData>>
+    
+    /**
+     * 搜索记忆照片（根据自然语言查询）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("memory-photo-search")
+    suspend fun searchMemoryPhotos(@Body request: SearchPhotosRequest): ApiResponse<List<MemoryPhotoData>>
+    
+    /**
+     * 获取照片上传凭证（用于直传 COS）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("memory-photo-credentials")
+    suspend fun getPhotoUploadCredentials(@Body request: PhotoCredentialsRequest): ApiResponse<PhotoUploadCredentials>
+    
+    /**
+     * 保存照片元数据（图片已直传 COS 后调用）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("memory-photo-save")
+    suspend fun savePhotoMetadata(@Body request: SavePhotoMetadataRequest): ApiResponse<MemoryPhotoData>
+    
+    // ==================== 认知评估管理 ====================
+    
+    /**
+     * 记录认知评估结果
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("cognitive-log")
+    suspend fun logCognitiveResult(@Body request: CognitiveLogRequest): ApiResponse<Unit>
+    
+    /**
+     * 获取认知评估报告（家人端查看）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("cognitive-report")
+    suspend fun getCognitiveReport(@Body request: GetCognitiveReportRequest): ApiResponse<CognitiveReportData>
 }
 
 // ==================== 请求数据类 ====================
@@ -281,4 +327,108 @@ data class AlertData(
     val elderDeviceId: String,
     val isRead: Boolean,
     val createdAt: String
+)
+
+// ==================== 记忆照片相关 ====================
+
+@Serializable
+data class GetPhotosRequest(
+    val elderDeviceId: String,
+    val familyDeviceId: String? = null,
+    val page: Int = 1,
+    val pageSize: Int = 20,
+    val sinceTimestamp: Long? = null  // 获取此时间戳之后的照片（用于增量同步）
+)
+
+@Serializable
+data class SearchPhotosRequest(
+    val elderDeviceId: String,
+    val query: String,                // 自然语言查询
+    val limit: Int = 10
+)
+
+@Serializable
+data class MemoryPhotoData(
+    val id: String,
+    val elderDeviceId: String,
+    val familyDeviceId: String,
+    val imageUrl: String,
+    val thumbnailUrl: String? = null,
+    val description: String,
+    val aiDescription: String,
+    val takenDate: String? = null,
+    val location: String? = null,
+    val people: String? = null,
+    val tags: String? = null,
+    val createdAt: String
+)
+
+// ==================== 认知评估相关 ====================
+
+@Serializable
+data class CognitiveLogRequest(
+    val elderDeviceId: String,
+    val photoId: String,
+    val questionType: String,         // "person", "location", "date", "event"
+    val expectedAnswer: String,
+    val actualAnswer: String,
+    val isCorrect: Boolean,
+    val responseTimeMs: Long,
+    val confidence: Float = 0f
+)
+
+@Serializable
+data class GetCognitiveReportRequest(
+    val elderDeviceId: String,
+    val familyDeviceId: String,
+    val days: Int = 7                 // 统计最近几天的数据
+)
+
+@Serializable
+data class CognitiveReportData(
+    val totalQuestions: Int,
+    val correctAnswers: Int,
+    val correctRate: Float,
+    val averageResponseTimeMs: Long,
+    val trend: String,                // "improving", "stable", "declining"
+    val startDate: String,
+    val endDate: String
+)
+
+// ==================== 直传 COS 相关 ====================
+
+@Serializable
+data class PhotoCredentialsRequest(
+    val elderDeviceId: String,
+    val familyDeviceId: String,
+    val fileExtension: String = "jpg"
+)
+
+@Serializable
+data class PhotoUploadCredentials(
+    val photoId: String,
+    val cloudPath: String,
+    val uploadUrl: String? = null,  // 可能为 null，表示需要回退到 Base64 方式
+    val authorization: String = "",
+    val token: String = "",
+    val fileId: String = "",
+    val cosFileId: String? = null,
+    val expiresAt: String = "",
+    val fallbackToBase64: Boolean = false,  // 是否需要回退到 Base64 方式
+    val message: String? = null
+)
+
+@Serializable
+data class SavePhotoMetadataRequest(
+    val elderDeviceId: String,
+    val familyDeviceId: String,
+    val photoId: String,
+    val cloudPath: String,
+    val fileId: String? = null,
+    val description: String = "",
+    val aiDescription: String = "",
+    val takenDate: String? = null,
+    val location: String? = null,
+    val people: String? = null,
+    val tags: String? = null
 )

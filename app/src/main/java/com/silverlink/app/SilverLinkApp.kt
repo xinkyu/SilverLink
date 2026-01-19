@@ -7,6 +7,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.silverlink.app.data.local.AppDatabase
+import com.silverlink.app.feature.memory.MemorySyncService
 import com.silverlink.app.feature.reminder.DailyResetWorker
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
@@ -29,6 +30,9 @@ class SilverLinkApp : Application() {
 
         // 安排每日凌晨重置任务
         scheduleDailyReset()
+
+        // 安排记忆照片后台同步
+        MemorySyncService.schedule(this)
     }
 
     /**

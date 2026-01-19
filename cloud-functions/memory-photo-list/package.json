@@ -1,0 +1,9 @@
+{
+  "name": "memory-photo-list",
+  "version": "1.0.0",
+  "description": "获取记忆照片列表",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

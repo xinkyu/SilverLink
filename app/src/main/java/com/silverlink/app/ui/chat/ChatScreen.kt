@@ -91,6 +91,7 @@ import java.util.Locale
 @Composable
 fun ChatScreen(
     modifier: Modifier = Modifier,
+    onNavigateToGallery: () -> Unit = {},
     viewModel: ChatViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -183,6 +184,15 @@ fun ChatScreen(
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+    
+    // 监听照片意图 - 检测到后导航到记忆相册
+    val photoIntent by viewModel.photoIntent.collectAsState()
+    LaunchedEffect(photoIntent) {
+        if (photoIntent !is ChatViewModel.PhotoIntent.None) {
+            onNavigateToGallery()
+            viewModel.clearPhotoIntent()
         }
     }
 

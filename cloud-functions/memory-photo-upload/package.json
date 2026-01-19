@@ -1,0 +1,9 @@
+{
+  "name": "memory-photo-upload",
+  "version": "1.0.0",
+  "description": "上传记忆照片",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

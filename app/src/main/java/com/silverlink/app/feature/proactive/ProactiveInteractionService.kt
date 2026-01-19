@@ -19,6 +19,8 @@ import com.silverlink.app.R
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.dao.HistoryDao
+import com.silverlink.app.data.local.dao.CognitiveLogDao
+import com.silverlink.app.data.local.dao.MemoryPhotoDao
 import com.silverlink.app.data.remote.CloudBaseService
 import com.silverlink.app.data.remote.RetrofitClient
 import com.silverlink.app.data.remote.model.Input
@@ -77,6 +79,8 @@ class ProactiveInteractionService : Service(), SensorEventListener {
     // 用户配置
     private lateinit var userPreferences: UserPreferences
     private lateinit var historyDao: HistoryDao
+    private lateinit var memoryPhotoDao: MemoryPhotoDao
+    private lateinit var cognitiveLogDao: CognitiveLogDao
 
     private var lastMovementTime = AtomicLong(System.currentTimeMillis())
     private var currentLightLevel = 0f
@@ -95,9 +99,12 @@ class ProactiveInteractionService : Service(), SensorEventListener {
     private var lastWakeUpTime = 0L
     // 真正的用户移动时间（基于计步器变化，不是定时器重置）
     private var lastRealMovementTime = AtomicLong(0L)
+    private val lastQuizPromptTime = AtomicLong(0L)
     private val deviceId: String by lazy {
         Settings.Secure.getString(applicationContext.contentResolver, Settings.Secure.ANDROID_ID)
     }
+
+    private val QUIZ_PROMPT_INTERVAL_MS = 24 * 60 * 60 * 1000L
 
     override fun onCreate() {
         super.onCreate()
@@ -114,6 +121,8 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         // 3. 初始化用户配置和历史记录访问
         userPreferences = UserPreferences.getInstance(applicationContext)
         historyDao = AppDatabase.getInstance(applicationContext).historyDao()
+        memoryPhotoDao = AppDatabase.getInstance(applicationContext).memoryPhotoDao()
+        cognitiveLogDao = AppDatabase.getInstance(applicationContext).cognitiveLogDao()
         
         // 4. 初始化传感器
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -212,6 +221,9 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         
         // 2. Generate and speak personalized greeting
         speakGreeting()
+
+        // 2.1 适度提示记忆小游戏（每天最多一次）
+        maybePromptMemoryQuiz()
         
         // 3. 增加失败计数（如果用户打开App，会在onResume时重置）
         val failures = consecutiveWakeUpFailures.incrementAndGet()
@@ -222,6 +234,44 @@ class ProactiveInteractionService : Service(), SensorEventListener {
             sendInactivityAlertToFamily()
             // 重置计数器，避免重复发送
             consecutiveWakeUpFailures.set(0)
+        }
+    }
+
+    /**
+     * 适度提示记忆小游戏
+     */
+    private fun maybePromptMemoryQuiz() {
+        serviceScope.launch {
+            try {
+                val now = System.currentTimeMillis()
+                val lastPrompt = lastQuizPromptTime.get()
+                if (now - lastPrompt < QUIZ_PROMPT_INTERVAL_MS) return@launch
+
+                if (deviceId.isBlank()) return@launch
+                val photoCount = memoryPhotoDao.getDownloadedCount(deviceId)
+                if (photoCount <= 0) return@launch
+
+                val recentLogs = cognitiveLogDao.getRecentLogs(deviceId, 1)
+                if (recentLogs.isNotEmpty()) {
+                    val recentTime = recentLogs.first().createdAt
+                    if (now - recentTime < 3 * 24 * 60 * 60 * 1000L) return@launch
+                }
+
+                delay(4000)
+                val prompt = "要不要一起玩记忆小游戏？我给您出几道照片小题。"
+                val result = ttsService.synthesize(prompt)
+                result.fold(
+                    onSuccess = { audioData ->
+                        audioPlayer.play(audioData)
+                        lastQuizPromptTime.set(now)
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "TTS quiz prompt failed: ${error.message}")
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to prompt memory quiz", e)
+            }
         }
     }
     

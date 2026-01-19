@@ -56,6 +56,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _ttsState = MutableStateFlow<TtsState>(TtsState.Idle)
     val ttsState: StateFlow<TtsState> = _ttsState.asStateFlow()
 
+    // 照片意图状态 - 用于触发导航到记忆画廊
+    sealed class PhotoIntent {
+        object None : PhotoIntent()
+        object OpenGallery : PhotoIntent()
+        data class SearchPhotos(val query: String) : PhotoIntent()
+    }
+    
+    private val _photoIntent = MutableStateFlow<PhotoIntent>(PhotoIntent.None)
+    val photoIntent: StateFlow<PhotoIntent> = _photoIntent.asStateFlow()
+
     // 会话管理
     private val _conversations = MutableStateFlow<List<ConversationEntity>>(emptyList())
     val conversations: StateFlow<List<ConversationEntity>> = _conversations.asStateFlow()
@@ -368,6 +378,67 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             else -> Emotion.NEUTRAL
         }
     }
+    
+    // ==================== 照片意图识别 ====================
+    
+    /**
+     * 检测照片相关意图
+     * 返回 true 表示检测到照片意图，已处理，不需要继续发送到 AI
+     */
+    private fun detectPhotoIntent(text: String): Boolean {
+        val galleryKeywords = listOf("看照片", "看看照片", "老照片", "翻相册", "记忆相册", "看相册")
+        val searchKeywords = listOf("找照片", "搜照片", "有没有", "那年", "那次", "去哪里", "谁带我")
+        
+        // 检测是否是打开相册的意图
+        if (galleryKeywords.any { text.contains(it) }) {
+            _photoIntent.value = PhotoIntent.OpenGallery
+            
+            // 语音回复
+            val elderName = getElderName()
+            val response = if (elderName.isNotBlank()) {
+                "${elderName}，好的，这就打开记忆相册给您看。"
+            } else {
+                "好的，这就打开记忆相册给您看。"
+            }
+            
+            viewModelScope.launch {
+                val assistantMessage = Message("assistant", response)
+                _messages.value = _messages.value + assistantMessage
+                saveMessageToDb(assistantMessage, null)
+                speakText(response)
+            }
+            return true
+        }
+        
+        // 检测是否是搜索照片的意图
+        if (searchKeywords.any { text.contains(it) }) {
+            _photoIntent.value = PhotoIntent.SearchPhotos(text)
+            
+            val elderName = getElderName()
+            val response = if (elderName.isNotBlank()) {
+                "${elderName}，我帮您找找相关的照片。"
+            } else {
+                "我帮您找找相关的照片。"
+            }
+            
+            viewModelScope.launch {
+                val assistantMessage = Message("assistant", response)
+                _messages.value = _messages.value + assistantMessage
+                saveMessageToDb(assistantMessage, null)
+                speakText(response)
+            }
+            return true
+        }
+        
+        return false
+    }
+    
+    /**
+     * 清除照片意图状态（导航后调用）
+     */
+    fun clearPhotoIntent() {
+        _photoIntent.value = PhotoIntent.None
+    }
 
     /**
      * 开始录音
@@ -475,6 +546,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         // 停止当前的 TTS 播放
         stopSpeaking()
+        
+        // 检测照片意图 - 如果是照片相关请求，直接处理不发送到 AI
+        if (detectPhotoIntent(content)) {
+            // 仍然显示用户消息
+            val userMessage = Message("user", content)
+            _messages.value = _messages.value + userMessage
+            viewModelScope.launch {
+                saveMessageToDb(userMessage, null)
+            }
+            return
+        }
 
         // 对文字输入也进行情绪检测
         detectEmotionFromText(content)

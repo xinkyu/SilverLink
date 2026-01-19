@@ -1,0 +1,9 @@
+{
+  "name": "memory-photo-search",
+  "version": "1.0.0",
+  "description": "搜索记忆照片",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

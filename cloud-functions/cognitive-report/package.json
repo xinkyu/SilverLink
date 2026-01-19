@@ -1,0 +1,9 @@
+{
+  "name": "cognitive-report",
+  "version": "1.0.0",
+  "description": "获取认知评估报告",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

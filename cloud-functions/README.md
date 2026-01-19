@@ -440,6 +440,13 @@ exports.main = async (event) => {
 | /alert/send        | alert-send        |
 | /alert/query       | alert-query       |
 | /alert/dismiss     | alert-dismiss     |
+| /memory-photo-upload      | memory-photo-upload      |
+| /memory-photo-list        | memory-photo-list        |
+| /memory-photo-search      | memory-photo-search      |
+| /memory-photo-credentials | memory-photo-credentials |
+| /memory-photo-save        | memory-photo-save        |
+| /cognitive-log            | cognitive-log            |
+| /cognitive-report         | cognitive-report         |
 
 3. 获取访问地址，格式为：`https://<环境ID>.service.tcloudbase.com/`
 
