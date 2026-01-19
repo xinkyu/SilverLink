@@ -496,7 +496,8 @@ private fun minutesOfDay(point: MoodTimePoint): Int {
 
 enum class ChartType(val label: String) {
     MOOD("情绪"),
-    MEDICATION("用药记录")
+    MEDICATION("用药记录"),
+    COGNITIVE("认知评估")
 }
 
 @Composable
@@ -522,7 +523,7 @@ fun ChartTypeToggle(
             
             Surface(
                 modifier = Modifier
-                    .padding(horizontal = 4.dp)
+                    .padding(horizontal = 3.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .clickable { onTypeSelected(type) },
                 color = backgroundColor,
@@ -530,9 +531,12 @@ fun ChartTypeToggle(
             ) {
                 Text(
                     text = type.label,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     color = textColor,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
@@ -1142,5 +1146,191 @@ fun MoodDetailCard(
                 }
             }
         }
+    }
+}
+
+// ==================== 认知评估相关 ====================
+
+/**
+ * 认知评估报告数据
+ */
+data class CognitiveReportUiData(
+    val totalQuestions: Int,
+    val correctAnswers: Int,
+    val correctRate: Float,
+    val averageResponseTimeMs: Long,
+    val trend: String,              // "improving", "stable", "declining"
+    val startDate: String,
+    val endDate: String
+)
+
+/**
+ * 认知评估报告卡片
+ */
+@Composable
+fun CognitiveReportCard(
+    report: CognitiveReportUiData?,
+    isLoading: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "🧠 认知评估报告",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            when {
+                isLoading -> {
+                    Text(
+                        text = "正在加载认知数据…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                report == null || report.totalQuestions == 0 -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "📝",
+                            style = MaterialTheme.typography.displaySmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "暂无认知测试记录",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "长辈可在「记忆相册」中进行记忆小游戏",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                else -> {
+                    // 正确率显示
+                    val ratePercent = (report.correctRate * 100).toInt()
+                    val rateColor = when {
+                        ratePercent >= 80 -> Color(0xFF4CAF50)
+                        ratePercent >= 60 -> Color(0xFFFFC107)
+                        else -> Color(0xFFFF5722)
+                    }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "${ratePercent}%",
+                                style = MaterialTheme.typography.displaySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = rateColor
+                            )
+                            Text(
+                                text = "正确率",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.End) {
+                            val trendEmoji = when (report.trend) {
+                                "improving" -> "📈 进步中"
+                                "declining" -> "📉 需关注"
+                                else -> "➡️ 保持稳定"
+                            }
+                            val trendColor = when (report.trend) {
+                                "improving" -> Color(0xFF4CAF50)
+                                "declining" -> Color(0xFFFF5722)
+                                else -> Color(0xFF9E9E9E)
+                            }
+                            Text(
+                                text = trendEmoji,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = trendColor
+                            )
+                            Text(
+                                text = "${report.startDate} ~ ${report.endDate}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // 统计数据
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        StatItem(
+                            label = "总题数",
+                            value = report.totalQuestions.toString()
+                        )
+                        StatItem(
+                            label = "答对",
+                            value = report.correctAnswers.toString()
+                        )
+                        StatItem(
+                            label = "平均用时",
+                            value = "${report.averageResponseTimeMs / 1000}秒"
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // 正确率进度条
+                    LinearProgressIndicator(
+                        progress = report.correctRate.coerceIn(0f, 1f),
+                        color = rateColor,
+                        trackColor = rateColor.copy(alpha = 0.2f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatItem(
+    label: String,
+    value: String
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

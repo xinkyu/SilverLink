@@ -155,6 +155,14 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     private val _alerts = MutableStateFlow<List<AlertData>>(emptyList())
     val alerts: StateFlow<List<AlertData>> = _alerts.asStateFlow()
     
+    // 认知评估报告
+    private val _cognitiveReport = MutableStateFlow<com.silverlink.app.data.remote.CognitiveReportData?>(null)
+    val cognitiveReport: StateFlow<com.silverlink.app.data.remote.CognitiveReportData?> = _cognitiveReport.asStateFlow()
+    
+    // 认知报告加载状态
+    private val _isCognitiveLoading = MutableStateFlow(false)
+    val isCognitiveLoading: StateFlow<Boolean> = _isCognitiveLoading.asStateFlow()
+    
     // 警报轮询Job
     private var alertPollingJob: kotlinx.coroutines.Job? = null
     
@@ -379,8 +387,30 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         } else {
             _moodAnalysis.value = null
         }
+        
+        // 加载认知评估报告
+        fetchCognitiveReport()
 
         _loadingState.value = LoadingState.Success()
+    }
+    
+    /**
+     * 获取认知评估报告
+     */
+    private suspend fun fetchCognitiveReport() {
+        _isCognitiveLoading.value = true
+        try {
+            val result = syncRepository.getCognitiveReport(days = 7)
+            result.onSuccess { report ->
+                _cognitiveReport.value = report
+            }.onFailure { e ->
+                android.util.Log.e("FamilyMonitoringViewModel", "获取认知报告失败: ${e.message}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FamilyMonitoringViewModel", "获取认知报告异常: ${e.message}")
+        } finally {
+            _isCognitiveLoading.value = false
+        }
     }
     
     private fun processMoodData(

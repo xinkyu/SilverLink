@@ -85,6 +85,7 @@ class CognitiveQuizService(private val context: Context) {
     
     /**
      * 生成随机测验问题
+     * 优先从本地数据库获取，若无照片则尝试从云端获取
      */
     suspend fun generateQuiz(): QuizQuestion? {
         if (deviceId.isBlank()) {
@@ -92,14 +93,62 @@ class CognitiveQuizService(private val context: Context) {
             return null
         }
         
-        // 随机获取一张包含人物的照片
-        val photo = memoryPhotoDao.getRandomPersonPhoto(deviceId)
-        if (photo == null) {
-            Log.w(TAG, "No suitable photos for quiz")
-            return null
+        // 1. 先尝试从本地数据库获取已下载的包含人物的照片
+        val localPhoto = memoryPhotoDao.getRandomPersonPhoto(deviceId)
+        if (localPhoto != null) {
+            Log.d(TAG, "Using local photo for quiz: ${localPhoto.cloudId}")
+            return generateQuestionFromPhoto(localPhoto)
         }
         
-        // 选择问题类型（优先人物识别）
+        // 2. 本地无照片时，尝试从云端获取
+        Log.d(TAG, "No local photos, fetching from cloud...")
+        try {
+            val cloudResult = CloudBaseService.getMemoryPhotos(
+                elderDeviceId = deviceId,
+                pageSize = 50
+            )
+            
+            cloudResult.onSuccess { photos ->
+                // 筛选包含人物的照片
+                val photosWithPeople = photos.filter { !it.people.isNullOrBlank() }
+                val selectedPhoto = photosWithPeople.randomOrNull() ?: photos.randomOrNull()
+                
+                if (selectedPhoto != null) {
+                    Log.d(TAG, "Using cloud photo for quiz: ${selectedPhoto.id}")
+                    // 转换为 Entity 用于问题生成
+                    val entity = MemoryPhotoEntity(
+                        cloudId = selectedPhoto.id,
+                        elderDeviceId = selectedPhoto.elderDeviceId,
+                        familyDeviceId = selectedPhoto.familyDeviceId,
+                        imageUrl = selectedPhoto.imageUrl,
+                        thumbnailUrl = selectedPhoto.thumbnailUrl,
+                        localPath = null,
+                        thumbnailPath = null,
+                        description = selectedPhoto.description,
+                        aiDescription = selectedPhoto.aiDescription,
+                        takenDate = selectedPhoto.takenDate,
+                        location = selectedPhoto.location,
+                        people = selectedPhoto.people,
+                        tags = selectedPhoto.tags,
+                        isDownloaded = false
+                    )
+                    return generateQuestionFromPhoto(entity)
+                }
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to fetch cloud photos", e)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching cloud photos", e)
+        }
+        
+        Log.w(TAG, "No suitable photos for quiz")
+        return null
+    }
+    
+    /**
+     * 从照片生成测验问题
+     */
+    private fun generateQuestionFromPhoto(photo: MemoryPhotoEntity): QuizQuestion {
         val questionType = selectQuestionType(photo)
         val (questionText, expectedAnswers) = generateQuestionContent(photo, questionType)
         

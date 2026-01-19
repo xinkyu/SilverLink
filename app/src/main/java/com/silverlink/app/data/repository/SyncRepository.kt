@@ -523,6 +523,51 @@ class SyncRepository(private val context: Context) {
         }
     }
     
+    // ==================== 认知评估相关 ====================
+    
+    /**
+     * 获取认知评估报告（家人端调用）
+     */
+    suspend fun getCognitiveReport(
+        days: Int = 7
+    ): Result<com.silverlink.app.data.remote.CognitiveReportData?> = withContext(Dispatchers.IO) {
+        try {
+            // 获取已配对的长辈设备ID
+            val elderDeviceId = cloudBase.getPairedElderDeviceId(currentDeviceId).getOrNull()
+            
+            if (elderDeviceId == null) {
+                return@withContext Result.success(null)
+            }
+            
+            cloudBase.getCognitiveReport(
+                elderDeviceId = elderDeviceId,
+                familyDeviceId = currentDeviceId,
+                days = days
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "获取认知报告失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 长辈端获取自己的认知评估报告（不需要配对验证）
+     */
+    suspend fun getSelfCognitiveReport(
+        days: Int = 7
+    ): Result<com.silverlink.app.data.remote.CognitiveReportData?> = withContext(Dispatchers.IO) {
+        try {
+            cloudBase.getCognitiveReport(
+                elderDeviceId = currentDeviceId,
+                familyDeviceId = null,
+                days = days
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "获取认知报告失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
     companion object {
         @Volatile
         private var instance: SyncRepository? = null

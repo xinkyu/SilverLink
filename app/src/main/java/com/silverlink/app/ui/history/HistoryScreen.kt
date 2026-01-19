@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.ui.components.ChartType
 import com.silverlink.app.ui.components.ChartTypeToggle
+import com.silverlink.app.ui.components.CognitiveReportCard
+import com.silverlink.app.ui.components.CognitiveReportUiData
 import com.silverlink.app.ui.components.HealthTopBar
 import com.silverlink.app.ui.components.HeroStatusDisplay
 import com.silverlink.app.ui.components.MedicationStatusDisplay
@@ -65,6 +67,10 @@ fun HistoryScreen(
     val moodAnalysis by viewModel.moodAnalysis.collectAsState()
     val isAnalyzing by viewModel.isAnalyzing.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    
+    // 认知评估状态
+    val cognitiveReport by viewModel.cognitiveReport.collectAsState()
+    val isCognitiveLoading by viewModel.isCognitiveLoading.collectAsState()
     
     val gradientBrush = Brush.verticalGradient(
         colors = listOf(
@@ -177,6 +183,29 @@ fun HistoryScreen(
                                 summary = medicationSummary
                             )
                         }
+                    }
+                    
+                    // 认知评估
+                    AnimatedVisibility(
+                        visible = chartType == ChartType.COGNITIVE,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        val reportUiData = cognitiveReport?.let { report ->
+                            CognitiveReportUiData(
+                                totalQuestions = report.totalQuestions,
+                                correctAnswers = report.correctAnswers,
+                                correctRate = report.correctRate,
+                                averageResponseTimeMs = report.averageResponseTimeMs,
+                                trend = report.trend,
+                                startDate = report.startDate,
+                                endDate = report.endDate
+                            )
+                        }
+                        CognitiveReportCard(
+                            report = reportUiData,
+                            isLoading = isCognitiveLoading
+                        )
                     }
                     
                     // 无数据提示

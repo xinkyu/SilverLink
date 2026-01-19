@@ -11,6 +11,8 @@ const db = app.database();
  */
 exports.main = async (event) => {
   try {
+    const body =
+      typeof event?.body === "string" ? JSON.parse(event.body) : event?.body;
     const {
       elderDeviceId,
       photoId,
@@ -20,14 +22,14 @@ exports.main = async (event) => {
       isCorrect,
       responseTimeMs,
       confidence = 0,
-    } = event;
+    } = body || event;
 
     if (!elderDeviceId || !photoId || !questionType) {
       return { success: false, message: "参数不完整" };
     }
 
     const now = new Date();
-    
+
     await db.collection("cognitive_logs").add({
       elderDeviceId,
       photoId,

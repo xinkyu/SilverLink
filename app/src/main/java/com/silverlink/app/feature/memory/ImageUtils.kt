@@ -126,15 +126,70 @@ object ImageUtils {
     
     /**
      * 将 Bitmap 转换为 JPEG 字节数组（用于直传 COS）
+     * 
+     * 智能压缩策略：
+     * - 小于 500KB 的图片：不压缩，保持原质量
+     * - 500KB-2MB：轻微压缩，保持高质量
+     * - 大于 2MB：适度压缩，平衡质量和大小
+     * 
      * @param bitmap 原始图片
-     * @param quality 压缩质量 (0-100)
-     * @param maxSize 最大边长（像素），防止上传过大的图片
+     * @param targetMaxBytes 目标最大字节数（默认 2MB，COS 上传没有严格限制）
      * @return JPEG 格式的字节数组
      */
-    fun bitmapToJpegBytes(bitmap: Bitmap, quality: Int = 90, maxSize: Int = 1920): ByteArray {
-        val scaledBitmap = compressBitmap(bitmap, maxSize)
+    fun bitmapToJpegBytes(
+        bitmap: Bitmap, 
+        quality: Int = 92, 
+        maxSize: Int = 2560,  // 最大边长，4K 以下
+        targetMaxBytes: Int = 2 * 1024 * 1024  // 目标最大 2MB
+    ): ByteArray {
+        // 先估算原始大小
+        val originalBytes = estimateByteSize(bitmap, 95)
+        
+        // 小图片（< 500KB）：不压缩
+        if (originalBytes < 500 * 1024 && bitmap.width <= maxSize && bitmap.height <= maxSize) {
+            android.util.Log.d("ImageUtils", "小图片无需压缩: ${originalBytes / 1024}KB")
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+            return outputStream.toByteArray()
+        }
+        
+        // 中等图片（500KB - 2MB）：轻微压缩
+        if (originalBytes < targetMaxBytes) {
+            val scaledBitmap = compressBitmap(bitmap, maxSize)
+            val outputStream = ByteArrayOutputStream()
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+            android.util.Log.d("ImageUtils", "中等图片轻度压缩: ${originalBytes / 1024}KB -> ${outputStream.size() / 1024}KB")
+            return outputStream.toByteArray()
+        }
+        
+        // 大图片（> 2MB）：渐进式压缩
+        var currentMaxSize = maxSize
+        var currentQuality = quality
+        
+        repeat(5) {
+            val scaledBitmap = compressBitmap(bitmap, currentMaxSize)
+            val outputStream = ByteArrayOutputStream()
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, currentQuality, outputStream)
+            val resultBytes = outputStream.toByteArray()
+            
+            if (resultBytes.size <= targetMaxBytes) {
+                android.util.Log.d("ImageUtils", "大图片压缩完成: ${originalBytes / 1024}KB -> ${resultBytes.size / 1024}KB, 尺寸=${scaledBitmap.width}x${scaledBitmap.height}, 质量=$currentQuality")
+                return resultBytes
+            }
+            
+            // 继续压缩
+            if (currentQuality > 75) {
+                currentQuality -= 8
+            } else {
+                currentMaxSize = (currentMaxSize * 0.85f).toInt().coerceAtLeast(1280)
+            }
+        }
+        
+        // 最终兜底
+        val scaledBitmap = compressBitmap(bitmap, currentMaxSize)
         val outputStream = ByteArrayOutputStream()
-        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, currentQuality.coerceAtLeast(70), outputStream)
+        android.util.Log.d("ImageUtils", "大图片最终压缩: ${originalBytes / 1024}KB -> ${outputStream.size() / 1024}KB")
         return outputStream.toByteArray()
     }
 }

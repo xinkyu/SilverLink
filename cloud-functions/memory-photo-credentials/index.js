@@ -1,111 +1,84 @@
-// memory-photo-credentials/index.js
-// 生成 COS 预签名上传 URL
 const cloud = require("@cloudbase/node-sdk");
-const COS = require("cos-nodejs-sdk-v5");
-const STS = require("qcloud-cos-sts");
 
+// 初始化
 const app = cloud.init({
   env: cloud.SYMBOL_CURRENT_ENV,
 });
 const db = app.database();
 
-function getParams(event) {
-  if (!event) return {};
-  if (event.body) {
-    let body = event.body;
+exports.main = async (event, context) => {
+  try {
+    // 1. 解析参数
+    let body = event.body || {};
     if (event.isBase64Encoded) {
       body = Buffer.from(body, "base64").toString("utf8");
     }
     if (typeof body === "string") {
       try {
-        return JSON.parse(body);
-      } catch (e) {
-        return {};
-      }
+        body = JSON.parse(body);
+      } catch (e) {}
     }
-    return body || {};
-  }
-  if (event.queryStringParameters) {
-    return event.queryStringParameters;
-  }
-  return event;
-}
+    const params = { ...(event.queryStringParameters || {}), ...body };
+    const { elderDeviceId, familyDeviceId, fileExtension = "jpg" } = params;
 
-/**
- * 生成 COS 上传凭证
- * 方案：使用 CloudBase uploadFile 先上传一个占位文件获取 fileId，
- * 然后返回 fileId 和临时访问 URL
- * 
- * 注意：由于 CloudBase 云函数内无法直接生成 COS 预签名 URL，
- * 我们改为在云函数中完成上传，但接受 multipart 格式的请求
- */
-exports.main = async (event) => {
-  try {
-    const { elderDeviceId, familyDeviceId, fileExtension = "jpg" } =
-      getParams(event);
-
+    // 2. 校验参数
     if (!elderDeviceId || !familyDeviceId) {
-      return { success: false, message: "参数不完整" };
+      return { success: false, message: "缺少必要参数" };
     }
 
-    // 验证配对关系
-    const { data: pairings } = await db
+    // 3. 校验配对
+    const countResult = await db
       .collection("pairing_codes")
       .where({
         familyDeviceId,
         elderDeviceId,
         status: "paired",
       })
-      .limit(1)
-      .get();
+      .count();
 
-    if (!pairings || pairings.length === 0) {
+    if (countResult.total === 0) {
       return { success: false, message: "未找到配对关系" };
     }
 
-    // 生成唯一文件路径
+    // 4. 准备路径
     const photoId = `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const cloudPath = `memory_photos/${elderDeviceId}/${photoId}.${fileExtension}`;
+    const contentType = `image/${fileExtension === "png" ? "png" : "jpeg"}`;
 
-    // 使用 getUploadMetadata 生成直传 URL
-    try {
-      console.log("尝试 getUploadMetadata, cloudPath:", cloudPath);
-      const uploadMetadata = await app.getUploadMetadata({
-        cloudPath: cloudPath,
-        contentType: "image/jpeg",
-      });
+    // 5. 核心修复：获取并解包数据
+    const result = await app.getUploadMetadata({
+      cloudPath: cloudPath,
+      contentType: contentType,
+    });
 
-      console.log("getUploadMetadata 返回:", JSON.stringify(uploadMetadata));
+    console.log("SDK原始返回:", JSON.stringify(result));
 
-      if (!uploadMetadata || !uploadMetadata.url) {
-        return {
-          success: false,
-          message: "无法获取上传URL",
-        };
-      }
+    // 关键修正：兼容 result.data 和直接 result 的情况
+    const meta = result.data || result;
 
-      return {
-        success: true,
-        data: {
-          photoId,
-          cloudPath,
-          uploadUrl: uploadMetadata.url,
-          authorization: uploadMetadata.authorization || "",
-          token: uploadMetadata.token || "",
-          fileId: uploadMetadata.fileId || "",
-          cosFileId: uploadMetadata.cosFileId || null,
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-        },
-      };
-    } catch (metaErr) {
-      console.log("getUploadMetadata 失败:", metaErr.message);
-      return {
-        success: false,
-        message: `无法获取上传URL: ${metaErr.message}`,
-      };
+    if (!meta || !meta.url) {
+      return { success: false, message: "凭证字段缺失" };
     }
+
+    // 6. 返回成功
+    return {
+      success: true,
+      data: {
+        photoId,
+        cloudPath,
+        uploadUrl: meta.url,
+        authorization: meta.authorization,
+        token: meta.token,
+        fileId: meta.fileId,
+        cosFileId: meta.cosFileId,
+        contentType,
+      },
+    };
   } catch (e) {
-    console.error("生成上传凭证失败:", e);
-    return { success: false, message: e.message };
+    console.error("系统错误:", e);
+    return {
+      success: false,
+      message: `服务端内部错误: ${e.message}`,
+    };
   }
 };

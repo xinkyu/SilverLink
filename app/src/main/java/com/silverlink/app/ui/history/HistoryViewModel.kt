@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.entity.MedicationLogEntity
 import com.silverlink.app.data.local.entity.MoodLogEntity
+import com.silverlink.app.data.remote.CognitiveReportData
 import com.silverlink.app.data.remote.MedicationData
 import com.silverlink.app.data.remote.MedicationLogData
 import com.silverlink.app.data.remote.MoodLogData
@@ -136,6 +137,14 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     // 加载状态
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    
+    // 认知评估报告
+    private val _cognitiveReport = MutableStateFlow<CognitiveReportData?>(null)
+    val cognitiveReport: StateFlow<CognitiveReportData?> = _cognitiveReport.asStateFlow()
+    
+    // 认知报告加载状态
+    private val _isCognitiveLoading = MutableStateFlow(false)
+    val isCognitiveLoading: StateFlow<Boolean> = _isCognitiveLoading.asStateFlow()
     
     init {
         loadData()
@@ -299,6 +308,28 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             }
         } else {
             _moodAnalysis.value = null
+        }
+        
+        // 加载认知评估报告
+        fetchCognitiveReport()
+    }
+    
+    /**
+     * 获取认知评估报告
+     */
+    private suspend fun fetchCognitiveReport() {
+        _isCognitiveLoading.value = true
+        try {
+            val result = syncRepository.getSelfCognitiveReport(days = 7)
+            result.onSuccess { report ->
+                _cognitiveReport.value = report
+            }.onFailure { e ->
+                android.util.Log.e("HistoryViewModel", "获取认知报告失败: ${e.message}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("HistoryViewModel", "获取认知报告异常: ${e.message}")
+        } finally {
+            _isCognitiveLoading.value = false
         }
     }
     

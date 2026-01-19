@@ -5,7 +5,9 @@ import android.graphics.BitmapFactory
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +45,7 @@ fun MemoryGalleryScreen(
     viewModel: MemoryGalleryViewModel = viewModel(),
     onBack: () -> Unit,
     onQuizClick: () -> Unit = {},
+    initialPhotoIndex: Int = 0,
     onAskQuestion: (String, MemoryPhotoData) -> Unit = { _, _ -> }
 ) {
     val photos by viewModel.photos.collectAsState()
@@ -54,6 +57,13 @@ fun MemoryGalleryScreen(
     
     LaunchedEffect(Unit) {
         viewModel.loadPhotos()
+    }
+    
+    // 加载完成后跳转到初始索引
+    LaunchedEffect(photos.size, initialPhotoIndex) {
+        if (photos.isNotEmpty() && initialPhotoIndex > 0) {
+            viewModel.goToPhoto(initialPhotoIndex)
+        }
     }
     
     // 自动隐藏描述
@@ -97,11 +107,17 @@ fun MemoryGalleryScreen(
                     contentScale = ContentScale.Crop
                 )
                 
-                // 主图片
+                // 主图片（点击切换描述显示）
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(vertical = 60.dp),
+                        .padding(vertical = 60.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null  // 无点击效果
+                        ) {
+                            showDescription = !showDescription
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     AsyncImage(
@@ -232,24 +248,24 @@ fun MemoryGalleryScreen(
                     }
                 }
                 
-                // 左右导航箭头
+                // 左右导航箭头 - 小巧透明，位于底部两侧
                 if (currentIndex > 0) {
                     IconButton(
                         onClick = { viewModel.previousPhoto() },
                         modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .padding(8.dp)
-                            .size(56.dp)
+                            .align(Alignment.BottomStart)
+                            .padding(start = 16.dp, bottom = 100.dp)
+                            .size(44.dp)
                             .background(
-                                Color.Black.copy(alpha = 0.3f),
+                                Color.Black.copy(alpha = 0.15f),
                                 CircleShape
                             )
                     ) {
                         Icon(
                             Icons.Default.ChevronLeft,
                             contentDescription = "上一张",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
@@ -258,38 +274,23 @@ fun MemoryGalleryScreen(
                     IconButton(
                         onClick = { viewModel.nextPhoto() },
                         modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(8.dp)
-                            .size(56.dp)
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 100.dp)
+                            .size(44.dp)
                             .background(
-                                Color.Black.copy(alpha = 0.3f),
+                                Color.Black.copy(alpha = 0.15f),
                                 CircleShape
                             )
                     ) {
                         Icon(
                             Icons.Default.ChevronRight,
                             contentDescription = "下一张",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
-                
-                // 点击显示描述
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    if (event.changes.any { it.pressed }) {
-                                        showDescription = !showDescription
-                                    }
-                                }
-                            }
-                        }
-                )
+
             }
         }
     }

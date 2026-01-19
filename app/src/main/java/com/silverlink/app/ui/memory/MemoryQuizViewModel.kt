@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.silverlink.app.feature.chat.AudioPlayerHelper
 import com.silverlink.app.feature.chat.AudioRecorder
 import com.silverlink.app.feature.chat.SpeechRecognitionService
 import com.silverlink.app.feature.chat.TextToSpeechService
@@ -22,6 +23,7 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
     
     private val quizService = CognitiveQuizService(application)
     private val ttsService = TextToSpeechService()
+    private val audioPlayerHelper = AudioPlayerHelper(application)
     private val audioRecorder = AudioRecorder(application)
     private val speechService = SpeechRecognitionService()
     
@@ -197,8 +199,10 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
         try {
             val result = ttsService.synthesize(text, 0.9)
             result.onSuccess { audioData ->
-                // TODO: 播放音频
                 Log.d(TAG, "Question speech synthesized: ${audioData.size} bytes")
+                audioPlayerHelper.play(audioData)
+            }.onFailure { e ->
+                Log.e(TAG, "Question TTS synthesis failed", e)
             }
         } catch (e: Exception) {
             Log.e(TAG, "TTS failed", e)
@@ -225,6 +229,9 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
             val result = ttsService.synthesize(text, 0.9)
             result.onSuccess { audioData ->
                 Log.d(TAG, "Speech synthesized: ${audioData.size} bytes")
+                audioPlayerHelper.play(audioData)
+            }.onFailure { e ->
+                Log.e(TAG, "TTS synthesis failed", e)
             }
         } catch (e: Exception) {
             Log.e(TAG, "TTS failed", e)
@@ -248,5 +255,10 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
         } else {
             "开始测试记忆力吧！"
         }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        audioPlayerHelper.release()
     }
 }

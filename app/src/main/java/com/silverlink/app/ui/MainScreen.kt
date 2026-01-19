@@ -32,6 +32,7 @@ import com.silverlink.app.data.local.UserRole
 import com.silverlink.app.ui.chat.ChatScreen
 import com.silverlink.app.ui.family.FamilyMonitoringScreen
 import com.silverlink.app.ui.history.HistoryScreen
+import com.silverlink.app.ui.memory.ElderPhotoGridScreen
 import com.silverlink.app.ui.memory.MemoryGalleryScreen
 import com.silverlink.app.ui.memory.MemoryQuizScreen
 import com.silverlink.app.ui.memory.MemoryLibraryScreen
@@ -63,6 +64,8 @@ fun MainScreen(modifier: Modifier = Modifier) {
 private fun ElderMainScreen(modifier: Modifier = Modifier) {
     var selectedTab by remember { mutableStateOf(0) }
     var showMemoryQuiz by remember { mutableStateOf(false) }
+    var showPhotoDetail by remember { mutableStateOf(false) }
+    var selectedPhotoIndex by remember { mutableStateOf(0) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -160,15 +163,28 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                 )
                 1 -> ReminderScreen()
                 2 -> {
-                    if (showMemoryQuiz) {
-                        MemoryQuizScreen(
-                            onBack = { showMemoryQuiz = false }
-                        )
-                    } else {
-                        MemoryGalleryScreen(
-                            onBack = { selectedTab = 0 },
-                            onQuizClick = { showMemoryQuiz = true }
-                        )
+                    when {
+                        showMemoryQuiz -> {
+                            MemoryQuizScreen(
+                                onBack = { showMemoryQuiz = false }
+                            )
+                        }
+                        showPhotoDetail -> {
+                            MemoryGalleryScreen(
+                                onBack = { showPhotoDetail = false },
+                                onQuizClick = { showMemoryQuiz = true },
+                                initialPhotoIndex = selectedPhotoIndex
+                            )
+                        }
+                        else -> {
+                            ElderPhotoGridScreen(
+                                onPhotoClick = { index ->
+                                    selectedPhotoIndex = index
+                                    showPhotoDetail = true
+                                },
+                                onQuizClick = { showMemoryQuiz = true }
+                            )
+                        }
                     }
                 }
                 3 -> HistoryScreen()

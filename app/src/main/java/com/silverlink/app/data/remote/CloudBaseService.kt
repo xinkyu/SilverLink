@@ -2,6 +2,8 @@ package com.silverlink.app.data.remote
 
 import android.util.Log
 import com.silverlink.app.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -27,7 +29,9 @@ import java.util.concurrent.TimeUnit
 object CloudBaseService {
     
     // CloudBase URL is loaded from BuildConfig (set in local.properties)
-    private val CLOUD_BASE_URL: String = BuildConfig.CLOUDBASE_URL
+    private val CLOUD_BASE_URL: String = BuildConfig.CLOUDBASE_URL.let { url ->
+        if (url.endsWith("/")) url else "$url/"
+    }
     
     private val json = Json {
         ignoreUnknownKeys = true
@@ -549,11 +553,11 @@ object CloudBaseService {
     }
     
     /**
-     * 获取认知评估报告（家人端查看）
+     * 获取认知评估报告（家人端或长辈端查看）
      */
     suspend fun getCognitiveReport(
         elderDeviceId: String,
-        familyDeviceId: String,
+        familyDeviceId: String? = null,
         days: Int = 7
     ): Result<CognitiveReportData?> {
         return try {
@@ -606,6 +610,10 @@ object CloudBaseService {
                 Log.e("CloudBase", "获取上传凭证失败: ${response.message}")
                 Result.failure(Exception(response.message ?: "获取上传凭证失败"))
             }
+        } catch (e: retrofit2.HttpException) {
+            val errorBody = e.response()?.errorBody()?.string()
+            Log.e("CloudBase", "获取上传凭证异常: HTTP ${e.code()} ${errorBody ?: ""}", e)
+            Result.failure(Exception("获取上传凭证异常: HTTP ${e.code()} ${errorBody ?: ""}".trim()))
         } catch (e: Exception) {
             Log.e("CloudBase", "获取上传凭证异常: ${e.message}", e)
             Result.failure(e)
@@ -686,12 +694,17 @@ object CloudBaseService {
             }
             
             // 2. 直传到 COS
+            // 重要：x-cos-meta-fileid 头必须使用 cosFileId（base64编码），而不是 fileId（cloud://路径）
+            // 因为 CloudBase SDK 在计算签名时使用的是 cosFileId
             Log.d("CloudStorage", "步骤2: 直传云存储, 大小=${imageBytes.size / 1024}KB")
+            Log.d("CloudStorage", "cosFileId=${credentials.cosFileId}")
             val uploadResult = uploadToCOS(
                 uploadUrl = credentials.uploadUrl,
                 authorization = credentials.authorization,
                 token = credentials.token,
-                imageBytes = imageBytes
+                imageBytes = imageBytes,
+                contentType = credentials.contentType,
+                cosFileId = credentials.cosFileId  // 使用 cosFileId 而非 fileId
             )
             if (uploadResult.isFailure) {
                 return Result.failure(Exception("直传云存储失败: ${uploadResult.exceptionOrNull()?.message}"))
@@ -728,43 +741,74 @@ object CloudBaseService {
     
     /**
      * 使用 PUT 请求直传图片到 COS
+     * 
+     * 签名验证说明：
+     * - COS 签名 (authorization) 中的 q-header-list 指定了哪些 header 参与签名计算
+     * - 例如 q-header-list=host;x-cos-meta-fileid 表示签名包含 host 和 x-cos-meta-fileid
+     * - 发送请求时必须包含这些 header，否则会 SignatureDoesNotMatch
+     * - 重要：x-cos-meta-fileid 使用的是 cosFileId（base64编码），不是 fileId（cloud://路径）
      */
     private suspend fun uploadToCOS(
         uploadUrl: String?,
         authorization: String,
         token: String,
-        imageBytes: ByteArray
+        imageBytes: ByteArray,
+        contentType: String?,
+        cosFileId: String?  // 注意：必须使用 cosFileId，不是 fileId
     ): Result<Unit> {
-        return try {
-            if (uploadUrl.isNullOrBlank()) {
-                return Result.failure(Exception("无法获取上传URL"))
+        return withContext(Dispatchers.IO) {
+            try {
+                if (uploadUrl.isNullOrBlank()) {
+                    return@withContext Result.failure(Exception("无法获取上传URL"))
+                }
+                
+                Log.d("CloudStorage", "COS 上传参数: url=$uploadUrl")
+                Log.d("CloudStorage", "COS 上传参数: authorization=${authorization.take(50)}...")
+                Log.d("CloudStorage", "COS 上传参数: cosFileId=$cosFileId")
+                
+                val safeContentType = (contentType ?: "image/jpeg").trim()
+                val requestBody = okhttp3.RequestBody.create(safeContentType.toMediaType(), imageBytes)
+
+                val requestBuilder = okhttp3.Request.Builder()
+                    .url(uploadUrl)
+                    .put(requestBody)
+                    .addHeader("Content-Type", safeContentType)
+                
+                // 添加 COS 签名 - authorization 字符串包含完整的签名信息
+                // 格式: q-sign-algorithm=sha1&q-ak=...&q-sign-time=...&q-key-time=...&q-header-list=...&q-url-param-list=&q-signature=...
+                if (authorization.isNotBlank()) {
+                    requestBuilder.addHeader("Authorization", authorization.trim())
+                }
+                
+                // 添加临时密钥的 token
+                if (token.isNotBlank()) {
+                    requestBuilder.addHeader("x-cos-security-token", token.trim())
+                }
+                
+                // x-cos-meta-fileid 是签名中 q-header-list 包含的 header，必须添加
+                // 必须使用 cosFileId（CloudBase SDK 签名时使用的值）
+                if (!cosFileId.isNullOrBlank()) {
+                    requestBuilder.addHeader("x-cos-meta-fileid", cosFileId.trim())
+                }
+
+                val request = requestBuilder.build()
+                
+                Log.d("CloudStorage", "COS PUT 请求 headers: ${request.headers}")
+
+                val response = okHttpClient.newCall(request).execute()
+
+                if (response.isSuccessful) {
+                    Log.d("CloudStorage", "COS PUT 成功, code=${response.code}")
+                    Result.success(Unit)
+                } else {
+                    val errorBody = response.body?.string() ?: "Unknown error"
+                    Log.e("CloudStorage", "COS PUT 失败: ${response.code}, $errorBody")
+                    Result.failure(Exception("COS 上传失败: ${response.code}"))
+                }
+            } catch (e: Exception) {
+                Log.e("CloudStorage", "COS PUT 异常: ${e.message}", e)
+                Result.failure(e)
             }
-            val requestBody = okhttp3.RequestBody.create(
-                "image/jpeg".toMediaType(),
-                imageBytes
-            )
-            
-            val request = okhttp3.Request.Builder()
-                .url(uploadUrl)
-                .put(requestBody)
-                .addHeader("Authorization", authorization)
-                .addHeader("x-cos-security-token", token)
-                .addHeader("Content-Type", "image/jpeg")
-                .build()
-            
-            val response = okHttpClient.newCall(request).execute()
-            
-            if (response.isSuccessful) {
-                Log.d("CloudStorage", "COS PUT 成功, code=${response.code}")
-                Result.success(Unit)
-            } else {
-                val errorBody = response.body?.string() ?: "Unknown error"
-                Log.e("CloudStorage", "COS PUT 失败: ${response.code}, $errorBody")
-                Result.failure(Exception("COS 上传失败: ${response.code}"))
-            }
-        } catch (e: Exception) {
-            Log.e("CloudStorage", "COS PUT 异常: ${e.message}", e)
-            Result.failure(e)
         }
     }
 }

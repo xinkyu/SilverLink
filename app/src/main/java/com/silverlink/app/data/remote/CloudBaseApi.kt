@@ -380,7 +380,7 @@ data class CognitiveLogRequest(
 @Serializable
 data class GetCognitiveReportRequest(
     val elderDeviceId: String,
-    val familyDeviceId: String,
+    val familyDeviceId: String? = null,
     val days: Int = 7                 // 统计最近几天的数据
 )
 
@@ -411,6 +411,7 @@ data class PhotoUploadCredentials(
     val uploadUrl: String? = null,  // 可能为 null，表示需要回退到 Base64 方式
     val authorization: String = "",
     val token: String = "",
+    val contentType: String? = null,
     val fileId: String = "",
     val cosFileId: String? = null,
     val expiresAt: String = "",

@@ -51,19 +51,36 @@ class MemoryLibraryViewModel(application: Application) : AndroidViewModel(applic
     val aiAnalysisResult: StateFlow<PhotoAnalysisResult?> = _aiAnalysisResult.asStateFlow()
     
     private var elderDeviceId: String? = null
-    private var familyDeviceId: String? = null
+    
+    // 同步获取家人设备 ID
+    private val familyDeviceId: String = android.provider.Settings.Secure.getString(
+        application.contentResolver,
+        android.provider.Settings.Secure.ANDROID_ID
+    )
+    
+    private var isInitialized = false
     
     init {
+        Log.d(TAG, "初始化，familyDeviceId=$familyDeviceId")
+        // 自动初始化并加载照片
         viewModelScope.launch {
-            // 获取设备 ID
-            familyDeviceId = android.provider.Settings.Secure.getString(
-                application.contentResolver,
-                android.provider.Settings.Secure.ANDROID_ID
-            )
-            
-            // 获取已配对的长辈设备 ID
-            elderDeviceId = CloudBaseService.getPairedElderDeviceId(familyDeviceId ?: "")
-                .getOrNull()
+            ensureInitialized()
+            loadPhotos()
+        }
+    }
+    
+    /**
+     * 确保已获取配对的长辈设备 ID
+     */
+    private suspend fun ensureInitialized() {
+        if (isInitialized) return
+        
+        try {
+            elderDeviceId = CloudBaseService.getPairedElderDeviceId(familyDeviceId).getOrNull()
+            Log.d(TAG, "获取配对长辈 ID: elderDeviceId=$elderDeviceId")
+            isInitialized = true
+        } catch (e: Exception) {
+            Log.e(TAG, "获取配对长辈 ID 失败", e)
         }
     }
     
@@ -71,7 +88,13 @@ class MemoryLibraryViewModel(application: Application) : AndroidViewModel(applic
      * 加载照片列表
      */
     fun loadPhotos() {
-        val elderId = elderDeviceId ?: return
+        val elderId = elderDeviceId
+        if (elderId == null) {
+            Log.w(TAG, "未配对，无法加载照片")
+            return
+        }
+        
+        Log.d(TAG, "开始加载照片，elderDeviceId=$elderId, familyDeviceId=$familyDeviceId")
         
         viewModelScope.launch {
             _isLoading.value = true
@@ -83,6 +106,9 @@ class MemoryLibraryViewModel(application: Application) : AndroidViewModel(applic
                 result.onSuccess { photoList ->
                     _photos.value = photoList
                     Log.d(TAG, "加载了 ${photoList.size} 张照片")
+                    if (photoList.isNotEmpty()) {
+                        Log.d(TAG, "第一张照片 URL: ${photoList.first().imageUrl.take(100)}")
+                    }
                 }.onFailure { e ->
                     Log.e(TAG, "加载照片失败", e)
                     _errorMessage.value = "加载照片失败: ${e.message}"
@@ -143,8 +169,8 @@ class MemoryLibraryViewModel(application: Application) : AndroidViewModel(applic
         viewModelScope.launch {
             _uploadState.value = UploadState.Uploading
             try {
-                // 将 Bitmap 转换为高质量 JPEG 字节数组（保留高清质量）
-                val imageBytes = ImageUtils.bitmapToJpegBytes(bitmap, quality = 90, maxSize = 1920)
+                // 将 Bitmap 转换为 JPEG 字节数组（智能压缩：小图不压缩，大图适当压缩）
+                val imageBytes = ImageUtils.bitmapToJpegBytes(bitmap)
                 Log.d(TAG, "图片大小: ${imageBytes.size / 1024}KB")
 
                 // 获取 AI 描述（如果有）
