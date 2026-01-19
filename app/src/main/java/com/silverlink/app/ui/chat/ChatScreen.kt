@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -116,6 +117,17 @@ fun ChatScreen(
                 == PackageManager.PERMISSION_GRANTED
         )
     }
+    
+    // 相机权限状态
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) 
+                == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    
+    // 相机拍照相关
+    var photoFile by remember { mutableStateOf<java.io.File?>(null) }
 
     // 录音权限请求
     val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -125,6 +137,40 @@ fun ChatScreen(
         if (!granted) {
             Toast.makeText(context, "需要录音权限才能使用语音输入", Toast.LENGTH_SHORT).show()
         }
+    }
+    
+    // 相机权限请求
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+        if (!granted) {
+            Toast.makeText(context, "需要相机权限才能拍照找药", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    // 拍照启动器
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && photoFile != null) {
+            val bitmap = android.graphics.BitmapFactory.decodeFile(photoFile!!.absolutePath)
+            if (bitmap != null) {
+                viewModel.checkPill(bitmap)
+            }
+        }
+    }
+    
+    // 启动相机拍照找药
+    fun launchPillCamera() {
+        val file = java.io.File(context.cacheDir, "pill_check_${System.currentTimeMillis()}.jpg")
+        photoFile = file
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        cameraLauncher.launch(uri)
     }
 
     // 显示错误提示
@@ -168,6 +214,20 @@ fun ChatScreen(
                         text = "🔊",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+                // 找药按钮 - 拍照识别药品
+                IconButton(onClick = { 
+                    if (hasCameraPermission) {
+                        launchPillCamera()
+                    } else {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.CameraAlt,
+                        contentDescription = "找药",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
                 // 新对话按钮

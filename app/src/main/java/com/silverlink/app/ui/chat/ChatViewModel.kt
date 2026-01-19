@@ -20,6 +20,7 @@ import com.silverlink.app.feature.chat.TextToSpeechService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private const val TAG = "ChatViewModel"
@@ -525,6 +526,101 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _isLoading.value = false
             }
         }
+    }
+
+    /**
+     * 检查药品 - 通过拍照识别并验证是否是当前应该吃的药
+     */
+    fun checkPill(bitmap: android.graphics.Bitmap) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                
+                // 1. 使用 AI 识别药品
+                val recognitionService = com.silverlink.app.feature.reminder.MedicationRecognitionService()
+                val verificationHelper = com.silverlink.app.feature.reminder.MedicationVerificationHelper()
+                
+                val recognitionResult = recognitionService.recognizeMedication(bitmap)
+                
+                recognitionResult.fold(
+                    onSuccess = { recognized ->
+                        Log.d(TAG, "Recognized medication: ${recognized.name}")
+                        
+                        // 2. 获取当前计划的所有药品
+                        val medications = com.silverlink.app.SilverLinkApp.database.medicationDao()
+                            .getAllMedications().first()
+                        
+                        // 3. 获取当前时间
+                        val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                            .format(java.util.Date())
+                        
+                        // 4. 验证药品
+                        val verificationResult = verificationHelper.verifyMedication(
+                            recognizedName = recognized.name,
+                            scheduledMeds = medications,
+                            currentTime = currentTime
+                        )
+                        
+                        // 5. 生成并播报语音回复
+                        val response = generatePillCheckResponse(verificationResult)
+                        
+                        // 6. 显示为消息
+                        val assistantMessage = com.silverlink.app.data.remote.model.Message("assistant", response)
+                        _messages.value = _messages.value + assistantMessage
+                        saveMessageToDb(assistantMessage, null)
+                        
+                        // 7. 语音播报
+                        speakText(response)
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Recognition failed", error)
+                        val response = generateUnknownPillResponse()
+                        val assistantMessage = com.silverlink.app.data.remote.model.Message("assistant", response)
+                        _messages.value = _messages.value + assistantMessage
+                        saveMessageToDb(assistantMessage, null)
+                        speakText(response)
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in checkPill", e)
+                val errorMsg = "抱歉，出了点问题，请再试一次。"
+                val assistantMessage = com.silverlink.app.data.remote.model.Message("assistant", errorMsg)
+                _messages.value = _messages.value + assistantMessage
+                speakText(errorMsg)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    private fun generatePillCheckResponse(result: com.silverlink.app.feature.reminder.VerificationResult): String {
+        val elderName = getElderName()
+        val prefix = if (elderName.isNotBlank()) "${elderName}，" else ""
+        
+        return when (result) {
+            is com.silverlink.app.feature.reminder.VerificationResult.Correct -> {
+                "${prefix}是的，这就是${result.medicationName}，请服用${result.dosage}。"
+            }
+            is com.silverlink.app.feature.reminder.VerificationResult.WrongMed -> {
+                "${prefix}不对哦，这个是${result.recognizedName}。你现在需要吃的是${result.correctName}，${result.correctDosage}。"
+            }
+            is com.silverlink.app.feature.reminder.VerificationResult.NoScheduleNow -> {
+                if (result.nextTime != null) {
+                    "${prefix}现在不是吃药时间哦，下次吃药时间是${result.nextTime}。"
+                } else {
+                    "${prefix}现在没有需要吃的药哦。"
+                }
+            }
+            is com.silverlink.app.feature.reminder.VerificationResult.UnknownMed -> {
+                generateUnknownPillResponse()
+            }
+        }
+    }
+    
+    private fun generateUnknownPillResponse(): String {
+        val elderName = getElderName()
+        val prefix = if (elderName.isNotBlank()) "${elderName}，" else ""
+        return "${prefix}抱歉，我没能认出这个药。你可以把药瓶正面对着我再试一次吗？"
     }
 
     override fun onCleared() {
