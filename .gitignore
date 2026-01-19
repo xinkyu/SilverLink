@@ -1,0 +1,44 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local config
+local.properties
+
+# IntelliJ/Android Studio
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Demo/temp docs
+银龄守护demo.md
+
+# Kotlin/Java
+*.class
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keystore
+*.jks
+*.keystore
+
+# APK/AAB
+*.apk
+*.aab
+
+# Heap dumps
+*.hprof
+
+# Build logs
+build_log*.txt
+
+# Node modules (cloud functions)
+**/node_modules/

@@ -1,0 +1,9 @@
+{
+  "name": "pairing-get-elder",
+  "version": "1.0.0",
+  "description": "获取已配对的长辈设备ID云函数",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.0.0"
+  }
+}

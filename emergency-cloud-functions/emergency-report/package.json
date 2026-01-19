@@ -1,0 +1,9 @@
+{
+  "name": "emergency-report",
+  "version": "1.0.0",
+  "description": "上报紧急事件云函数",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.0.0"
+  }
+}
