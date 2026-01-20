@@ -1,6 +1,8 @@
 package com.silverlink.app.ui.onboarding
 
 import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -55,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -470,6 +475,21 @@ fun VoiceRecordingStep(
     var cloningState by remember { mutableStateOf(CloningState.IDLE) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     
+    // 权限请求启动器
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            if (!isGranted) {
+                errorMessage = "需要麦克风权限才能录制声音"
+            }
+        }
+    )
+
+    // 进入页面时自动请求权限
+    LaunchedEffect(Unit) {
+        permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+    }
+    
     // 录音计时器
     LaunchedEffect(recordingState) {
         if (recordingState == RecordingState.RECORDING) {
@@ -496,6 +516,7 @@ fun VoiceRecordingStep(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState()) // 添加滚动支持
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -503,7 +524,7 @@ fun VoiceRecordingStep(
         
         // 标题和说明
         Text(
-            text = "录制${elderName}的声音",
+            text = "录制家人的声音", // 修改标题
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF5D4037),
@@ -514,16 +535,16 @@ fun VoiceRecordingStep(
         
         Text(
             text = if (selectedDialect != Dialect.NONE) {
-                "录制 10-30 秒清晰语音，AI将用${selectedDialect.displayName}回复"
+                "录制 10-30 秒清晰语音，AI将模仿您的声音并用${selectedDialect.displayName}陪伴${elderName}"
             } else {
-                "录制 10-30 秒清晰语音，AI将模仿长辈声音回复"
+                "录制 10-30 秒清晰语音，AI将模仿您的声音陪伴${elderName}"
             },
             style = MaterialTheme.typography.bodyLarge,
             color = Color(0xFF8D6E63),
             textAlign = TextAlign.Center
         )
         
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         
         // 录音提示卡片
         Card(
@@ -532,25 +553,25 @@ fun VoiceRecordingStep(
             colors = CardDefaults.cardColors(containerColor = Color.White)
         ) {
             Column(
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.padding(12.dp)
             ) {
                 Text(
                     text = "🎤 录音示范文本（建议朗读）",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF5D4037)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "\"我是${elderName}，今天天气真不错。早上起来感觉身体很好，等会儿要出去散散步。孩子们都挺忙的，我自己在家也挺好的。\"",
+                    text = "\"${elderName}，我是[您的名字]。最近身体还好吗？要注意休息，多喝水。我会经常来陪您的，您想我了就跟小银说话。\"",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFF795548),
-                    lineHeight = 24.sp
+                    lineHeight = 22.sp
                 )
             }
         }
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         
         // 录音按钮和状态
         when (cloningState) {
@@ -588,7 +609,7 @@ fun VoiceRecordingStep(
                 // 录音按钮
                 Box(
                     modifier = Modifier
-                        .size(120.dp)
+                        .size(100.dp)
                         .background(
                             color = when (recordingState) {
                                 RecordingState.RECORDING -> Color(0xFFE53935)
@@ -601,11 +622,20 @@ fun VoiceRecordingStep(
                             when (recordingState) {
                                 RecordingState.IDLE -> {
                                     errorMessage = null
-                                    val path = audioRecorder.startRecording()
-                                    if (path != null) {
-                                        recordingState = RecordingState.RECORDING
+                                    // 检查权限（虽然自动请求了，但点击时再次检查更稳妥）
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                            context,
+                                            android.Manifest.permission.RECORD_AUDIO
+                                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        val path = audioRecorder.startRecording()
+                                        if (path != null) {
+                                            recordingState = RecordingState.RECORDING
+                                        } else {
+                                            errorMessage = "无法启动录音，请检查设备"
+                                        }
                                     } else {
-                                        errorMessage = "无法启动录音，请检查麦克风权限"
+                                        permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                                     }
                                 }
                                 RecordingState.RECORDING -> {
@@ -815,6 +845,7 @@ fun PairingCodeStep(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -863,8 +894,8 @@ fun PairingCodeStep(
         
         // 二维码卡片
         Card(
-            modifier = Modifier.size(220.dp),
-            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.size(200.dp),
+            shape = RoundedCornerShape(20.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White)
         ) {
@@ -872,11 +903,11 @@ fun PairingCodeStep(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                qrCodeBitmap?.let { bitmap ->
+                if (qrCodeBitmap != null) {
                     Image(
-                        bitmap = bitmap.asImageBitmap(),
+                        bitmap = qrCodeBitmap.asImageBitmap(),
                         contentDescription = "配对二维码",
-                        modifier = Modifier.size(180.dp)
+                        modifier = Modifier.size(160.dp)
                     )
                 }
             }
@@ -900,11 +931,11 @@ fun PairingCodeStep(
         ) {
             Text(
                 text = pairingCode,
-                style = MaterialTheme.typography.displayMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF5D4037),
-                letterSpacing = 8.sp,
-                modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
+                letterSpacing = 6.sp,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
             )
         }
         

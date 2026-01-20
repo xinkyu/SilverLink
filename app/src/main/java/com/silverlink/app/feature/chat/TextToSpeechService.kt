@@ -130,37 +130,37 @@ class TextToSpeechService {
      * 支持的方言：广东话、东北话、甘肃话、贵州话、河南话、湖北话、
      *            江西话、闽南话、宁夏话、山西话、陕西话、山东话、
      *            上海话、四川话、天津话、云南话
-     * 
-     * TODO: 暂时禁用 instruction 以测试基本 TTS 功能
      */
     private fun buildInstruction(dialect: String, emotion: Emotion): String {
-        // 暂时返回空字符串以测试基本 TTS 功能
-        // 如果 TTS 正常工作，再逐步启用 instruction
-        Log.d(TAG, "buildInstruction called with dialect=$dialect, emotion=$emotion (temporarily disabled)")
-        return ""
+        Log.d(TAG, "buildInstruction called with dialect=$dialect, emotion=$emotion")
         
-        /*
         val parts = mutableListOf<String>()
         
         // 方言指令（仅复刻音色支持）
         if (dialect.isNotBlank()) {
             if (isUsingClonedVoice()) {
-                parts.add("请用${dialect}表达。")
+                // 格式：“请用<方言>表达”
+                parts.add("请用${dialect}表达")
             } else {
                 Log.w(TAG, "方言指令需要复刻音色支持，当前使用系统音色，方言设置 '$dialect' 将被忽略")
             }
         }
-        */
         
-        /*
-        // 情感指令
-        val emotionValue = mapEmotionToValue(emotion)
-        if (emotionValue != "neutral") {
-            parts.add("你说话的情感是${emotionValue}。")
+        // TODO: 再次禁用情感指令，即便修复了标点符号，用户反馈仍然有问题。
+        // 暂时只保留方言指令，确保功能可用。
+//        val emotionValue = mapEmotionToValue(emotion)
+//        if (emotionValue != "neutral") {
+//            parts.add("你说话的情感是${emotionValue}")
+//        }
+       
+        if (parts.isEmpty()) {
+            return ""
         }
         
-        return parts.joinToString("")
-        */
+        // 使用逗号连接多个指令，并在末尾添加句号
+        val instruction = parts.joinToString("，") + "。"
+        Log.d(TAG, "Built instruction: $instruction")
+        return instruction
     }
     
     /**
@@ -183,7 +183,7 @@ class TextToSpeechService {
         instruction: String,
         voiceId: String
     ): ByteArray = suspendCancellableCoroutine { continuation ->
-        val taskId = UUID.randomUUID().toString()
+        val taskId = UUID.randomUUID().toString().replace("-", "") // API 建议 UUID，这里去掉横线试试，文档说可以带也可以不带
         val audioBuffer = ByteArrayOutputStream()
         val speechRate = rate
 
@@ -214,7 +214,7 @@ class TextToSpeechService {
                     when (event) {
                         "task-started" -> {
                             Log.d(TAG, "Task started, sending finish-task")
-                            // 发送 finish-task 指令通知已完成文本发送
+                            // 文本已在 run-task 中发送，此处直接发送 finish-task
                             val finishTaskMessage = createFinishTaskMessage(taskId)
                             webSocket.send(finishTaskMessage)
                         }
@@ -295,7 +295,26 @@ class TextToSpeechService {
                     put("volume", 50)
                     put("rate", rate)
                     put("pitch", 1.0)
+                    // 增加语言提示，确保方言包含在中文语境内
+                    put("language_hints", org.json.JSONArray().apply {
+                        put("zh")
+                    })
                 })
+                put("input", JSONObject().apply {
+                    put("text", text)
+                })
+            })
+        }.toString()
+    }
+
+    private fun createContinueTaskMessage(taskId: String, text: String): String {
+        return JSONObject().apply {
+            put("header", JSONObject().apply {
+                put("action", "continue-task")
+                put("task_id", taskId)
+                put("streaming", "duplex")
+            })
+            put("payload", JSONObject().apply {
                 put("input", JSONObject().apply {
                     put("text", text)
                 })
@@ -308,6 +327,7 @@ class TextToSpeechService {
             put("header", JSONObject().apply {
                 put("action", "finish-task")
                 put("task_id", taskId)
+                put("streaming", "duplex") // 必须加这个
             })
             put("payload", JSONObject().apply {
                 put("input", JSONObject())
