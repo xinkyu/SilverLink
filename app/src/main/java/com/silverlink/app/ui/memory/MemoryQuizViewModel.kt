@@ -4,6 +4,9 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.silverlink.app.data.local.Dialect
+import com.silverlink.app.data.local.UserPreferences
+import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.feature.chat.AudioPlayerHelper
 import com.silverlink.app.feature.chat.AudioRecorder
 import com.silverlink.app.feature.chat.SpeechRecognitionService
@@ -26,6 +29,7 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
     private val audioPlayerHelper = AudioPlayerHelper(application)
     private val audioRecorder = AudioRecorder(application)
     private val speechService = SpeechRecognitionService()
+    private val userPreferences = UserPreferences.getInstance(application)
     
     // UI 状态
     sealed class QuizUiState {
@@ -66,6 +70,13 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
     val totalCount: StateFlow<Int> = _totalCount.asStateFlow()
     
     init {
+        // 设置复刻音色ID（如果有）
+        val clonedVoiceId = userPreferences.userConfig.value.clonedVoiceId
+        if (clonedVoiceId.isNotBlank()) {
+            ttsService.setClonedVoiceId(clonedVoiceId)
+            Log.d(TAG, "Using cloned voice for quiz: $clonedVoiceId")
+        }
+        
         loadNextQuestion()
     }
     
@@ -197,7 +208,9 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
      */
     private suspend fun speakQuestion(text: String) {
         try {
-            val result = ttsService.synthesize(text, 0.9)
+            val dialect = userPreferences.userConfig.value.dialect
+            val dialectName = if (dialect != Dialect.NONE) dialect.displayName else ""
+            val result = ttsService.synthesize(text, 0.9, dialectName, Emotion.NEUTRAL)
             result.onSuccess { audioData ->
                 Log.d(TAG, "Question speech synthesized: ${audioData.size} bytes")
                 audioPlayerHelper.play(audioData)
@@ -226,7 +239,10 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
      */
     private suspend fun speakText(text: String) {
         try {
-            val result = ttsService.synthesize(text, 0.9)
+            val dialect = userPreferences.userConfig.value.dialect
+            val dialectName = if (dialect != Dialect.NONE) dialect.displayName else ""
+            // 默认使用 happy 情感，因为测验场景一般是鼓励性的
+            val result = ttsService.synthesize(text, 0.9, dialectName, Emotion.HAPPY)
             result.onSuccess { audioData ->
                 Log.d(TAG, "Speech synthesized: ${audioData.size} bytes")
                 audioPlayerHelper.play(audioData)

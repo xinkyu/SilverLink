@@ -37,7 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.silverlink.app.SilverLinkApp
+import com.silverlink.app.data.local.Dialect
 import com.silverlink.app.data.local.UserPreferences
+import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.feature.chat.AudioPlayerHelper
 import com.silverlink.app.feature.chat.TextToSpeechService
 import com.silverlink.app.ui.theme.*
@@ -62,6 +64,12 @@ class ReminderAlertActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         audioPlayer = AudioPlayerHelper(this)
+        
+        // 设置复刻音色ID（如果有）
+        val clonedVoiceId = UserPreferences.getInstance(this).userConfig.value.clonedVoiceId
+        if (clonedVoiceId.isNotBlank()) {
+            ttsService.setClonedVoiceId(clonedVoiceId)
+        }
         
         val medId = intent.getIntExtra("MED_ID", 0)
         val medName = intent.getStringExtra("MED_NAME") ?: "该吃药了"
@@ -188,12 +196,22 @@ class ReminderAlertActivity : ComponentActivity() {
     }
     
     /**
-     * 语音播报文本
+     * 获取当前方言设置
      */
-    private fun speakText(text: String) {
+    private fun getDialectName(): String {
+        val dialect = UserPreferences.getInstance(this).userConfig.value.dialect
+        return if (dialect != Dialect.NONE) dialect.displayName else ""
+    }
+    
+    /**
+     * 语音播报文本
+     * 支持方言和情感设置
+     */
+    private fun speakText(text: String, emotion: Emotion = Emotion.NEUTRAL) {
         CoroutineScope(Dispatchers.Main).launch {
             try {
-                val result = ttsService.synthesize(text)
+                val dialectName = getDialectName()
+                val result = ttsService.synthesize(text, 1.0, dialectName, emotion)
                 result.fold(
                     onSuccess = { audioData ->
                         audioPlayer.play(audioData)
