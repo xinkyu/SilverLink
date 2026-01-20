@@ -259,11 +259,11 @@ object CloudBaseService {
     // ==================== 药品管理 ====================
     
     /**
-     * 添加药品（家人端为长辈添加）
+     * 添加药品（家人端为长辈添加，或老人端自己添加）
      */
     suspend fun addMedication(
         elderDeviceId: String,
-        familyDeviceId: String,
+        familyDeviceId: String?,
         name: String,
         dosage: String,
         times: String
@@ -273,7 +273,7 @@ object CloudBaseService {
             val response = api.addMedication(
                 AddMedicationRequest(
                     elderDeviceId = elderDeviceId,
-                    familyDeviceId = familyDeviceId,
+                    familyDeviceId = familyDeviceId ?: "",
                     name = name,
                     dosage = dosage,
                     times = times

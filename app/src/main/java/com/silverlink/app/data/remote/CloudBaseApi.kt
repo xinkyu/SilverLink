@@ -338,24 +338,24 @@ data class PairingResult(
 
 @Serializable
 data class MedicationLogData(
-    val id: String,
-    val medicationId: Int,
-    val medicationName: String,
-    val dosage: String,
-    val scheduledTime: String,
-    val status: String,
-    val date: String,
-    val createdAt: String
+    val id: String = "",
+    val medicationId: Int = 0,
+    val medicationName: String = "",
+    val dosage: String = "",
+    val scheduledTime: String = "",
+    val status: String = "",
+    val date: String = "",
+    val createdAt: String = ""
 )
 
 @Serializable
 data class MoodLogData(
-    val id: String,
-    val mood: String,
-    val note: String,
-    val conversationSummary: String,
-    val date: String,
-    val createdAt: String
+    val id: String = "",
+    val mood: String = "",
+    val note: String = "",
+    val conversationSummary: String = "",
+    val date: String = "",
+    val createdAt: String = ""
 )
 
 @Serializable

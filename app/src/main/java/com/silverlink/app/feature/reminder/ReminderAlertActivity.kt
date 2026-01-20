@@ -74,6 +74,7 @@ class ReminderAlertActivity : ComponentActivity() {
         val medId = intent.getIntExtra("MED_ID", 0)
         val medName = intent.getStringExtra("MED_NAME") ?: "该吃药了"
         val medDosage = intent.getStringExtra("MED_DOSAGE") ?: ""
+        val medTime = intent.getStringExtra("MED_TIME") ?: ""
 
         playRingtone()
 
@@ -97,8 +98,8 @@ class ReminderAlertActivity : ComponentActivity() {
                     },
                     onSnooze = {
                         stopRingtone()
-                        // 设置10分钟后再次提醒
-                        scheduleSnooze(medId, medName, medDosage)
+                        // 设置10分钟后再次提醒，保留原始服药时间
+                        scheduleSnooze(medId, medName, medDosage, medTime)
                         finish()
                     },
                     onFindPill = { bitmap ->
@@ -229,9 +230,9 @@ class ReminderAlertActivity : ComponentActivity() {
     /**
      * 设置稍后提醒（10分钟后）
      */
-    private fun scheduleSnooze(medId: Int, medName: String, medDosage: String) {
+    private fun scheduleSnooze(medId: Int, medName: String, medDosage: String, medTime: String) {
         val alarmScheduler = AlarmScheduler(this)
-        alarmScheduler.scheduleSnooze(medId, medName, medDosage)
+        alarmScheduler.scheduleSnooze(medId, medName, medDosage, medTime)
     }
 
     /**

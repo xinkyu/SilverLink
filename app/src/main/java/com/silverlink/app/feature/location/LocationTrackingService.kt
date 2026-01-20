@@ -193,13 +193,74 @@ class LocationTrackingService : Service() {
         
         Log.d(TAG, "位置追踪已启动，间隔=${LOCATION_UPDATE_INTERVAL_MS / 1000}秒")
         
-        // 立即获取一次位置
+        // 立即获取一次位置并上传
+        getImmediateLocation()
+    }
+    
+    /**
+     * 立即获取位置并上传
+     * 优先使用 lastLocation，如果为空则强制请求新位置
+     */
+    @SuppressLint("MissingPermission")
+    private fun getImmediateLocation() {
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            location?.let {
-                Log.d(TAG, "初始位置: lat=${it.latitude}, lng=${it.longitude}")
-                uploadLocation(it.latitude, it.longitude, it.accuracy)
+            if (location != null) {
+                Log.d(TAG, "初始位置(lastLocation): lat=${location.latitude}, lng=${location.longitude}")
+                uploadLocation(location.latitude, location.longitude, location.accuracy)
+            } else {
+                // lastLocation 为空，强制请求当前位置
+                Log.d(TAG, "lastLocation 为空，请求当前位置...")
+                forceGetCurrentLocation()
             }
+        }.addOnFailureListener { e ->
+            Log.e(TAG, "获取lastLocation失败: ${e.message}")
+            forceGetCurrentLocation()
         }
+    }
+    
+    /**
+     * 强制获取当前位置（用于首次或lastLocation为空时）
+     * 如果失败会重试，最多3次
+     */
+    @SuppressLint("MissingPermission")
+    private fun forceGetCurrentLocation(retryCount: Int = 0) {
+        val maxRetries = 3
+        val retryDelayMs = 5000L // 5秒后重试
+        
+        val locationRequest = CurrentLocationRequest.Builder()
+            .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+            .setMaxUpdateAgeMillis(0) // 强制获取新位置
+            .setDurationMillis(10000) // 允许最多10秒来获取位置
+            .build()
+        
+        fusedLocationClient.getCurrentLocation(locationRequest, null)
+            .addOnSuccessListener { location ->
+                if (location != null) {
+                    Log.d(TAG, "强制获取位置成功: lat=${location.latitude}, lng=${location.longitude}")
+                    uploadLocation(location.latitude, location.longitude, location.accuracy)
+                } else {
+                    if (retryCount < maxRetries) {
+                        Log.w(TAG, "强制获取位置返回null，${retryDelayMs / 1000}秒后重试 (${retryCount + 1}/$maxRetries)")
+                        serviceScope.launch {
+                            delay(retryDelayMs)
+                            forceGetCurrentLocation(retryCount + 1)
+                        }
+                    } else {
+                        Log.w(TAG, "强制获取位置失败，已达到最大重试次数，等待定期更新")
+                    }
+                }
+            }
+            .addOnFailureListener { e ->
+                if (retryCount < maxRetries) {
+                    Log.e(TAG, "强制获取位置失败: ${e.message}，${retryDelayMs / 1000}秒后重试 (${retryCount + 1}/$maxRetries)")
+                    serviceScope.launch {
+                        delay(retryDelayMs)
+                        forceGetCurrentLocation(retryCount + 1)
+                    }
+                } else {
+                    Log.e(TAG, "强制获取位置失败，已达到最大重试次数: ${e.message}")
+                }
+            }
     }
     
     /**
