@@ -28,10 +28,8 @@ import java.util.concurrent.TimeUnit
  */
 object CloudBaseService {
     
-    // CloudBase URL is loaded from BuildConfig (set in local.properties)
-    private val CLOUD_BASE_URL: String = BuildConfig.CLOUDBASE_URL.let { url ->
-        if (url.endsWith("/")) url else "$url/"
-    }
+    // 直接硬编码测试，排除本地配置文件的干扰
+    private const val CLOUD_BASE_URL: String = "https://silverlink-9gdqj1ne4d834dab-1396514174.ap-shanghai.app.tcloudbase.com/"
     
     private val json = Json {
         ignoreUnknownKeys = true
@@ -817,8 +815,94 @@ object CloudBaseService {
             }
         }
     }
+    
+    // ==================== 位置管理 ====================
+    
+    /**
+     * 上传位置（老人端调用）
+     */
+    suspend fun updateLocation(
+        elderDeviceId: String,
+        latitude: Double,
+        longitude: Double,
+        accuracy: Float = 0f,
+        address: String = ""
+    ): Result<Unit> {
+        return try {
+            Log.d("CloudBase", "上传位置: elderDeviceId=$elderDeviceId, lat=$latitude, lng=$longitude")
+            val response = api.updateLocation(
+                UpdateLocationRequest(
+                    elderDeviceId = elderDeviceId,
+                    latitude = latitude,
+                    longitude = longitude,
+                    accuracy = accuracy,
+                    address = address
+                )
+            )
+            if (response.success) {
+                Log.d("CloudBase", "位置上传成功")
+                Result.success(Unit)
+            } else {
+                Log.e("CloudBase", "位置上传失败: ${response.message}")
+                Result.failure(Exception(response.message ?: "位置上传失败"))
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "位置上传异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 查询位置（家人端调用）
+     * 返回老人的最新位置和最近2小时的位置历史
+     */
+    suspend fun queryLocation(
+        elderDeviceId: String,
+        familyDeviceId: String? = null
+    ): Result<LocationQueryResult> = withContext(Dispatchers.IO) {
+        try {
+            Log.d("CloudBase", "查询位置(OkHttp): elderDeviceId=$elderDeviceId")
+            // 直接拼装 URL，绕过 Retrofit，确保万无一失
+            val baseUrl = "https://silverlink-9gdqj1ne4d834dab-1396514174.ap-shanghai.app.tcloudbase.com/location-query"
+            val url = "$baseUrl?elderDeviceId=$elderDeviceId&familyDeviceId=${familyDeviceId ?: ""}"
+            
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .get()
+                .build()
+                
+            val response = okHttpClient.newCall(request).execute()
+            
+            if (response.isSuccessful) {
+                val bodyString = response.body?.string()
+                Log.d("CloudBase", "OkHttp响应: $bodyString")
+                if (!bodyString.isNullOrBlank()) {
+                    val apiResponse = retrofit2.converter.gson.GsonConverterFactory.create()
+                        .responseBodyConverter(
+                            com.google.gson.reflect.TypeToken.getParameterized(ApiResponse::class.java, LocationQueryResult::class.java).type,
+                            arrayOf(),
+                            retrofit
+                        )?.convert(okhttp3.ResponseBody.create(null, bodyString)) as? ApiResponse<LocationQueryResult>
 
-    // ==================== 声音复刻直传相关 ====================
+                    if (apiResponse != null && apiResponse.success && apiResponse.data != null) {
+                         Result.success(apiResponse.data)
+                    } else {
+                         Result.success(LocationQueryResult(null, emptyList()))
+                    }
+                } else {
+                    Result.failure(Exception("响应为空"))
+                }
+            } else {
+                Log.e("CloudBase", "OkHttp错误: code=${response.code}, message=${response.message}")
+                Result.failure(Exception("HTTP ${response.code}"))
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "位置查询异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    // ==================== 声音复刻管理 ====================
     
     /**
      * 获取声音复刻音频上传凭证
@@ -828,6 +912,7 @@ object CloudBaseService {
         format: String = "wav"
     ): Result<PhotoUploadCredentials> {
         return try {
+            Log.d("CloudBase", "获取声音上传凭证: familyDeviceId=$familyDeviceId")
             val response = api.getVoiceUploadCredentials(
                 VoiceCredentialsRequest(
                     familyDeviceId = familyDeviceId,

@@ -347,6 +347,13 @@ class UserPreferences(context: Context) {
         private const val KEY_PAIRING_CODE = "pairing_code"
         private const val KEY_PAIRED_DEVICE_ID = "paired_device_id"
         
+        // 跌倒检测相关
+        private const val KEY_FALL_DETECTION_ENABLED = "fall_detection_enabled"
+        private const val KEY_FALL_DETECTION_SENSITIVITY = "fall_detection_sensitivity"
+        
+        // 位置共享相关
+        private const val KEY_LOCATION_SHARING_ENABLED = "location_sharing_enabled"
+        
         @Volatile
         private var instance: UserPreferences? = null
         
@@ -355,5 +362,65 @@ class UserPreferences(context: Context) {
                 instance ?: UserPreferences(context.applicationContext).also { instance = it }
             }
         }
+    }
+    
+    // ==================== 跌倒检测设置 ====================
+    
+    /**
+     * 跌倒检测灵敏度
+     */
+    enum class FallDetectionSensitivity {
+        LOW,    // 低灵敏度（不容易误报）
+        MEDIUM, // 中等灵敏度（默认）
+        HIGH    // 高灵敏度（更容易触发）
+    }
+    
+    /**
+     * 获取跌倒检测开关状态
+     */
+    fun isFallDetectionEnabled(): Boolean {
+        return prefs.getBoolean(KEY_FALL_DETECTION_ENABLED, false)
+    }
+    
+    /**
+     * 设置跌倒检测开关
+     */
+    fun setFallDetectionEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FALL_DETECTION_ENABLED, enabled).apply()
+    }
+    
+    /**
+     * 获取跌倒检测灵敏度
+     */
+    fun getFallDetectionSensitivity(): FallDetectionSensitivity {
+        val name = prefs.getString(KEY_FALL_DETECTION_SENSITIVITY, FallDetectionSensitivity.MEDIUM.name)
+        return try {
+            FallDetectionSensitivity.valueOf(name ?: FallDetectionSensitivity.MEDIUM.name)
+        } catch (e: Exception) {
+            FallDetectionSensitivity.MEDIUM
+        }
+    }
+    
+    /**
+     * 设置跌倒检测灵敏度
+     */
+    fun setFallDetectionSensitivity(sensitivity: FallDetectionSensitivity) {
+        prefs.edit().putString(KEY_FALL_DETECTION_SENSITIVITY, sensitivity.name).apply()
+    }
+    
+    // ==================== 位置共享设置 ====================
+    
+    /**
+     * 获取位置共享开关状态
+     */
+    fun isLocationSharingEnabled(): Boolean {
+        return prefs.getBoolean(KEY_LOCATION_SHARING_ENABLED, false)
+    }
+    
+    /**
+     * 设置位置共享开关
+     */
+    fun setLocationSharingEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_LOCATION_SHARING_ENABLED, enabled).apply()
     }
 }

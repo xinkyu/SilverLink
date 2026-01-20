@@ -13,7 +13,10 @@ import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.data.remote.model.QwenRequest
 import com.silverlink.app.data.repository.SyncRepository
 import com.silverlink.app.ui.components.ChartType
+import com.silverlink.app.ui.components.LocationCard
 import com.silverlink.app.ui.components.MedicationStatus
+import com.silverlink.app.data.remote.LocationData
+import com.silverlink.app.data.remote.LocationQueryResult
 import com.silverlink.app.ui.components.MedicationSummary
 import com.silverlink.app.ui.components.MoodTimePoint
 import com.silverlink.app.ui.components.TimeRange
@@ -166,6 +169,20 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     // 警报轮询Job
     private var alertPollingJob: kotlinx.coroutines.Job? = null
     
+    // 位置相关状态
+    private val _elderLocation = MutableStateFlow<LocationData?>(null)
+    val elderLocation: StateFlow<LocationData?> = _elderLocation.asStateFlow()
+    
+    private val _locationHistory = MutableStateFlow<List<LocationData>>(emptyList())
+    val locationHistory: StateFlow<List<LocationData>> = _locationHistory.asStateFlow()
+    
+    private val _isLocationLoading = MutableStateFlow(false)
+    val isLocationLoading: StateFlow<Boolean> = _isLocationLoading.asStateFlow()
+    
+    // 地址解析结果
+    private val _currentAddress = MutableStateFlow<String?>(null)
+    val currentAddress: StateFlow<String?> = _currentAddress.asStateFlow()
+    
     init {
         loadData()
         startAlertPolling()
@@ -199,8 +216,46 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         alertPollingJob = viewModelScope.launch {
             while (true) {
                 fetchAlerts()
-                delay(60_000L) // 每60秒检查一次
+                fetchLocation() // 同时也轮询位置
+                delay(30_000L) // 改为30秒检查一次（位置需要更频繁）
             }
+        }
+    }
+    
+    /**
+     * 获取长辈位置
+     */
+    private suspend fun fetchLocation() {
+        if (!isPaired.value) return
+        
+        try {
+            // 直接调用 Repository 方法，它会在内部处理配对ID的获取
+            val result = syncRepository.getElderLocation()
+            
+            if (result.isSuccess) {
+                val data = result.getOrNull()
+                if (data != null) {
+                    _elderLocation.value = data.latest
+                    _locationHistory.value = data.history
+                    
+                    if (data.latest != null && !data.latest.address.isNullOrEmpty()) {
+                        _currentAddress.value = data.latest.address
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FamilyMonitoringViewModel", "获取位置失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 刷新位置（UI调用）
+     */
+    fun refreshLocation() {
+        viewModelScope.launch {
+            _isLocationLoading.value = true
+            fetchLocation()
+            _isLocationLoading.value = false
         }
     }
     
@@ -250,6 +305,15 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
      */
     private fun getAnalysisCacheKey(range: TimeRange, startDate: String): String {
         return "${range.name}_$startDate"
+    }
+    
+    /**
+     * 启动位置轮询（由 UI 调用）
+     */
+    fun startLocationPolling() {
+        // 实际上轮询已经在 startAlertPolling 中处理了
+        // 这里我们可以立即触发一次刷新
+        refreshLocation()
     }
     
     /**
@@ -744,6 +808,11 @@ $notesSection
         // 强制刷新：清除缓存
         invalidateCache()
         loadData(forceRefresh = true)
+        
+        // 立即刷新位置
+        viewModelScope.launch {
+            fetchLocation()
+        }
     }
     
     // ==================== 药品管理 ====================
@@ -804,6 +873,11 @@ $notesSection
      */
     fun resetAddMedicationState() {
         _addMedicationState.value = LoadingState.Idle
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        alertPollingJob?.cancel()
     }
 }
 

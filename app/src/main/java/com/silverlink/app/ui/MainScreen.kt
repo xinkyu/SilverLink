@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -150,6 +151,25 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                         indicatorColor = MaterialTheme.colorScheme.secondaryContainer
                     )
                 )
+                NavigationBarItem(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
+                    icon = { 
+                        Icon(
+                            Icons.Default.Security, 
+                            contentDescription = "安全",
+                            modifier = Modifier.size(26.dp)
+                        ) 
+                    },
+                    label = { 
+                        Text("安全守护", style = MaterialTheme.typography.labelMedium) 
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = WarmPrimary,
+                        selectedTextColor = WarmPrimary,
+                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                )
             }
         }
     ) { innerPadding ->
@@ -188,6 +208,20 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                     }
                 }
                 3 -> HistoryScreen()
+                4 -> {
+                    // 安全守护 Tab
+                    var showContacts by remember { mutableStateOf(false) }
+                    
+                    if (showContacts) {
+                        com.silverlink.app.feature.falldetection.EmergencyContactScreen(
+                            onBack = { showContacts = false }
+                        )
+                    } else {
+                        com.silverlink.app.feature.falldetection.FallDetectionScreen(
+                            onNavigateToContacts = { showContacts = true }
+                        )
+                    }
+                }
             }
         }
     }
