@@ -33,7 +33,8 @@ class SyncRepository(private val context: Context) {
      */
     suspend fun createPairingCodeOnCloud(
         elderName: String,
-        elderProfile: String = ""
+        elderProfile: String = "",
+        dialect: String = "NONE"
     ): Result<String> = withContext(Dispatchers.IO) {
         // 生成本地配对码
         val code = userPrefs.completeFamilySetup(elderName, elderProfile)
@@ -43,6 +44,8 @@ class SyncRepository(private val context: Context) {
         val cloudResult = cloudBase.createPairingCode(
             code = cleanCode,
             elderName = elderName,
+            elderProfile = elderProfile,
+            dialect = dialect,
             familyDeviceId = currentDeviceId
         )
         
@@ -70,7 +73,15 @@ class SyncRepository(private val context: Context) {
             if (cloudResult.isSuccess) {
                 val pairingResult = cloudResult.getOrNull()
                 if (pairingResult != null) {
-                    // 云端验证成功
+                    // 云端验证成功，保存 elderProfile 和 dialect
+                    if (pairingResult.elderProfile.isNotBlank()) {
+                        userPrefs.setElderProfile(pairingResult.elderProfile)
+                    }
+                    if (pairingResult.dialect != "NONE" && pairingResult.dialect.isNotBlank()) {
+                        val dialect = com.silverlink.app.data.local.Dialect.fromName(pairingResult.dialect)
+                        userPrefs.setDialect(dialect)
+                        android.util.Log.d("SyncRepository", "从云端获取方言设置: ${dialect.displayName}")
+                    }
                     return@withContext Result.success(PairingInfo(
                         code = cleanCode,
                         elderName = pairingResult.elderName,

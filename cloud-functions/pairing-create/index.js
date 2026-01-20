@@ -32,11 +32,13 @@ exports.main = async (event) => {
     // HTTP 触发时，参数在 body 中
     const params = getParams(event);
 
-    const { code, elderName, familyDeviceId, expiresInMinutes = 30 } = params;
+    const { code, elderName, elderProfile, dialect, familyDeviceId, expiresInMinutes = 30 } = params;
 
     console.log("pairing-create 收到参数:", {
       code,
       elderName,
+      elderProfile,
+      dialect,
       familyDeviceId,
     });
 
@@ -55,6 +57,8 @@ exports.main = async (event) => {
     await db.collection("pairing_codes").add({
       code,
       elderName,
+      elderProfile: elderProfile || "",
+      dialect: dialect || "NONE",
       familyDeviceId,
       elderDeviceId: null,
       status: "pending",

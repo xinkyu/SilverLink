@@ -1,0 +1,9 @@
+{
+  "name": "voice-audio-upload",
+  "version": "1.0.0",
+  "description": "Upload voice audio for cloning",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

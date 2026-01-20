@@ -71,6 +71,8 @@ exports.main = async (event) => {
       success: true,
       data: {
         elderName: pairing.elderName,
+        elderProfile: pairing.elderProfile || "",
+        dialect: pairing.dialect || "NONE",
         familyDeviceId: pairing.familyDeviceId,
         pairedAt: pairedAt.toISOString(),
       },

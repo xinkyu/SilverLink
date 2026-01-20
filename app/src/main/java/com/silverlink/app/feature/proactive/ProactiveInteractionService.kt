@@ -17,10 +17,12 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.silverlink.app.R
 import com.silverlink.app.data.local.AppDatabase
+import com.silverlink.app.data.local.Dialect
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.dao.HistoryDao
 import com.silverlink.app.data.local.dao.CognitiveLogDao
 import com.silverlink.app.data.local.dao.MemoryPhotoDao
+import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.data.remote.CloudBaseService
 import com.silverlink.app.data.remote.RetrofitClient
 import com.silverlink.app.data.remote.model.Input
@@ -124,7 +126,14 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         memoryPhotoDao = AppDatabase.getInstance(applicationContext).memoryPhotoDao()
         cognitiveLogDao = AppDatabase.getInstance(applicationContext).cognitiveLogDao()
         
-        // 4. 初始化传感器
+        // 4. 设置复刻音色ID（如果有）
+        val clonedVoiceId = userPreferences.userConfig.value.clonedVoiceId
+        if (clonedVoiceId.isNotBlank()) {
+            ttsService.setClonedVoiceId(clonedVoiceId)
+            Log.d(TAG, "Using cloned voice: $clonedVoiceId")
+        }
+        
+        // 5. 初始化传感器
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
@@ -259,7 +268,10 @@ class ProactiveInteractionService : Service(), SensorEventListener {
 
                 delay(4000)
                 val prompt = "要不要一起玩记忆小游戏？我给您出几道照片小题。"
-                val result = ttsService.synthesize(prompt)
+                // 使用方言设置
+                val config = userPreferences.userConfig.value
+                val dialectName = if (config.dialect != Dialect.NONE) config.dialect.displayName else ""
+                val result = ttsService.synthesize(prompt, 1.0, dialectName, Emotion.HAPPY)
                 result.fold(
                     onSuccess = { audioData ->
                         audioPlayer.play(audioData)
@@ -362,7 +374,15 @@ class ProactiveInteractionService : Service(), SensorEventListener {
                 Log.d(TAG, "AI generated greeting: $greetingText")
                 
                 // 4. 使用 App 统一的语音服务播放
-                val result = ttsService.synthesize(greetingText)
+                // 获取方言名称（如 "四川话"、"广东话"）
+                val dialectName = if (config.dialect != Dialect.NONE) {
+                    config.dialect.displayName
+                } else {
+                    ""
+                }
+                // 根据最近情绪设置语音情感
+                val emotion = Emotion.fromLabel(latestMood)
+                val result = ttsService.synthesize(greetingText, 1.0, dialectName, emotion)
                 result.fold(
                     onSuccess = { audioData ->
                         Log.d(TAG, "TTS synthesis successful, playing audio...")

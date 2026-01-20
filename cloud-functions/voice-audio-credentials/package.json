@@ -1,0 +1,9 @@
+{
+  "name": "voice-audio-credentials",
+  "version": "1.0.0",
+  "description": "Get upload credentials for voice audio",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

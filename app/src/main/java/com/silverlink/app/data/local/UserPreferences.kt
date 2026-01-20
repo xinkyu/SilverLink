@@ -18,6 +18,40 @@ enum class UserRole {
 }
 
 /**
+ * 方言类型
+ * 使用 CosyVoice cosyvoice-v3-plus 模型支持的方言
+ */
+enum class Dialect(
+    val displayName: String,
+    val languageCode: String,  // CosyVoice language parameter
+    val promptHint: String
+) {
+    NONE("无（普通话）", "zh", "请用标准普通话回答"),
+    CANTONESE("广东话", "yue", "请用粤语的口吻和词汇（如\"点解\"、\"系咪\"、\"唔该\"）与老人聊天"),
+    DONGBEI("东北话", "db", "请用东北话的口吻和词汇（如\"嘎哈呢\"、\"老铁\"、\"贼好\"）与老人聊天"),
+    GANSU("甘肃话", "gs", "请用甘肃话的口吻与老人聊天"),
+    GUIZHOU("贵州话", "gz", "请用贵州话的口吻与老人聊天"),
+    HENAN("河南话", "hn", "请用河南话的口吻（如\"中\"、\"咋弄\"）与老人聊天"),
+    HUBEI("湖北话", "hb", "请用湖北话的口吻与老人聊天"),
+    JIANGXI("江西话", "jx", "请用江西话的口吻与老人聊天"),
+    MINNAN("闽南话", "mn", "请用闽南话的口吻与老人聊天"),
+    NINGXIA("宁夏话", "nx", "请用宁夏话的口吻与老人聊天"),
+    SHANXI("山西话", "sx", "请用山西话的口吻与老人聊天"),
+    SHAANXI("陕西话", "snx", "请用陕西话的口吻（如\"额\"、\"咋咧\"）与老人聊天"),
+    SHANDONG("山东话", "sd", "请用山东话的口吻与老人聊天"),
+    SHANGHAI("上海话", "sh", "请用上海话的口吻（如\"侬好\"、\"阿拉\"）与老人聊天"),
+    SICHUAN("四川话", "sc", "请用四川话的口吻和词汇（如\"咋个样\"、\"巴适\"、\"莫得\"）与老人聊天"),
+    TIANJIN("天津话", "tj", "请用天津话的口吻（如\"嘛呢\"、\"倍儿\"）与老人聊天"),
+    YUNNAN("云南话", "yn", "请用云南话的口吻与老人聊天");
+
+    companion object {
+        fun fromName(name: String): Dialect {
+            return entries.find { it.name == name } ?: NONE
+        }
+    }
+}
+
+/**
  * 配对信息
  */
 data class PairingInfo(
@@ -34,6 +68,8 @@ data class UserConfig(
     val isActivated: Boolean = false,
     val elderName: String = "",        // 长辈称呼，如"王爷爷"
     val elderProfile: String = "",     // 长辈信息简介（家乡/兴趣/健康等）
+    val dialect: Dialect = Dialect.NONE,  // 方言设置
+    val clonedVoiceId: String = "",    // 复刻音色ID（用于TTS方言支持）
     val pairingCode: String = "",      // 配对码
     val pairedDeviceId: String = ""    // 已配对设备ID
 )
@@ -65,6 +101,8 @@ class UserPreferences(context: Context) {
             isActivated = prefs.getBoolean(KEY_ACTIVATED, false),
             elderName = prefs.getString(KEY_ELDER_NAME, "") ?: "",
             elderProfile = prefs.getString(KEY_ELDER_PROFILE, "") ?: "",
+            dialect = Dialect.fromName(prefs.getString(KEY_DIALECT, Dialect.NONE.name) ?: Dialect.NONE.name),
+            clonedVoiceId = prefs.getString(KEY_CLONED_VOICE_ID, "") ?: "",
             pairingCode = prefs.getString(KEY_PAIRING_CODE, "") ?: "",
             pairedDeviceId = prefs.getString(KEY_PAIRED_DEVICE_ID, "") ?: ""
         )
@@ -100,6 +138,22 @@ class UserPreferences(context: Context) {
     fun setElderProfile(profile: String) {
         prefs.edit().putString(KEY_ELDER_PROFILE, profile).apply()
         _userConfig.value = _userConfig.value.copy(elderProfile = profile)
+    }
+
+    /**
+     * 设置方言
+     */
+    fun setDialect(dialect: Dialect) {
+        prefs.edit().putString(KEY_DIALECT, dialect.name).apply()
+        _userConfig.value = _userConfig.value.copy(dialect = dialect)
+    }
+    
+    /**
+     * 设置复刻音色ID
+     */
+    fun setClonedVoiceId(voiceId: String) {
+        prefs.edit().putString(KEY_CLONED_VOICE_ID, voiceId).apply()
+        _userConfig.value = _userConfig.value.copy(clonedVoiceId = voiceId)
     }
     
     /**
@@ -157,14 +211,26 @@ class UserPreferences(context: Context) {
     }
     
     /**
-     * 生成二维码内容（包含配对码和长辈称呼）
+     * 生成二维码内容（包含配对码、长辈称呼、方言设置和复刻音色ID）
      */
-    fun generateQRContent(code: String, elderName: String, elderProfile: String = ""): String {
+    fun generateQRContent(
+        code: String, 
+        elderName: String, 
+        elderProfile: String = "", 
+        dialect: Dialect = Dialect.NONE,
+        clonedVoiceId: String = ""
+    ): String {
         val json = JSONObject().apply {
             put("code", code.replace(" ", ""))
             put("name", elderName)
             if (elderProfile.isNotBlank()) {
                 put("profile", elderProfile)
+            }
+            if (dialect != Dialect.NONE) {
+                put("dialect", dialect.name)
+            }
+            if (clonedVoiceId.isNotBlank()) {
+                put("voiceId", clonedVoiceId)
             }
             put("app", "SilverLink")
         }
@@ -173,19 +239,33 @@ class UserPreferences(context: Context) {
     
     /**
      * 解析二维码内容
-     * @return 配对信息，解析失败返回 null
+     * @return Pair of 配对信息 and 方言，解析失败返回 null
      */
-    fun parseQRContent(content: String): PairingInfo? {
+    fun parseQRContent(content: String): Pair<PairingInfo, Dialect>? {
         return try {
             if (!content.startsWith("silverlink://")) return null
             val base64Data = content.removePrefix("silverlink://")
             val jsonStr = String(Base64.decode(base64Data, Base64.NO_WRAP))
             val json = JSONObject(jsonStr)
-            PairingInfo(
+            val pairingInfo = PairingInfo(
                 code = json.getString("code"),
                 elderName = json.getString("name"),
                 timestamp = System.currentTimeMillis()
             )
+            val dialect = if (json.has("dialect")) {
+                Dialect.fromName(json.getString("dialect"))
+            } else {
+                Dialect.NONE
+            }
+            // 保存解析出的 profile、dialect 和 voiceId
+            if (json.has("profile")) {
+                setElderProfile(json.getString("profile"))
+            }
+            setDialect(dialect)
+            if (json.has("voiceId")) {
+                setClonedVoiceId(json.getString("voiceId"))
+            }
+            Pair(pairingInfo, dialect)
         } catch (e: Exception) {
             null
         }
@@ -223,6 +303,8 @@ class UserPreferences(context: Context) {
     
     /**
      * 完成长辈端激活
+     * 
+     * 重要：保留之前通过 parseQRContent 设置的 dialect 和 clonedVoiceId
      */
     fun completeElderActivation(elderName: String) {
         prefs.edit()
@@ -230,11 +312,11 @@ class UserPreferences(context: Context) {
             .putString(KEY_ELDER_NAME, elderName)
             .putBoolean(KEY_ACTIVATED, true)
             .apply()
-        _userConfig.value = UserConfig(
+        // 保留 dialect 和 clonedVoiceId（在 parseQRContent 中已设置）
+        _userConfig.value = _userConfig.value.copy(
             role = UserRole.ELDER,
             isActivated = true,
-            elderName = elderName,
-            elderProfile = _userConfig.value.elderProfile
+            elderName = elderName
         )
     }
     
@@ -260,6 +342,8 @@ class UserPreferences(context: Context) {
         private const val KEY_ACTIVATED = "is_activated"
         private const val KEY_ELDER_NAME = "elder_name"
         private const val KEY_ELDER_PROFILE = "elder_profile"
+        private const val KEY_DIALECT = "dialect"
+        private const val KEY_CLONED_VOICE_ID = "cloned_voice_id"
         private const val KEY_PAIRING_CODE = "pairing_code"
         private const val KEY_PAIRED_DEVICE_ID = "paired_device_id"
         

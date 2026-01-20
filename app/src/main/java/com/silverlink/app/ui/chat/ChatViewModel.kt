@@ -119,6 +119,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer.setOnErrorListener { errorMsg ->
             _ttsState.value = TtsState.Error(errorMsg)
         }
+        
+        // 设置复刻音色ID（如果有）
+        val clonedVoiceId = userPrefs.userConfig.value.clonedVoiceId
+        Log.d(TAG, "Loaded user config - clonedVoiceId: '$clonedVoiceId', dialect: ${userPrefs.userConfig.value.dialect}")
+        if (clonedVoiceId.isNotBlank()) {
+            ttsService.setClonedVoiceId(clonedVoiceId)
+            Log.d(TAG, "Using cloned voice: $clonedVoiceId")
+        } else {
+            Log.d(TAG, "No cloned voice set, will use default system voice")
+        }
     }
 
     private fun loadConversations() {
@@ -252,6 +262,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val emotionHint = _currentEmotion.value.promptHint
         val elderName = getElderName()
         val elderProfile = getElderProfile()
+        val dialect = userPrefs.userConfig.value.dialect
         val nameHint = if (elderName.isNotBlank()) {
             "用户称呼为“$elderName”，回复时请优先使用该称呼，避免使用“爷爷奶奶”等泛称。"
         } else {
@@ -262,10 +273,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             ""
         }
-        val fullPrompt = if (emotionHint.isNotBlank()) {
-            "$baseSystemPrompt\n\n【称呼提示】$nameHint\n${profileHint.ifBlank { "" }}${if (profileHint.isNotBlank()) "\n" else ""}\n【用户情绪提示】$emotionHint"
+        
+        val dialectHint = if (dialect != com.silverlink.app.data.local.Dialect.NONE) {
+            "【用户方言/地区】用户来自${dialect.displayName}地区。${dialect.promptHint}"
         } else {
-            "$baseSystemPrompt\n\n【称呼提示】$nameHint${if (profileHint.isNotBlank()) "\n$profileHint" else ""}"
+            ""
+        }
+
+        val fullPrompt = buildString {
+            append(baseSystemPrompt)
+            append("\n\n【称呼提示】$nameHint")
+            if (profileHint.isNotBlank()) append("\n$profileHint")
+            if (dialectHint.isNotBlank()) append("\n$dialectHint")
+            if (emotionHint.isNotBlank()) append("\n【用户情绪提示】$emotionHint")
         }
         return Message(role = "system", content = fullPrompt)
     }
@@ -506,17 +526,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * 语音朗读文本
+     * 使用 longanhuan 音色，支持方言、角色、情感设置
      */
     fun speakText(text: String, emotion: Emotion = _currentEmotion.value) {
         if (text.isBlank()) return
 
         val ttsRate = getTtsRateForEmotion(emotion)
-        Log.d(TAG, "Speaking with rate=$ttsRate for emotion=${emotion.name}")
+        val dialect = userPrefs.userConfig.value.dialect
+        // 获取方言名称用于 instruction（如 "四川话"、"广东话"）
+        val dialectName = if (dialect != com.silverlink.app.data.local.Dialect.NONE) {
+            dialect.displayName
+        } else {
+            ""
+        }
+        Log.d(TAG, "Speaking with rate=$ttsRate, dialect=$dialectName, emotion=${emotion.name}")
 
         viewModelScope.launch {
             _ttsState.value = TtsState.Synthesizing
             
-            val result = ttsService.synthesize(text, ttsRate)
+            // TTS 服务会自动构建包含方言、角色、情感的 instruction
+            val result = ttsService.synthesize(text, ttsRate, dialectName, emotion)
             
             result.fold(
                 onSuccess = { audioData ->
