@@ -178,6 +178,29 @@ interface CloudBaseApi {
         @Query("elderDeviceId") elderDeviceId: String,
         @Query("familyDeviceId") familyDeviceId: String
     ): ApiResponse<LocationQueryResult>
+    
+    // ==================== 声音复刻管理 ====================
+    
+    /**
+     * 上传声音复刻音频到云存储
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("voice-audio-upload")
+    suspend fun uploadVoiceAudio(@Body request: VoiceAudioUploadRequest): ApiResponse<VoiceAudioUploadResult>
+
+    /**
+     * 获取声音复刻音频上传凭证
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("voice-audio-credentials")
+    suspend fun getVoiceUploadCredentials(@Body request: VoiceCredentialsRequest): ApiResponse<PhotoUploadCredentials>
+    
+    /**
+     * 获取声音复刻音频公网URL
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("voice-audio-get-url")
+    suspend fun getVoicePublicUrl(@Body request: VoiceGetUrlRequest): ApiResponse<VoiceGetUrlResult>
 }
 
 // ==================== 请求数据类 ====================
@@ -186,6 +209,9 @@ interface CloudBaseApi {
 data class CreatePairingRequest(
     val code: String,
     val elderName: String,
+    val elderProfile: String = "",
+    val dialect: String = "NONE",
+    val clonedVoiceId: String = "",
     val familyDeviceId: String,
     val expiresInMinutes: Int = 30
 )
@@ -303,6 +329,9 @@ data class PairingCodeData(
 @Serializable
 data class PairingResult(
     val elderName: String,
+    val elderProfile: String = "",
+    val dialect: String = "NONE",
+    val clonedVoiceId: String = "",
     val familyDeviceId: String,
     val pairedAt: String
 )
@@ -437,7 +466,8 @@ data class PhotoUploadCredentials(
     val cosFileId: String? = null,
     val expiresAt: String = "",
     val fallbackToBase64: Boolean = false,  // 是否需要回退到 Base64 方式
-    val message: String? = null
+    val message: String? = null,
+    val directUrl: String? = null  // 直接 COS URL（需要桶设置为公共读取）
 )
 
 @Serializable
@@ -486,4 +516,37 @@ data class LocationData(
     val accuracy: Float = 0f,
     val address: String = "",
     val createdAt: String = ""
+)
+
+// ==================== 声音复刻相关 ====================
+
+@Serializable
+data class VoiceAudioUploadRequest(
+    val familyDeviceId: String,
+    val audioBase64: String,
+    val format: String = "wav"
+)
+
+@Serializable
+data class VoiceAudioUploadResult(
+    val url: String = "",
+    val fileId: String = "",
+    val cloudPath: String = ""
+)
+
+@Serializable
+data class VoiceCredentialsRequest(
+    val familyDeviceId: String,
+    val format: String = "wav"
+)
+
+@Serializable
+data class VoiceGetUrlRequest(
+    val fileId: String
+)
+
+@Serializable
+data class VoiceGetUrlResult(
+    val url: String,
+    val fileId: String
 )

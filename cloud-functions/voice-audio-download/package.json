@@ -1,0 +1,9 @@
+{
+  "name": "voice-audio-download",
+  "version": "1.0.0",
+  "description": "Download voice audio proxy",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

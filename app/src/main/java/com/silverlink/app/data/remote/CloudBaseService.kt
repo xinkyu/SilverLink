@@ -67,14 +67,20 @@ object CloudBaseService {
     suspend fun createPairingCode(
         code: String,
         elderName: String,
+        elderProfile: String = "",
+        dialect: String = "NONE",
+        clonedVoiceId: String = "",
         familyDeviceId: String
     ): Result<PairingCodeData> {
         return try {
-            Log.d("CloudBase", "创建配对码: code=$code, elderName=$elderName, deviceId=$familyDeviceId")
+            Log.d("CloudBase", "创建配对码: code=$code, elderName=$elderName, dialect=$dialect, voiceId=$clonedVoiceId, deviceId=$familyDeviceId")
             val response = api.createPairingCode(
                 CreatePairingRequest(
                     code = code,
                     elderName = elderName,
+                    elderProfile = elderProfile,
+                    dialect = dialect,
+                    clonedVoiceId = clonedVoiceId,
                     familyDeviceId = familyDeviceId
                 )
             )
@@ -810,11 +816,10 @@ object CloudBaseService {
         }
     }
     
-    // ==================== 位置相关 ====================
+    // ==================== 位置管理 ====================
     
     /**
      * 上传位置（老人端调用）
-     * 每5分钟上传一次位置，云端会保留最近2小时的记录
      */
     suspend fun updateLocation(
         elderDeviceId: String,
@@ -824,7 +829,7 @@ object CloudBaseService {
         address: String = ""
     ): Result<Unit> {
         return try {
-            Log.d("CloudBase", "上传位置: lat=$latitude, lng=$longitude, accuracy=$accuracy")
+            Log.d("CloudBase", "上传位置: elderDeviceId=$elderDeviceId, lat=$latitude, lng=$longitude")
             val response = api.updateLocation(
                 UpdateLocationRequest(
                     elderDeviceId = elderDeviceId,
@@ -893,6 +898,149 @@ object CloudBaseService {
             }
         } catch (e: Exception) {
             Log.e("CloudBase", "位置查询异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    // ==================== 声音复刻管理 ====================
+    
+    /**
+     * 获取声音复刻音频上传凭证
+     */
+    suspend fun getVoiceUploadCredentials(
+        familyDeviceId: String,
+        format: String = "wav"
+    ): Result<PhotoUploadCredentials> {
+        return try {
+            Log.d("CloudBase", "获取声音上传凭证: familyDeviceId=$familyDeviceId")
+            val response = api.getVoiceUploadCredentials(
+                VoiceCredentialsRequest(
+                    familyDeviceId = familyDeviceId,
+                    format = format
+                )
+            )
+            if (response.success && response.data != null) {
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception(response.message ?: "获取上传凭证失败"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 获取声音复刻音频公网URL
+     * 
+     * 重要：CloudBase 的 getTempFileURL 返回的 *.tcb.qcloud.la URL 不可公开访问，
+     * 因此直接使用 HTTP Trigger 代理云函数 (voice-audio-download) 获取可访问的公网URL。
+     * 代理云函数会从 COS 下载文件并返回二进制内容，阿里云可以正常访问。
+     * 
+     * 使用 path 参数格式（更简洁）：
+     * /voice-audio-download?path=voice_cloning/familyId/filename.m4a
+     * 
+     * 而非复杂的 fileId 格式：
+     * /voice-audio-download?fileId=cloud%3A%2F%2F...
+     */
+    suspend fun getVoicePublicUrl(fileId: String): Result<String> {
+        return try {
+            // 从 fileId 中提取路径部分
+            // fileId 格式: cloud://envId.bucket/voice_cloning/familyId/filename.m4a
+            // 我们只需要: voice_cloning/familyId/filename.m4a
+            val path = extractPathFromFileId(fileId)
+            val encodedPath = java.net.URLEncoder.encode(path, "UTF-8")
+            val proxyUrl = "${CLOUD_BASE_URL}voice-audio-download?path=$encodedPath"
+
+            Log.d("CloudBase", "Voice proxy URL: $proxyUrl")
+            Log.d("CloudBase", "Extracted path: $path")
+            Result.success(proxyUrl)
+        } catch (e: Exception) {
+            Log.e("CloudBase", "Failed to generate voice URL: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 从 CloudBase fileId 中提取存储路径
+     * 
+     * @param fileId 格式: cloud://envId.bucket/path/to/file.ext
+     * @return 路径部分: path/to/file.ext
+     */
+    private fun extractPathFromFileId(fileId: String): String {
+        // 移除 cloud:// 前缀
+        val withoutPrefix = fileId.removePrefix("cloud://")
+        // 找到第一个 / 之后的路径部分
+        val slashIndex = withoutPrefix.indexOf('/')
+        return if (slashIndex >= 0) {
+            withoutPrefix.substring(slashIndex + 1)
+        } else {
+            withoutPrefix
+        }
+    }
+    
+    /**
+     * 直传声音复刻音频到 COS（完整流程）
+     * 
+     * 返回的 URL 优先使用直接 COS URL（需要 COS 桶设置公共读取权限）
+     * 该 URL 格式简洁，没有查询参数，更容易被第三方 API（如阿里云声音复刻）接受
+     */
+    suspend fun uploadVoiceDirectToCOS(
+        familyDeviceId: String,
+        audioFile: java.io.File
+    ): Result<String> {
+        return try {
+            val startTime = System.currentTimeMillis()
+            val audioBytes = audioFile.readBytes()
+            val format = audioFile.extension.lowercase().let { 
+                if (it == "m4a" || it == "aac") "m4a" else if (it == "mp3") "mp3" else "wav" 
+            }
+            
+            // 1. 获取上传凭证
+            Log.d("CloudStorage", "声音上传 Step 1: 获取凭证")
+            val credentialsResult = getVoiceUploadCredentials(familyDeviceId, format)
+            val credentials = credentialsResult.getOrElse { 
+                return Result.failure(Exception("获取上传凭证失败: ${it.message}"))
+            }
+            
+            // 2. 直传到 COS
+            Log.d("CloudStorage", "声音上传 Step 2: 直传云存储, 大小=${audioBytes.size / 1024}KB")
+            val uploadResult = uploadToCOS(
+                uploadUrl = credentials.uploadUrl,
+                authorization = credentials.authorization,
+                token = credentials.token,
+                imageBytes = audioBytes,
+                contentType = credentials.contentType,
+                cosFileId = credentials.cosFileId
+            )
+            
+            if (uploadResult.isFailure) {
+                return Result.failure(Exception("直传云存储失败: ${uploadResult.exceptionOrNull()?.message}"))
+            }
+            
+            // 3. 获取公网URL
+            // 优先使用 directUrl（直接 COS URL，格式简洁，无查询参数）
+            // 需要 COS 桶的 voice_cloning 目录设置为公共读取
+            Log.d("CloudStorage", "声音上传 Step 3: 获取访问URL")
+            
+            val publicUrl = if (!credentials.directUrl.isNullOrBlank()) {
+                // 使用直接 COS URL（推荐，格式简洁）
+                Log.d("CloudStorage", "使用直接 COS URL: ${credentials.directUrl}")
+                credentials.directUrl
+            } else {
+                // 回退到代理 URL
+                Log.d("CloudStorage", "回退到代理 URL")
+                val urlResult = getVoicePublicUrl(credentials.fileId)
+                urlResult.getOrElse {
+                    return Result.failure(Exception("获取访问URL失败: ${it.message}"))
+                }
+            }
+            
+            val totalTime = System.currentTimeMillis() - startTime
+            Log.d("CloudStorage", "声音上传完成, URL: $publicUrl, 耗时=${totalTime}ms")
+            
+            Result.success(publicUrl)
+        } catch (e: Exception) {
+            Log.e("CloudStorage", "声音直传异常: ${e.message}", e)
             Result.failure(e)
         }
     }

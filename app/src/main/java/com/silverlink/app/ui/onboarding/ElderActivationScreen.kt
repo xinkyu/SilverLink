@@ -100,7 +100,7 @@ fun ElderActivationScreen(
         val contents = scanResult?.contents
         if (!contents.isNullOrBlank()) {
             val parsed = userPreferences.parseQRContent(contents)
-            val code = parsed?.code ?: contents.filter { it.isDigit() }.take(6)
+            val code = parsed?.first?.code ?: contents.filter { it.isDigit() }.take(6)
             if (code.length == 6) {
                 pairingCode = code
                 isError = false
