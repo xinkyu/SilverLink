@@ -257,6 +257,23 @@ class SyncRepository(private val context: Context) {
     }
 
     /**
+     * 老人端自己添加药品到云端
+     */
+    suspend fun addMedicationForSelf(
+        name: String,
+        dosage: String,
+        times: String
+    ): Result<MedicationData> = withContext(Dispatchers.IO) {
+        cloudBase.addMedication(
+            elderDeviceId = currentDeviceId,
+            familyDeviceId = null,
+            name = name,
+            dosage = dosage,
+            times = times
+        )
+    }
+
+    /**
      * 更新长辈药品时间（长辈端调用）
      */
     suspend fun updateMedicationTimesForElder(

@@ -113,12 +113,14 @@ class AlarmScheduler(private val context: Context) {
      * @param medId 药品ID
      * @param medName 药品名称
      * @param medDosage 药品剂量
+     * @param medTime 原始计划服药时间（可选，用于标记服药记录）
      */
-    fun scheduleSnooze(medId: Int, medName: String, medDosage: String) {
+    fun scheduleSnooze(medId: Int, medName: String, medDosage: String, medTime: String? = null) {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra("MED_ID", medId)
             putExtra("MED_NAME", medName)
             putExtra("MED_DOSAGE", medDosage)
+            putExtra("MED_TIME", medTime ?: "")
             putExtra("IS_SNOOZE", true)
         }
 
@@ -144,7 +146,7 @@ class AlarmScheduler(private val context: Context) {
                         triggerTime,
                         pendingIntent
                     )
-                    Log.d("AlarmScheduler", "Snooze scheduled for $medName in 10 minutes")
+                    Log.d("AlarmScheduler", "Snooze scheduled for $medName in 10 minutes (time=$medTime)")
                 } else {
                     Log.e("AlarmScheduler", "Cannot schedule exact alarms for snooze")
                 }
@@ -154,7 +156,7 @@ class AlarmScheduler(private val context: Context) {
                     triggerTime,
                     pendingIntent
                 )
-                Log.d("AlarmScheduler", "Snooze scheduled for $medName in 10 minutes")
+                Log.d("AlarmScheduler", "Snooze scheduled for $medName in 10 minutes (time=$medTime)")
             }
         } catch (e: SecurityException) {
             Log.e("AlarmScheduler", "Failed to schedule snooze", e)

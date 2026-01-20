@@ -52,7 +52,11 @@ exports.main = async (event) => {
       return { success: false, message: "参数不完整" };
     }
 
-    const logDate = date || new Date().toISOString().split("T")[0];
+    // 使用中国时区 (GMT+8) 计算日期
+    const now = new Date();
+    const chinaOffset = 8 * 60 * 60 * 1000; // UTC+8
+    const chinaTime = new Date(now.getTime() + chinaOffset);
+    const logDate = date || chinaTime.toISOString().split("T")[0];
 
     await db.collection("medication_logs").add({
       elderDeviceId,

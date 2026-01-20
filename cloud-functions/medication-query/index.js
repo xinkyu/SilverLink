@@ -73,14 +73,14 @@ exports.main = async (event) => {
       .get();
 
     const result = data.map((item) => ({
-      id: item.id_,
-      medicationId: item.medicationId,
-      medicationName: item.medicationName,
-      dosage: item.dosage,
-      scheduledTime: item.scheduledTime,
-      status: item.status,
-      date: item.date,
-      createdAt: item.createdAt.toISOString(),
+      id: item._id || "",
+      medicationId: item.medicationId || 0,
+      medicationName: item.medicationName || "",
+      dosage: item.dosage || "",
+      scheduledTime: item.scheduledTime || "",
+      status: item.status || "",
+      date: item.date || "",
+      createdAt: item.createdAt ? item.createdAt.toISOString() : new Date().toISOString(),
     }));
 
     return { success: true, data: result };

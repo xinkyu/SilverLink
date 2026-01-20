@@ -60,8 +60,10 @@ exports.main = async (event) => {
       }
     }
 
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    // 使用中国时区 (GMT+8) 计算日期范围
+    const chinaOffset = 8 * 60 * 60 * 1000; // UTC+8
+    const nowChina = new Date(new Date().getTime() + chinaOffset);
+    const startDate = new Date(nowChina.getTime() - days * 24 * 60 * 60 * 1000);
     const startDateStr = startDate.toISOString().split("T")[0];
 
     const { data } = await db
@@ -76,12 +78,12 @@ exports.main = async (event) => {
       .get();
 
     const result = data.map((item) => ({
-      id: item.id_,
+      id: item._id || "",
       mood: item.mood,
-      note: item.note,
-      conversationSummary: item.conversationSummary,
+      note: item.note || "",
+      conversationSummary: item.conversationSummary || "",
       date: item.date,
-      createdAt: item.createdAt.toISOString(),
+      createdAt: item.createdAt ? item.createdAt.toISOString() : new Date().toISOString(),
     }));
 
     return { success: true, data: result };

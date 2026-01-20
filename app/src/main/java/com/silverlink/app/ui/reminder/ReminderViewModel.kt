@@ -152,15 +152,61 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     fun addMedication(name: String, dosage: String, times: List<String>) {
         viewModelScope.launch {
             val timesStr = times.joinToString(",")
-            val med = Medication(
-                name = name,
-                dosage = dosage,
-                times = timesStr,
-                isTakenToday = false
-            )
-            val id = dao.insertMedication(med)
-            val savedMed = med.copy(id = id.toInt())
-            alarmScheduler.scheduleAll(savedMed)
+            
+            // 检查是否已存在同名同剂量的药品
+            val existingMed = dao.getMedicationByNameAndDosage(name.trim(), dosage.trim())
+            
+            if (existingMed != null) {
+                // 已存在，合并时间点
+                val existingTimes = existingMed.getTimeList().toMutableSet()
+                existingTimes.addAll(times)
+                val mergedTimes = existingTimes.sorted().joinToString(",")
+                
+                // 先取消旧闹钟
+                alarmScheduler.cancelAll(existingMed)
+                
+                // 更新药品
+                val updatedMed = existingMed.copy(times = mergedTimes)
+                dao.updateMedication(updatedMed)
+                
+                // 重新设置闹钟
+                alarmScheduler.scheduleAll(updatedMed)
+                
+                Log.d("ReminderViewModel", "合并药品时间: $name, 新时间: $mergedTimes")
+                
+                // 同步到云端
+                if (userPreferences.userConfig.value.role == UserRole.ELDER) {
+                    try {
+                        syncRepository.addMedicationForSelf(name.trim(), dosage.trim(), mergedTimes)
+                        Log.d("ReminderViewModel", "药品已同步到云端: $name")
+                    } catch (e: Exception) {
+                        Log.e("ReminderViewModel", "同步药品到云端失败: ${e.message}")
+                    }
+                }
+            } else {
+                // 不存在，创建新记录
+                val med = Medication(
+                    name = name.trim(),
+                    dosage = dosage.trim(),
+                    times = timesStr,
+                    isTakenToday = false
+                )
+                val id = dao.insertMedication(med)
+                val savedMed = med.copy(id = id.toInt())
+                alarmScheduler.scheduleAll(savedMed)
+                
+                Log.d("ReminderViewModel", "新增药品: $name")
+                
+                // 老人端添加药品时同步到云端
+                if (userPreferences.userConfig.value.role == UserRole.ELDER) {
+                    try {
+                        syncRepository.addMedicationForSelf(name.trim(), dosage.trim(), timesStr)
+                        Log.d("ReminderViewModel", "药品已同步到云端: $name")
+                    } catch (e: Exception) {
+                        Log.e("ReminderViewModel", "同步药品到云端失败: ${e.message}")
+                    }
+                }
+            }
         }
     }
 
