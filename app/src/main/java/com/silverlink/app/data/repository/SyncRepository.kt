@@ -34,10 +34,12 @@ class SyncRepository(private val context: Context) {
     suspend fun createPairingCodeOnCloud(
         elderName: String,
         elderProfile: String = "",
-        dialect: String = "NONE"
+        dialect: String = "NONE",
+        clonedVoiceId: String = ""
     ): Result<String> = withContext(Dispatchers.IO) {
         // 生成本地配对码
         val code = userPrefs.completeFamilySetup(elderName, elderProfile)
+        
         val cleanCode = code.replace(" ", "")
         
         // 同步到云端
@@ -46,6 +48,7 @@ class SyncRepository(private val context: Context) {
             elderName = elderName,
             elderProfile = elderProfile,
             dialect = dialect,
+            clonedVoiceId = clonedVoiceId,
             familyDeviceId = currentDeviceId
         )
         
@@ -81,6 +84,10 @@ class SyncRepository(private val context: Context) {
                         val dialect = com.silverlink.app.data.local.Dialect.fromName(pairingResult.dialect)
                         userPrefs.setDialect(dialect)
                         android.util.Log.d("SyncRepository", "从云端获取方言设置: ${dialect.displayName}")
+                    }
+                    if (pairingResult.clonedVoiceId.isNotBlank()) {
+                        userPrefs.setClonedVoiceId(pairingResult.clonedVoiceId)
+                        android.util.Log.d("SyncRepository", "从云端获取复刻音色ID: ${pairingResult.clonedVoiceId}")
                     }
                     return@withContext Result.success(PairingInfo(
                         code = cleanCode,

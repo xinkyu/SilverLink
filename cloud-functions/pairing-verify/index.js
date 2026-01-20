@@ -73,6 +73,7 @@ exports.main = async (event) => {
         elderName: pairing.elderName,
         elderProfile: pairing.elderProfile || "",
         dialect: pairing.dialect || "NONE",
+        clonedVoiceId: pairing.clonedVoiceId || "",
         familyDeviceId: pairing.familyDeviceId,
         pairedAt: pairedAt.toISOString(),
       },

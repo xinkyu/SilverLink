@@ -173,7 +173,7 @@ fun FamilySetupScreen(
                         // 创建配对码并同步到云端
                         scope.launch {
                             android.util.Log.d("FamilySetup", "onNext called, clonedVoiceId='$clonedVoiceId'")
-                            val result = syncRepository.createPairingCodeOnCloud(elderName, elderProfile, selectedDialect.name)
+                            val result = syncRepository.createPairingCodeOnCloud(elderName, elderProfile, selectedDialect.name, clonedVoiceId)
                             result.onSuccess { code ->
                                 pairingCode = code
                                 // 生成二维码内容（包含配对码、长辈称呼、方言和复刻音色ID）
@@ -191,7 +191,7 @@ fun FamilySetupScreen(
                     if (!isLoading) {
                         isLoading = true
                         scope.launch {
-                            val result = syncRepository.createPairingCodeOnCloud(elderName, elderProfile, selectedDialect.name)
+                            val result = syncRepository.createPairingCodeOnCloud(elderName, elderProfile, selectedDialect.name, "")
                             result.onSuccess { code ->
                                 pairingCode = code
                                 qrContent = userPreferences.generateQRContent(

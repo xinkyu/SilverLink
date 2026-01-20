@@ -59,6 +59,7 @@ exports.main = async (event) => {
       elderName,
       elderProfile: elderProfile || "",
       dialect: dialect || "NONE",
+      clonedVoiceId: params.clonedVoiceId || "",
       familyDeviceId,
       elderDeviceId: null,
       status: "pending",

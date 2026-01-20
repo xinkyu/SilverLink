@@ -190,6 +190,7 @@ data class CreatePairingRequest(
     val elderName: String,
     val elderProfile: String = "",
     val dialect: String = "NONE",
+    val clonedVoiceId: String = "",
     val familyDeviceId: String,
     val expiresInMinutes: Int = 30
 )
@@ -309,6 +310,7 @@ data class PairingResult(
     val elderName: String,
     val elderProfile: String = "",
     val dialect: String = "NONE",
+    val clonedVoiceId: String = "",
     val familyDeviceId: String,
     val pairedAt: String
 )
