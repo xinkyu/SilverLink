@@ -65,6 +65,7 @@ import com.silverlink.app.ui.components.MoodTimelineChart
 import com.silverlink.app.ui.components.TimeRangeSelector
 import com.silverlink.app.ui.components.CognitiveReportCard
 import com.silverlink.app.ui.components.CognitiveReportUiData
+import com.silverlink.app.ui.components.LocationCard
 import com.silverlink.app.data.remote.AlertData
 
 /**
@@ -99,6 +100,17 @@ fun FamilyMonitoringScreen(
     // 认知报告状态
     val cognitiveReport by viewModel.cognitiveReport.collectAsState()
     val isCognitiveLoading by viewModel.isCognitiveLoading.collectAsState()
+    
+    // 位置状态
+    val elderLocation by viewModel.elderLocation.collectAsState()
+    val isLocationLoading by viewModel.isLocationLoading.collectAsState()
+    
+    // 启动位置轮询
+    LaunchedEffect(isPaired) {
+        if (isPaired) {
+            viewModel.startLocationPolling()
+        }
+    }
     
     // 监听添加成功后关闭对话框
     LaunchedEffect(addMedicationState) {
@@ -212,6 +224,43 @@ fun FamilyMonitoringScreen(
                                 currentMood = currentMood,
                                 latestTime = latestTime,
                                 titlePrefix = "长辈"
+                            )
+                            
+                            // 位置卡片
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            LocationCard(
+                                location = elderLocation,
+                                isLoading = isLocationLoading,
+                                onRefresh = { viewModel.refreshLocation() },
+                                onViewMap = if (elderLocation != null) {
+                                    {
+                                        val lat = elderLocation?.latitude ?: 0.0
+                                        val lng = elderLocation?.longitude ?: 0.0
+                                        
+                                        // 先弹个提示，确认点击有效
+                                        android.widget.Toast.makeText(context, "正在打开地图...", android.widget.Toast.LENGTH_SHORT).show()
+                                        
+                                        // 方案1: 通用 Geo Intent (系统会自动弹出高德/百度/腾讯等已安装的地图)
+                                        // 格式: geo:latitude,longitude?q=latitude,longitude(Label)
+                                        val geoUri = android.net.Uri.parse("geo:$lat,$lng?q=$lat,$lng(长辈位置)")
+                                        val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, geoUri)
+                                        mapIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        
+                                        try {
+                                            context.startActivity(mapIntent)
+                                        } catch (e: Exception) {
+                                            // 方案2: 如果没有地图App，强制打开浏览器看网页版
+                                            val webUri = android.net.Uri.parse("https://uri.amap.com/marker?position=$lng,$lat&name=长辈位置")
+                                            val webIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, webUri)
+                                            webIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            try {
+                                                context.startActivity(webIntent)
+                                            } catch (e2: Exception) {
+                                                android.widget.Toast.makeText(context, "没有可用的地图或浏览器应用", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                } else null
                             )
                             
                             // 图表类型切换

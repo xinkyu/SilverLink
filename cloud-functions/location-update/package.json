@@ -1,0 +1,9 @@
+{
+  "name": "location-update",
+  "version": "1.0.0",
+  "description": "老人端上传位置",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "2.9.1"
+  }
+}

@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- For full screen intents/notifications -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -14,10 +16,21 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
+    <!-- Fall Detection Permissions -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    
+    <!-- Background Location Permission (Android 10+) -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application
         android:name=".SilverLinkApp"
@@ -52,10 +65,29 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.SilverLink" />
+            
+        <!-- Fall Detection Alert Activity -->
+        <activity
+            android:name=".feature.falldetection.FallAlertActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SilverLink"
+            android:showOnLockScreen="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait" />
         
         <!-- Receiver for Alarm -->
         <receiver android:name=".feature.reminder.AlarmReceiver" 
             android:exported="false"/>
+            
+        <!-- Boot Receiver for Fall Detection -->
+        <receiver
+            android:name=".feature.falldetection.BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <!-- FileProvider for camera photos -->
         <provider
@@ -74,7 +106,20 @@
             android:exported="false"
             android:stopWithTask="false"
             android:foregroundServiceType="dataSync" />
-
+            
+        <!-- Fall Detection Service -->
+        <service
+            android:name=".feature.falldetection.FallDetectionService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+            
+        <!-- Location Tracking Service -->
+        <service
+            android:name=".feature.location.LocationTrackingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
     </application>
 

@@ -21,12 +21,8 @@ class SilverLinkApp : Application() {
     override fun onCreate() {
         super.onCreate()
         
-        // Initialize Room Database
-        database = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            "silverlink-db"
-        ).build()
+        // Initialize Room Database using Singleton
+        database = AppDatabase.getInstance(this)
 
         // 安排每日凌晨重置任务
         scheduleDailyReset()

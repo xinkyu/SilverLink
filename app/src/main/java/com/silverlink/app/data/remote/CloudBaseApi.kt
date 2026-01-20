@@ -1,7 +1,9 @@
 package com.silverlink.app.data.remote
 
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 import kotlinx.serialization.Serializable
 
 /**
@@ -157,6 +159,25 @@ interface CloudBaseApi {
     @retrofit2.http.Headers("Content-Type: application/json")
     @POST("cognitive-report")
     suspend fun getCognitiveReport(@Body request: GetCognitiveReportRequest): ApiResponse<CognitiveReportData>
+    
+    // ==================== 位置管理 ====================
+    
+    /**
+     * 上传位置（老人端调用）
+     */
+    @retrofit2.http.Headers("Content-Type: application/json")
+    @POST("location-update")
+    suspend fun updateLocation(@Body request: UpdateLocationRequest): ApiResponse<Unit>
+    
+    /**
+     * 查询位置（家人端调用）
+     * 改为 GET 请求以绕过部分环境对 POST 的限制
+     */
+    @GET("location-query")
+    suspend fun queryLocation(
+        @Query("elderDeviceId") elderDeviceId: String,
+        @Query("familyDeviceId") familyDeviceId: String
+    ): ApiResponse<LocationQueryResult>
 }
 
 // ==================== 请求数据类 ====================
@@ -432,4 +453,37 @@ data class SavePhotoMetadataRequest(
     val location: String? = null,
     val people: String? = null,
     val tags: String? = null
+)
+
+// ==================== 位置相关 ====================
+
+@Serializable
+data class UpdateLocationRequest(
+    val elderDeviceId: String,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy: Float = 0f,
+    val address: String = ""
+)
+
+@Serializable
+data class QueryLocationRequest(
+    val elderDeviceId: String,
+    val familyDeviceId: String? = null
+)
+
+@Serializable
+data class LocationQueryResult(
+    val latest: LocationData? = null,
+    val history: List<LocationData> = emptyList()
+)
+
+@Serializable
+data class LocationData(
+    val id: String = "",
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy: Float = 0f,
+    val address: String = "",
+    val createdAt: String = ""
 )

@@ -5,10 +5,12 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.silverlink.app.data.local.dao.CognitiveLogDao
+import com.silverlink.app.data.local.dao.EmergencyContactDao
 import com.silverlink.app.data.local.dao.HistoryDao
 import com.silverlink.app.data.local.dao.MedicationDao
 import com.silverlink.app.data.local.dao.MemoryPhotoDao
 import com.silverlink.app.data.local.entity.CognitiveLogEntity
+import com.silverlink.app.data.local.entity.EmergencyContactEntity
 import com.silverlink.app.data.local.entity.Medication
 import com.silverlink.app.data.local.entity.MedicationLogEntity
 import com.silverlink.app.data.local.entity.MemoryPhotoEntity
@@ -25,9 +27,10 @@ import com.silverlink.app.data.local.entity.MoodLogEntity
         MedicationLogEntity::class,
         MoodLogEntity::class,
         MemoryPhotoEntity::class,
-        CognitiveLogEntity::class
+        CognitiveLogEntity::class,
+        EmergencyContactEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -37,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao
     abstract fun memoryPhotoDao(): MemoryPhotoDao
     abstract fun cognitiveLogDao(): CognitiveLogDao
+    abstract fun emergencyContactDao(): EmergencyContactDao
     
     companion object {
         @Volatile

@@ -568,6 +568,58 @@ class SyncRepository(private val context: Context) {
         }
     }
     
+    // ==================== 位置相关 ====================
+    
+    /**
+     * 获取老人位置（家人端调用）
+     * 返回最新位置和最近2小时的位置历史
+     */
+    suspend fun getElderLocation(): Result<com.silverlink.app.data.remote.LocationQueryResult> = withContext(Dispatchers.IO) {
+        try {
+            // 获取已配对的长辈设备ID
+            val elderDeviceId = cloudBase.getPairedElderDeviceId(currentDeviceId).getOrNull()
+            
+            if (elderDeviceId == null) {
+                return@withContext Result.failure(Exception("未找到已配对的长辈"))
+            }
+            
+            cloudBase.queryLocation(
+                elderDeviceId = elderDeviceId,
+                familyDeviceId = currentDeviceId
+            )
+        } catch (e: retrofit2.HttpException) {
+            val url = e.response()?.raw()?.request?.url
+            android.util.Log.e("SyncRepository", "获取位置HTTP错误详情: code=${e.code()}, url=$url")
+            Result.failure(e)
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "获取老人位置失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 上传位置（老人端调用）
+     */
+    suspend fun uploadLocation(
+        latitude: Double,
+        longitude: Double,
+        accuracy: Float = 0f,
+        address: String = ""
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            cloudBase.updateLocation(
+                elderDeviceId = currentDeviceId,
+                latitude = latitude,
+                longitude = longitude,
+                accuracy = accuracy,
+                address = address
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "上传位置失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
     companion object {
         @Volatile
         private var instance: SyncRepository? = null

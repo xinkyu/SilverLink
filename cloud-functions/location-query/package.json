@@ -1,0 +1,9 @@
+{
+    "name": "location-query",
+    "version": "1.0.0",
+    "description": "家人端查询老人位置",
+    "main": "index.js",
+    "dependencies": {
+        "@cloudbase/node-sdk": "2.9.1"
+    }
+}
