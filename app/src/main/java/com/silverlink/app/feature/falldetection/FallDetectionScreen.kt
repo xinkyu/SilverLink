@@ -52,6 +52,9 @@ fun FallDetectionScreen(
     var sensitivity by remember { mutableStateOf(userPreferences.getFallDetectionSensitivity()) }
 
     var isProactiveEnabled by remember { mutableStateOf(userPreferences.isProactiveInteractionEnabled()) }
+
+    // 字体大小（老人可调节）
+    var fontScale by remember { mutableStateOf(userPreferences.getFontScale()) }
     
     // 位置共享状态
     var isLocationSharingEnabled by remember { mutableStateOf(userPreferences.isLocationSharingEnabled()) }
@@ -152,6 +155,49 @@ fun FallDetectionScreen(
                 .background(Color(0xFFF5F5F5)),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 字体大小设置
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "字体大小",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "当前：${"%.0f".format(fontScale * 100)}%",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Slider(
+                        value = fontScale,
+                        onValueChange = { value ->
+                            fontScale = value
+                            userPreferences.setFontScale(value)
+                        },
+                        valueRange = 0.9f..1.5f,
+                        steps = 5
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("小", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("大", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                }
+            }
+
             // 1. 功能开关卡片
             Card(
                 modifier = Modifier

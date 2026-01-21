@@ -68,17 +68,19 @@ object CloudBaseService {
         code: String,
         elderName: String,
         elderProfile: String = "",
+        assistantName: String = "小银",
         dialect: String = "NONE",
         clonedVoiceId: String = "",
         familyDeviceId: String
     ): Result<PairingCodeData> {
         return try {
-            Log.d("CloudBase", "创建配对码: code=$code, elderName=$elderName, dialect=$dialect, voiceId=$clonedVoiceId, deviceId=$familyDeviceId")
+            Log.d("CloudBase", "创建配对码: code=$code, elderName=$elderName, assistantName=$assistantName, dialect=$dialect, voiceId=$clonedVoiceId, deviceId=$familyDeviceId")
             val response = api.createPairingCode(
                 CreatePairingRequest(
                     code = code,
                     elderName = elderName,
                     elderProfile = elderProfile,
+                    assistantName = assistantName,
                     dialect = dialect,
                     clonedVoiceId = clonedVoiceId,
                     familyDeviceId = familyDeviceId

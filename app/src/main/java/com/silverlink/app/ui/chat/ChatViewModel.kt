@@ -89,22 +89,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val userPrefs = UserPreferences.getInstance(application)
     private val syncRepository = com.silverlink.app.data.repository.SyncRepository.getInstance(application)
 
-    private val baseSystemPrompt = """
-        你叫'小银'，是一个温柔、耐心的年轻人，专门陪伴老人。
+    private fun getElderName(): String = userPrefs.userConfig.value.elderName.trim()
+    private fun getElderProfile(): String = userPrefs.userConfig.value.elderProfile.trim()
+    private fun getAssistantName(): String = userPrefs.userConfig.value.assistantName.trim().ifBlank { "小银" }
+
+    private fun getBaseSystemPrompt(): String {
+        val assistantName = getAssistantName()
+        return """
+        你叫'$assistantName'，是一个温柔、耐心的年轻人，专门陪伴老人。
         你的回答要简短、温暖，不要使用复杂的网络用语。
         如果老人提到身体不适，请建议他们联系子女或就医。
         如果老人发来疑似诈骗的信息，请帮他们分析并预警。
-    """.trimIndent()
-
-    private fun getElderName(): String = userPrefs.userConfig.value.elderName.trim()
-    private fun getElderProfile(): String = userPrefs.userConfig.value.elderProfile.trim()
+        """.trimIndent()
+    }
 
     private fun buildGreeting(): String {
         val elderName = getElderName()
+        val assistantName = getAssistantName()
         return if (elderName.isNotBlank()) {
-            "${elderName}好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？"
+            "${elderName}好，我是${assistantName}。今天身体怎么样？有什么想跟我聊聊的吗？"
         } else {
-            "您好，我是小银。今天身体怎么样？有什么想跟我聊聊的吗？"
+            "您好，我是${assistantName}。今天身体怎么样？有什么想跟我聊聊的吗？"
         }
     }
 
@@ -262,7 +267,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val emotionHint = _currentEmotion.value.promptHint
         val elderName = getElderName()
         val elderProfile = getElderProfile()
+
         val dialect = userPrefs.userConfig.value.dialect
+        val hasMajorDisease = userPrefs.userConfig.value.hasMajorDisease
+        val majorDiseaseDetails = userPrefs.userConfig.value.majorDiseaseDetails
+        
         val nameHint = if (elderName.isNotBlank()) {
             "用户称呼为“$elderName”，回复时请优先使用该称呼，避免使用“爷爷奶奶”等泛称。"
         } else {
@@ -274,6 +283,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ""
         }
         
+        val healthHint = if (hasMajorDisease && majorDiseaseDetails.isNotBlank()) {
+            "【健康状况重要提示】长辈患有：$majorDiseaseDetails。请在对话中格外注意，若长辈提到身体不适或相关症状，请立即建议就医或联系家人。请给予更多的关怀和耐心。"
+        } else {
+            ""
+        }
+        
         val dialectHint = if (dialect != com.silverlink.app.data.local.Dialect.NONE) {
             "【用户方言/地区】用户来自${dialect.displayName}地区。${dialect.promptHint}"
         } else {
@@ -281,9 +296,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val fullPrompt = buildString {
-            append(baseSystemPrompt)
+            append(getBaseSystemPrompt())
             append("\n\n【称呼提示】$nameHint")
             if (profileHint.isNotBlank()) append("\n$profileHint")
+            if (healthHint.isNotBlank()) append("\n$healthHint")
             if (dialectHint.isNotBlank()) append("\n$dialectHint")
             if (emotionHint.isNotBlank()) append("\n【用户情绪提示】$emotionHint")
         }

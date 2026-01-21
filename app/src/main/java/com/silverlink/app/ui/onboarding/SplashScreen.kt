@@ -26,9 +26,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import android.app.Activity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 // 橙色系背景
-val WarmApricot = Color(0xFFF59A1B)
+val WarmApricot = Color(0xFFF49007)
 
 /**
  * 启动页
@@ -57,6 +62,27 @@ fun SplashScreen(
         onSplashFinished()
     }
     
+    // 设置状态栏和导航栏颜色与背景一致，离开时恢复
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        val window = (view.context as Activity).window
+        val originalStatusBarColor = window.statusBarColor
+        val originalNavBarColor = window.navigationBarColor
+        
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            // 进入时设置橙色
+            window.statusBarColor = WarmApricot.toArgb()
+            window.navigationBarColor = WarmApricot.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            
+            onDispose {
+                // 离开时恢复原来的颜色
+                window.statusBarColor = originalStatusBarColor
+                window.navigationBarColor = originalNavBarColor
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = true
+            }
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()

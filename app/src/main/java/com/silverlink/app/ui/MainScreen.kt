@@ -63,6 +63,10 @@ fun MainScreen(modifier: Modifier = Modifier) {
  */
 @Composable
 private fun ElderMainScreen(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val userPrefs = remember { UserPreferences.getInstance(context) }
+    val userConfig by userPrefs.userConfig.collectAsState()
+    val assistantName = userConfig.assistantName.ifBlank { "小银" }
     var selectedTab by remember { mutableStateOf(0) }
     var showMemoryQuiz by remember { mutableStateOf(false) }
     var showPhotoDetail by remember { mutableStateOf(false) }
@@ -86,7 +90,7 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                         ) 
                     },
                     label = { 
-                        Text("小银陪伴", style = MaterialTheme.typography.labelMedium) 
+                        Text("${assistantName}陪伴", style = MaterialTheme.typography.labelMedium) 
                     },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = WarmPrimary,

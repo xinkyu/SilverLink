@@ -32,7 +32,15 @@ exports.main = async (event) => {
     // HTTP 触发时，参数在 body 中
     const params = getParams(event);
 
-    const { code, elderName, elderProfile, dialect, familyDeviceId, expiresInMinutes = 30 } = params;
+    const {
+      code,
+      elderName,
+      elderProfile,
+      assistantName,
+      dialect,
+      familyDeviceId,
+      expiresInMinutes = 30,
+    } = params;
 
     console.log("pairing-create 收到参数:", {
       code,
@@ -58,6 +66,7 @@ exports.main = async (event) => {
       code,
       elderName,
       elderProfile: elderProfile || "",
+      assistantName: assistantName || "小银",
       dialect: dialect || "NONE",
       clonedVoiceId: params.clonedVoiceId || "",
       familyDeviceId,
