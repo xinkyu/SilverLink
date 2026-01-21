@@ -350,6 +350,9 @@ class UserPreferences(context: Context) {
         // 跌倒检测相关
         private const val KEY_FALL_DETECTION_ENABLED = "fall_detection_enabled"
         private const val KEY_FALL_DETECTION_SENSITIVITY = "fall_detection_sensitivity"
+
+        // 主动关怀相关
+        private const val KEY_PROACTIVE_INTERACTION_ENABLED = "proactive_interaction_enabled"
         
         // 位置共享相关
         private const val KEY_LOCATION_SHARING_ENABLED = "location_sharing_enabled"
@@ -406,6 +409,22 @@ class UserPreferences(context: Context) {
      */
     fun setFallDetectionSensitivity(sensitivity: FallDetectionSensitivity) {
         prefs.edit().putString(KEY_FALL_DETECTION_SENSITIVITY, sensitivity.name).apply()
+    }
+
+    // ==================== 主动关怀设置 ====================
+
+    /**
+     * 获取主动关怀开关状态
+     */
+    fun isProactiveInteractionEnabled(): Boolean {
+        return prefs.getBoolean(KEY_PROACTIVE_INTERACTION_ENABLED, false)
+    }
+
+    /**
+     * 设置主动关怀开关
+     */
+    fun setProactiveInteractionEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PROACTIVE_INTERACTION_ENABLED, enabled).apply()
     }
     
     // ==================== 位置共享设置 ====================

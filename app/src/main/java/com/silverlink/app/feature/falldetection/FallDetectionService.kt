@@ -509,6 +509,7 @@ class FallDetectionService : Service(), SensorEventListener {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             addFlags(Intent.FLAG_ACTIVITY_NO_USER_ACTION)
             putExtra("from_service", true)
+            putExtra("alert_type", "fall")
         }
         
         val pendingIntent = PendingIntent.getActivity(

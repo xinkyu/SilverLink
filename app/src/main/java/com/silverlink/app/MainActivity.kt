@@ -73,7 +73,11 @@ class MainActivity : ComponentActivity() {
      */
     private fun startProactiveServiceIfElder(userPrefs: com.silverlink.app.data.local.UserPreferences) {
         val config = userPrefs.userConfig.value
-        if (config.role == com.silverlink.app.data.local.UserRole.ELDER && config.isActivated) {
+        if (
+            config.role == com.silverlink.app.data.local.UserRole.ELDER &&
+            config.isActivated &&
+            userPrefs.isProactiveInteractionEnabled()
+        ) {
             android.util.Log.d("MainActivity", "Starting ProactiveInteractionService for elder")
             androidx.core.content.ContextCompat.startForegroundService(
                 this, 

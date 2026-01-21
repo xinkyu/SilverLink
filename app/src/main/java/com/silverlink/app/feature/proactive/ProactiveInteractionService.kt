@@ -3,6 +3,7 @@ package com.silverlink.app.feature.proactive
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -23,17 +24,19 @@ import com.silverlink.app.data.local.dao.HistoryDao
 import com.silverlink.app.data.local.dao.CognitiveLogDao
 import com.silverlink.app.data.local.dao.MemoryPhotoDao
 import com.silverlink.app.data.model.Emotion
-import com.silverlink.app.data.remote.CloudBaseService
 import com.silverlink.app.data.remote.RetrofitClient
 import com.silverlink.app.data.remote.model.Input
 import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.data.remote.model.QwenRequest
 import com.silverlink.app.feature.chat.AudioPlayerHelper
 import com.silverlink.app.feature.chat.TextToSpeechService
+import com.silverlink.app.feature.falldetection.FallAlertActivity
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import android.provider.Settings
+import java.util.Calendar
+import java.util.TimeZone
 
 /**
  * 主动关怀服务
@@ -50,28 +53,41 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         private const val TAG = "ProactiveService"
         private const val NOTIFICATION_CHANNEL_ID = "proactive_service_channel"
         private const val NOTIFICATION_ID = 1001
+
+        private const val ALERT_CHANNEL_ID = "proactive_inactivity_alert_channel"
+        private const val ALERT_NOTIFICATION_ID = 1101
         
         private const val CHECK_INTERVAL_MS = 60 * 1000L // Check every 1 minute
         
         // Thresholds
-        private const val INACTIVITY_THRESHOLD_MS_DEBUG = 10 * 1000L // 10 seconds for debug
+        private const val INACTIVITY_THRESHOLD_MS_DEBUG = 60 * 1000L // 1 minute for debug
         private const val INACTIVITY_THRESHOLD_MS_REAL = 3 * 60 * 60 * 1000L // 3 hours
         
         // Use debug threshold for demo purposes, switch to REAL for production
-        private const val INACTIVITY_THRESHOLD_MS = INACTIVITY_THRESHOLD_MS_REAL 
-        
-        private const val LIGHT_THRESHOLD_LUX = 10.0f // Threshold for "bright" environment
+        private const val INACTIVITY_THRESHOLD_MS = INACTIVITY_THRESHOLD_MS_DEBUG 
         
         // 连续唤醒失败次数阈值，超过此值向家人发送警报
         private const val MAX_CONSECUTIVE_FAILURES = 2
         
         // 加速度计移动检测阈值 (m/s^2)
         private const val ACCEL_MOVEMENT_THRESHOLD = 1.5f
+
+        fun start(context: Context) {
+            val intent = Intent(context, ProactiveInteractionService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun stop(context: Context) {
+            context.stopService(Intent(context, ProactiveInteractionService::class.java))
+        }
     }
 
     private lateinit var sensorManager: SensorManager
     private var stepCounterSensor: Sensor? = null
-    private var lightSensor: Sensor? = null
     private var accelerometerSensor: Sensor? = null
 
     // App 统一语音服务（阿里云 CosyVoice）
@@ -85,8 +101,6 @@ class ProactiveInteractionService : Service(), SensorEventListener {
     private lateinit var cognitiveLogDao: CognitiveLogDao
 
     private var lastMovementTime = AtomicLong(System.currentTimeMillis())
-    private var currentLightLevel = 0f
-
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var checkJob: Job? = null
 
@@ -111,17 +125,24 @@ class ProactiveInteractionService : Service(), SensorEventListener {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service Created")
+
+        // 0. 检查开关，未开启则退出
+        userPreferences = UserPreferences.getInstance(applicationContext)
+        if (!userPreferences.isProactiveInteractionEnabled()) {
+            Log.i(TAG, "Proactive interaction disabled, stopping service")
+            stopSelf()
+            return
+        }
         
         // 1. 创建通知渠道并启动前台服务
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("SilverLink 正在守护您..."))
+        startForeground(NOTIFICATION_ID, buildNotification("正在监测久坐无响应..."))
         
         // 2. 初始化语音服务（使用 App 统一的 CosyVoice）
         ttsService = TextToSpeechService()
         audioPlayer = AudioPlayerHelper(applicationContext)
         
         // 3. 初始化用户配置和历史记录访问
-        userPreferences = UserPreferences.getInstance(applicationContext)
         historyDao = AppDatabase.getInstance(applicationContext).historyDao()
         memoryPhotoDao = AppDatabase.getInstance(applicationContext).memoryPhotoDao()
         cognitiveLogDao = AppDatabase.getInstance(applicationContext).cognitiveLogDao()
@@ -136,7 +157,6 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         // 5. 初始化传感器
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
         accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         if (stepCounterSensor == null) {
@@ -145,12 +165,6 @@ class ProactiveInteractionService : Service(), SensorEventListener {
             sensorManager.registerListener(this, stepCounterSensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
 
-        if (lightSensor == null) {
-            Log.w(TAG, "Light Sensor not found!")
-        } else {
-            sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
-        }
-        
         // 加速度传感器作为备用移动检测
         if (accelerometerSensor != null) {
             sensorManager.registerListener(this, accelerometerSensor, SensorManager.SENSOR_DELAY_NORMAL)
@@ -171,16 +185,28 @@ class ProactiveInteractionService : Service(), SensorEventListener {
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
+
+            val alertChannel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "久坐无响应警报",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "久坐无响应时触发的紧急警报"
+                enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            manager.createNotificationChannel(alertChannel)
         }
     }
 
     private fun buildNotification(content: String): Notification {
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("SilverLink")
+            .setContentTitle("安全守护已开启")
             .setContentText(content)
             .setSmallIcon(R.drawable.ic_app_logo)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .build()
     }
 
@@ -196,24 +222,27 @@ class ProactiveInteractionService : Service(), SensorEventListener {
     private fun checkInactivity() {
         val currentTime = System.currentTimeMillis()
         val timeSinceLastMove = currentTime - lastMovementTime.get()
+        val quietHours = isQuietHoursInBeijing()
 
-        Log.d(TAG, "Checking inactivity: ${timeSinceLastMove / 1000}s elapsed. Light: $currentLightLevel, Threshold: ${INACTIVITY_THRESHOLD_MS / 1000}s")
+        Log.d(TAG, "Checking inactivity: ${timeSinceLastMove / 1000}s elapsed. QuietHours=$quietHours, Threshold: ${INACTIVITY_THRESHOLD_MS / 1000}s")
 
         if (timeSinceLastMove > INACTIVITY_THRESHOLD_MS) {
-            // Debug 模式下绕过光线检测，方便测试
-            val isDebugMode = INACTIVITY_THRESHOLD_MS == INACTIVITY_THRESHOLD_MS_DEBUG
-            val lightCheckPassed = currentLightLevel > LIGHT_THRESHOLD_LUX || isDebugMode
-            
-            Log.d(TAG, "Inactivity threshold reached! Light check: $lightCheckPassed (debug=$isDebugMode, light=$currentLightLevel)")
-            
-            if (lightCheckPassed) {
-                triggerProactiveInteraction()
-                // Reset timer to avoid spamming
-                lastMovementTime.set(System.currentTimeMillis()) 
-            } else {
-                Log.d(TAG, "Skipping trigger: too dark (light=$currentLightLevel < threshold=$LIGHT_THRESHOLD_LUX)")
+            if (quietHours) {
+                Log.d(TAG, "Skipping trigger: quiet hours (22:00-08:00)")
+                return
             }
+
+            triggerProactiveInteraction()
+            // Reset timer to avoid spamming
+            lastMovementTime.set(System.currentTimeMillis())
         }
+    }
+
+    private fun isQuietHoursInBeijing(): Boolean {
+        val tz = TimeZone.getTimeZone("Asia/Shanghai")
+        val calendar = Calendar.getInstance(tz)
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        return hour >= 22 || hour < 8
     }
 
     private fun triggerProactiveInteraction() {
@@ -240,7 +269,7 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         
         // 4. 连续失败2次，发送警报给家人
         if (failures >= MAX_CONSECUTIVE_FAILURES) {
-            sendInactivityAlertToFamily()
+            triggerInactivityAlert()
             // 重置计数器，避免重复发送
             consecutiveWakeUpFailures.set(0)
         }
@@ -309,33 +338,44 @@ class ProactiveInteractionService : Service(), SensorEventListener {
     }
     
     /**
-     * 发送久坐无响应警报给家人
+     * 触发久坐无响应紧急提醒（全屏提示 + 电话 + 短信）
      */
-    private fun sendInactivityAlertToFamily() {
-        serviceScope.launch {
-            try {
-                val config = userPreferences.userConfig.value
-                val elderName = config.elderName.ifBlank { "老人" }
-                
-                val message = "您的" + elderName + "已经连续多次久坐无响应，可能需要关注。"
-                
-                Log.w(TAG, "Sending inactivity alert to family: $message")
-                
-                val result = CloudBaseService.sendAlert(
-                    elderDeviceId = deviceId,
-                    alertType = "inactivity",
-                    message = message,
-                    elderName = elderName
-                )
-                
-                if (result.isSuccess) {
-                    Log.i(TAG, "Inactivity alert sent successfully")
-                } else {
-                    Log.e(TAG, "Failed to send inactivity alert: ${result.exceptionOrNull()?.message}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending inactivity alert", e)
-            }
+    private fun triggerInactivityAlert() {
+        Log.w(TAG, "Inactivity alert triggered, showing emergency screen")
+        wakeScreen()
+
+        val intent = Intent(this, FallAlertActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_NO_USER_ACTION)
+            putExtra("alert_type", "inactivity")
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            2,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_app_logo)
+            .setContentTitle("久坐无响应")
+            .setContentText("正在启动紧急呼救...")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pendingIntent, true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .build()
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(ALERT_NOTIFICATION_ID, notification)
+
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Direct startActivity failed", e)
         }
     }
 
@@ -463,9 +503,6 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         event ?: return
 
         when (event.sensor.type) {
-            Sensor.TYPE_LIGHT -> {
-                currentLightLevel = event.values[0]
-            }
             Sensor.TYPE_ACCELEROMETER -> {
                 // 计算加速度的总变化量（去除重力后的运动检测）
                 val x = event.values[0]
