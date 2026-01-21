@@ -23,6 +23,11 @@ class EmergencyNotifier(private val context: Context) {
     companion object {
         private const val TAG = "EmergencyNotifier"
     }
+
+    enum class AlertType {
+        FALL,
+        INACTIVITY
+    }
     
     private val locationHelper = LocationHelper(context)
     private val emergencyContactDao = AppDatabase.getInstance(context).emergencyContactDao()
@@ -33,7 +38,7 @@ class EmergencyNotifier(private val context: Context) {
      * 优先拨打电话（无需等待），然后后台发送SMS
      * @return 发送结果：成功发送的联系人数量
      */
-    suspend fun sendEmergencyNotification(): Int {
+    suspend fun sendEmergencyNotification(alertType: AlertType = AlertType.FALL): Int {
         var successCount = 0
         
         try {
@@ -59,7 +64,7 @@ class EmergencyNotifier(private val context: Context) {
                     val location = locationHelper.getCurrentLocation()
                     val locationText = locationHelper.generateLocationText(location)
                     val elderName = userPreferences.userConfig.value.elderName.ifBlank { "您的家人" }
-                    val message = buildEmergencyMessage(elderName, locationText)
+                    val message = buildEmergencyMessage(elderName, locationText, alertType)
                     
                     // 发送SMS给所有联系人
                     for (contact in contacts) {
@@ -84,12 +89,26 @@ class EmergencyNotifier(private val context: Context) {
     /**
      * 构建紧急消息内容
      */
-    private fun buildEmergencyMessage(elderName: String, locationText: String): String {
+    private fun buildEmergencyMessage(
+        elderName: String,
+        locationText: String,
+        alertType: AlertType
+    ): String {
+        val title = when (alertType) {
+            AlertType.FALL -> "$elderName 可能发生跌倒！"
+            AlertType.INACTIVITY -> "$elderName 长时间未移动且多次无响应！"
+        }
+
+        val detail = when (alertType) {
+            AlertType.FALL -> "系统检测到疑似跌倒事件，请尽快确认情况。"
+            AlertType.INACTIVITY -> "系统检测到久坐无响应情况，请尽快确认情况。"
+        }
+
         return """
 【SilverLink紧急通知】
-$elderName 可能发生跌倒！
+$title
 
-系统检测到疑似跌倒事件，请尽快确认情况。
+$detail
 
 $locationText
 

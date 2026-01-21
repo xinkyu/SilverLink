@@ -47,9 +47,15 @@ class FallAlertActivity : ComponentActivity() {
     private var ringtone: Ringtone? = null
     private var countDownTimer: CountDownTimer? = null
     private val emergencyNotifier by lazy { EmergencyNotifier(this) }
+    private var alertType: EmergencyNotifier.AlertType = EmergencyNotifier.AlertType.FALL
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        alertType = when (intent.getStringExtra("alert_type")) {
+            "inactivity" -> EmergencyNotifier.AlertType.INACTIVITY
+            else -> EmergencyNotifier.AlertType.FALL
+        }
         
         // 唤醒屏幕并显示在锁屏之上
         turnScreenOnAndKeyguard()
@@ -81,6 +87,7 @@ class FallAlertActivity : ComponentActivity() {
                 }
                 
                 FallAlertScreen(
+                    title = if (alertType == EmergencyNotifier.AlertType.INACTIVITY) "久坐无响应！" else "检测到跌倒！",
                     remainingSeconds = remainingSeconds,
                     isSending = isSending,
                     onImFine = {
@@ -100,13 +107,15 @@ class FallAlertActivity : ComponentActivity() {
     private fun sendEmergencyNotification() {
         stopAlertSound()
         // 停止服务端的报警音
-        FallDetectionService.stopAlarm(this)
+        if (alertType == EmergencyNotifier.AlertType.FALL) {
+            FallDetectionService.stopAlarm(this)
+        }
         
         countDownTimer?.cancel()
         
         CoroutineScope(Dispatchers.Main).launch {
             try {
-                val sentCount = emergencyNotifier.sendEmergencyNotification()
+                val sentCount = emergencyNotifier.sendEmergencyNotification(alertType)
                 Log.i(TAG, "Emergency notification sent to $sentCount contacts")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send emergency notification", e)
@@ -119,7 +128,9 @@ class FallAlertActivity : ComponentActivity() {
         Log.d(TAG, "Alert cancelled by user")
         stopAlertSound()
         // 停止服务端的报警音
-        FallDetectionService.stopAlarm(this)
+        if (alertType == EmergencyNotifier.AlertType.FALL) {
+            FallDetectionService.stopAlarm(this)
+        }
         
         countDownTimer?.cancel()
         finish()
@@ -147,7 +158,9 @@ class FallAlertActivity : ComponentActivity() {
         super.onDestroy()
         stopAlertSound()
         // 确保服务端的报警音也停止
-        FallDetectionService.stopAlarm(this)
+        if (alertType == EmergencyNotifier.AlertType.FALL) {
+            FallDetectionService.stopAlarm(this)
+        }
         
         countDownTimer?.cancel()
     }
@@ -190,6 +203,7 @@ class FallAlertActivity : ComponentActivity() {
 
 @Composable
 fun FallAlertScreen(
+    title: String,
     remainingSeconds: Int,
     isSending: Boolean,
     onImFine: () -> Unit,
@@ -249,7 +263,7 @@ fun FallAlertScreen(
             
             // 主标题
             Text(
-                text = "检测到跌倒！",
+                text = title,
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 32.sp

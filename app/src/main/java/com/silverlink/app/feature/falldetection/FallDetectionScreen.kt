@@ -27,7 +27,13 @@ import androidx.core.content.ContextCompat
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.UserPreferences.FallDetectionSensitivity
 import com.silverlink.app.feature.location.LocationTrackingService
+import com.silverlink.app.feature.proactive.ProactiveInteractionService
 import kotlinx.coroutines.launch
+
+private enum class EnableTarget {
+    FALL,
+    PROACTIVE
+}
 
 /**
  * 跌倒检测设置屏幕
@@ -44,6 +50,8 @@ fun FallDetectionScreen(
     // 状态
     var isEnabled by remember { mutableStateOf(userPreferences.isFallDetectionEnabled()) }
     var sensitivity by remember { mutableStateOf(userPreferences.getFallDetectionSensitivity()) }
+
+    var isProactiveEnabled by remember { mutableStateOf(userPreferences.isProactiveInteractionEnabled()) }
     
     // 位置共享状态
     var isLocationSharingEnabled by remember { mutableStateOf(userPreferences.isLocationSharingEnabled()) }
@@ -65,41 +73,62 @@ fun FallDetectionScreen(
     // 是否显示后台权限提示对话框
     var showBackgroundPermissionDialog by remember { mutableStateOf(false) }
     
+    var pendingEnableTarget by remember { mutableStateOf<EnableTarget?>(null) }
+
+    fun enableFallDetection() {
+        isEnabled = true
+        userPreferences.setFallDetectionEnabled(true)
+        FallDetectionService.start(context)
+        Toast.makeText(context, "安全守护已开启", Toast.LENGTH_SHORT).show()
+
+        // ★ 弹出提示，引导用户开启后台/锁屏显示权限
+        showBackgroundPermissionDialog = true
+    }
+
+    fun enableProactiveInteraction() {
+        isProactiveEnabled = true
+        userPreferences.setProactiveInteractionEnabled(true)
+        ProactiveInteractionService.start(context)
+        Toast.makeText(context, "久坐守护已开启", Toast.LENGTH_SHORT).show()
+    }
+
     // 权限请求结果
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val allGranted = permissions.values.all { it }
         if (allGranted) {
-            // 权限全部授予，启动服务
-            isEnabled = true
-            userPreferences.setFallDetectionEnabled(true)
-            FallDetectionService.start(context)
-            Toast.makeText(context, "安全守护已开启", Toast.LENGTH_SHORT).show()
-            
-            // ★ 弹出提示，引导用户开启后台/锁屏显示权限
-            showBackgroundPermissionDialog = true
+            when (pendingEnableTarget) {
+                EnableTarget.FALL -> enableFallDetection()
+                EnableTarget.PROACTIVE -> enableProactiveInteraction()
+                null -> Unit
+            }
+            pendingEnableTarget = null
         } else {
             // 部分权限被拒绝
-            Toast.makeText(context, "需要授权相关权限才能正常使用跌倒检测功能", Toast.LENGTH_LONG).show()
+            val message = when (pendingEnableTarget) {
+                EnableTarget.PROACTIVE -> "需要授权相关权限才能正常使用久坐守护功能"
+                else -> "需要授权相关权限才能正常使用跌倒检测功能"
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            pendingEnableTarget = null
         }
     }
     
     // 检查并请求权限
-    fun checkAndRequestPermissions() {
+    fun checkAndRequestPermissions(target: EnableTarget) {
         val notGranted = requiredPermissions.filter {
             ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
         }
         
         if (notGranted.isEmpty()) {
-            // 已有全部权限，直接启动
-            isEnabled = true
-            userPreferences.setFallDetectionEnabled(true)
-            FallDetectionService.start(context)
-            // ★ 弹出提示
-            showBackgroundPermissionDialog = true
+            when (target) {
+                EnableTarget.FALL -> enableFallDetection()
+                EnableTarget.PROACTIVE -> enableProactiveInteraction()
+            }
         } else {
             // 请求缺失的权限
+            pendingEnableTarget = target
             permissionLauncher.launch(notGranted.toTypedArray())
         }
     }
@@ -166,7 +195,7 @@ fun FallDetectionScreen(
                             onCheckedChange = { checked ->
                                 if (checked) {
                                     // 开启时检查权限
-                                    checkAndRequestPermissions()
+                                    checkAndRequestPermissions(EnableTarget.FALL)
                                 } else {
                                     // 关闭时直接停止
                                     isEnabled = false
@@ -181,6 +210,69 @@ fun FallDetectionScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "开启后，系统将持续监测异常摔倒情况。检测到跌倒后15秒无响应，将自动通知紧急联系人。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+
+            // 1.1 久坐无响应守护开关
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.RecordVoiceOver,
+                                contentDescription = null,
+                                tint = if (isProactiveEnabled) Color(0xFF43A047) else Color.Gray,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = "久坐无响应守护",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Text(
+                                    text = if (isProactiveEnabled) "正在守护中" else "功能已关闭",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isProactiveEnabled) Color(0xFF43A047) else Color.Gray
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = isProactiveEnabled,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    checkAndRequestPermissions(EnableTarget.PROACTIVE)
+                                } else {
+                                    isProactiveEnabled = false
+                                    userPreferences.setProactiveInteractionEnabled(false)
+                                    ProactiveInteractionService.stop(context)
+                                }
+                            }
+                        )
+                    }
+
+                    if (isProactiveEnabled) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "3小时无移动将自动唤醒，两次无响应会弹出紧急提醒并自动拨打电话、发送短信给紧急联系人。",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray
                         )
