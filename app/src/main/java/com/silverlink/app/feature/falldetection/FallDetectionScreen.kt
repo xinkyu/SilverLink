@@ -450,7 +450,7 @@ fun FallDetectionScreen(
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "开启后，每5分钟更新一次位置，家人可以在App中查看您的实时位置。",
+                        text = "开启后，每1分钟更新一次位置，家人可以在App中查看您的实时位置。",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )

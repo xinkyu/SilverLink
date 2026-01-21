@@ -30,7 +30,7 @@ import java.util.Locale
  * 位置追踪前台服务
  * 
  * 功能：
- * - 每5分钟获取一次位置并上传到云端
+ * - 每1分钟获取一次位置并上传到云端
  * - 支持后台运行（前台服务）
  * - 自动反地理编码获取地址
  */
@@ -41,10 +41,10 @@ class LocationTrackingService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "location_tracking_channel"
         private const val NOTIFICATION_ID = 3001
         
-        // 位置更新间隔：5分钟
-        private const val LOCATION_UPDATE_INTERVAL_MS = 5 * 60 * 1000L
-        // 最快更新间隔：2分钟（防止过于频繁）
-        private const val LOCATION_FASTEST_INTERVAL_MS = 2 * 60 * 1000L
+        // 位置更新间隔：1分钟（平衡实时性和电量消耗）
+        private const val LOCATION_UPDATE_INTERVAL_MS = 1 * 60 * 1000L
+        // 最快更新间隔：30秒
+        private const val LOCATION_FASTEST_INTERVAL_MS = 30 * 1000L
         
         /**
          * 启动位置追踪服务
