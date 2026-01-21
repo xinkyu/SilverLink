@@ -57,7 +57,7 @@ enum class Dialect(
 data class PairingInfo(
     val code: String,           // 6位配对码
     val elderName: String,      // 长辈称呼
-    val assistantName: String = "小银", // AI 伴侣名称
+    val assistantName: String = "", // AI伴侣名称
     val timestamp: Long         // 创建时间
 )
 
@@ -69,13 +69,14 @@ data class UserConfig(
     val isActivated: Boolean = false,
     val elderName: String = "",        // 长辈称呼，如"王爷爷"
     val elderProfile: String = "",     // 长辈信息简介（家乡/兴趣/健康等）
-    val assistantName: String = "小银",   // AI 伴侣名称
+    val assistantName: String = "",    // AI伴侣名称
     val dialect: Dialect = Dialect.NONE,  // 方言设置
     val clonedVoiceId: String = "",    // 复刻音色ID（用于TTS方言支持）
     val pairingCode: String = "",      // 配对码
     val pairedDeviceId: String = "",   // 已配对设备ID
     val hasMajorDisease: Boolean = false, // 是否有重大疾病
-    val majorDiseaseDetails: String = ""  // 重大疾病详情
+    val majorDiseaseDetails: String = "",  // 重大疾病详情
+    val fontScale: Float = 1f               // 字体大小倍率
 )
 
 /**
@@ -105,14 +106,15 @@ class UserPreferences(context: Context) {
             isActivated = prefs.getBoolean(KEY_ACTIVATED, false),
             elderName = prefs.getString(KEY_ELDER_NAME, "") ?: "",
             elderProfile = prefs.getString(KEY_ELDER_PROFILE, "") ?: "",
-            assistantName = prefs.getString(KEY_ASSISTANT_NAME, "小银") ?: "小银",
+            assistantName = prefs.getString(KEY_ASSISTANT_NAME, "") ?: "",
             dialect = Dialect.fromName(prefs.getString(KEY_DIALECT, Dialect.NONE.name) ?: Dialect.NONE.name),
             clonedVoiceId = prefs.getString(KEY_CLONED_VOICE_ID, "") ?: "",
 
             pairingCode = prefs.getString(KEY_PAIRING_CODE, "") ?: "",
             pairedDeviceId = prefs.getString(KEY_PAIRED_DEVICE_ID, "") ?: "",
             hasMajorDisease = prefs.getBoolean(KEY_HAS_MAJOR_DISEASE, false),
-            majorDiseaseDetails = prefs.getString(KEY_MAJOR_DISEASE_DETAILS, "") ?: ""
+            majorDiseaseDetails = prefs.getString(KEY_MAJOR_DISEASE_DETAILS, "") ?: "",
+            fontScale = prefs.getFloat(KEY_FONT_SCALE, 1f)
         )
     }
     
@@ -149,12 +151,11 @@ class UserPreferences(context: Context) {
     }
 
     /**
-     * 设置AI伴侣名称
+     * 设置 AI 伴侣名称
      */
     fun setAssistantName(name: String) {
-        val safeName = name.ifBlank { "小银" }
-        prefs.edit().putString(KEY_ASSISTANT_NAME, safeName).apply()
-        _userConfig.value = _userConfig.value.copy(assistantName = safeName)
+        prefs.edit().putString(KEY_ASSISTANT_NAME, name).apply()
+        _userConfig.value = _userConfig.value.copy(assistantName = name)
     }
 
     /**
@@ -192,7 +193,7 @@ class UserPreferences(context: Context) {
      * @param elderName 长辈称呼
      * @return 格式化的配对码（xxx xxx）
      */
-    fun generatePairingCode(elderName: String, assistantName: String = _userConfig.value.assistantName): String {
+    fun generatePairingCode(elderName: String, assistantName: String = ""): String {
         val code = (100000..999999).random().toString()
         // 格式化为 xxx xxx
         val formattedCode = "${code.substring(0, 3)} ${code.substring(3, 6)}"
@@ -210,11 +211,13 @@ class UserPreferences(context: Context) {
     /**
      * 保存配对信息（模拟服务器存储）
      */
-    private fun savePairingInfo(code: String, elderName: String, assistantName: String) {
+    private fun savePairingInfo(code: String, elderName: String, assistantName: String = "") {
         val pairingInfo = JSONObject().apply {
             put("code", code)
             put("elderName", elderName)
-            put("assistantName", assistantName)
+            if (assistantName.isNotBlank()) {
+                put("assistantName", assistantName)
+            }
             put("timestamp", System.currentTimeMillis())
         }
         pairingPrefs.edit().putString(code, pairingInfo.toString()).apply()
@@ -235,7 +238,7 @@ class UserPreferences(context: Context) {
             PairingInfo(
                 code = json.getString("code"),
                 elderName = json.getString("elderName"),
-                assistantName = json.optString("assistantName", "小银"),
+                assistantName = json.optString("assistantName", ""),
                 timestamp = json.getLong("timestamp")
             )
         } catch (e: Exception) {
@@ -250,7 +253,7 @@ class UserPreferences(context: Context) {
         code: String, 
         elderName: String, 
         elderProfile: String = "", 
-        assistantName: String = "小银",
+        assistantName: String = "",
         dialect: Dialect = Dialect.NONE,
         clonedVoiceId: String = "",
         hasMajorDisease: Boolean = false,
@@ -259,11 +262,11 @@ class UserPreferences(context: Context) {
         val json = JSONObject().apply {
             put("code", code.replace(" ", ""))
             put("name", elderName)
-            if (elderProfile.isNotBlank()) {
-                put("profile", elderProfile)
-            }
             if (assistantName.isNotBlank()) {
                 put("assistantName", assistantName)
+            }
+            if (elderProfile.isNotBlank()) {
+                put("profile", elderProfile)
             }
             if (dialect != Dialect.NONE) {
                 put("dialect", dialect.name)
@@ -293,7 +296,7 @@ class UserPreferences(context: Context) {
             val pairingInfo = PairingInfo(
                 code = json.getString("code"),
                 elderName = json.getString("name"),
-                assistantName = json.optString("assistantName", "小银"),
+                assistantName = json.optString("assistantName", ""),
                 timestamp = System.currentTimeMillis()
             )
             val dialect = if (json.has("dialect")) {
@@ -335,7 +338,11 @@ class UserPreferences(context: Context) {
     /**
      * 完成家人端配置
      */
-    fun completeFamilySetup(elderName: String, elderProfile: String = "", assistantName: String = _userConfig.value.assistantName): String {
+    fun completeFamilySetup(
+        elderName: String,
+        elderProfile: String = "",
+        assistantName: String = ""
+    ): String {
         val code = generatePairingCode(elderName, assistantName)
         prefs.edit()
             .putString(KEY_ROLE, UserRole.FAMILY.name)
@@ -415,6 +422,9 @@ class UserPreferences(context: Context) {
         
         // 位置共享相关
         private const val KEY_LOCATION_SHARING_ENABLED = "location_sharing_enabled"
+
+        // 字体大小相关
+        private const val KEY_FONT_SCALE = "font_scale"
         
         @Volatile
         private var instance: UserPreferences? = null
@@ -500,5 +510,23 @@ class UserPreferences(context: Context) {
      */
     fun setLocationSharingEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_LOCATION_SHARING_ENABLED, enabled).apply()
+    }
+
+    // ==================== 字体大小设置 ====================
+
+    /**
+     * 获取字体大小倍率
+     */
+    fun getFontScale(): Float {
+        return prefs.getFloat(KEY_FONT_SCALE, 1f)
+    }
+
+    /**
+     * 设置字体大小倍率
+     */
+    fun setFontScale(scale: Float) {
+        val safeScale = scale.coerceIn(0.9f, 1.5f)
+        prefs.edit().putFloat(KEY_FONT_SCALE, safeScale).apply()
+        _userConfig.value = _userConfig.value.copy(fontScale = safeScale)
     }
 }

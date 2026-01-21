@@ -1204,7 +1204,7 @@ fun PairingCodeStep(
             )
         }
         
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.weight(1.3f))
         
         // 完成按钮
         Button(

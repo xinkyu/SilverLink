@@ -65,8 +65,8 @@ fun SilverLinkTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb() // Match background for cleaner look
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            window.statusBarColor = Color(0xFFF49007).toArgb() // 使用指定橙色
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false // 浅色图标（白色）以在橙色背景上清晰显示
         }
     }
 
