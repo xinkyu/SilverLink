@@ -61,28 +61,7 @@ fun SplashScreen(
         // 进入下一页
         onSplashFinished()
     }
-    
-    // 设置状态栏和导航栏颜色与背景一致，离开时恢复
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        val window = (view.context as Activity).window
-        val originalStatusBarColor = window.statusBarColor
-        val originalNavBarColor = window.navigationBarColor
-        
-        androidx.compose.runtime.DisposableEffect(Unit) {
-            // 进入时设置橙色
-            window.statusBarColor = WarmApricot.toArgb()
-            window.navigationBarColor = WarmApricot.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
-            
-            onDispose {
-                // 离开时恢复原来的颜色
-                window.statusBarColor = originalStatusBarColor
-                window.navigationBarColor = originalNavBarColor
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = true
-            }
-        }
-    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()

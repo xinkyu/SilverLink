@@ -1,73 +1,48 @@
-# 多模态记忆回溯功能 - 开发交接文档
+# 记忆时光机 (Memory Time Machine)
 
-> 📅 更新时间: 2026-01-20
-> 🎯 功能目标: 实现 Memory Time-Machine (记忆时光机)
+"记忆时光机"是 SilverLink 独特的情感化记忆训练功能，通过家庭相册连接长辈的过去与当下，预防认知衰退。
 
----
+## 功能特性
 
-## 1. 功能概述
+### 1. 智能云相册
+- **家人共建**：家属端可以上传老照片，并添加描述、标记时间地点等信息。
+- **自动同步**：照片会自动同步到长辈端设备，形成专属的数字相册。
+- **AI 智能标注**：
+    - 集成 **Qwen-VL Plus** 视觉大模型。
+    - 自动分析上传的照片，识别人物（爷爷/奶奶等）、场景（故宫/春节等）和事件。
+    - 生成温馨的 AI 描述文本，辅助长辈回忆。
 
-基于 **Qwen-VL + CloudBase** 的多模态记忆回溯功能：
+### 2. 记忆小游戏 (Cognitive Quiz)
+- **个性化出题**：
+    - 系统基于相册中的老照片，自动生成考察问题。
+    - 拒绝枯燥的题库，每一道题都与长辈的亲身经历相关，更有温度。
+- **题目类型**：
+    - **人物识别**："照片里的这个人是谁？"
+    - **地点回忆**："这张照片是在哪里拍的？"
+    - **事件回忆**："这张照片记录的是什么事情？"
+- **AI 智能评判**：
+    - 使用大语言模型进行**语义模糊匹配**，不要求长辈死记硬背标准答案。
+    - 例如：标准答案是"故宫"，长辈回答"北京皇宫"或"紫禁城"也会被判定为正确。
+    - 给予即时反馈与鼓励（"太棒了！您的记忆力真好！"）。
 
-- **Photo Talk**: 家人上传老照片，老人可浏览并与 AI 问答
-- **Digital Amnesia Defense**: 定期展示照片测试老人认知能力
+### 3. 认知健康追踪
+- **数据分析**：后台自动记录答题准确率、反应时间与置信度。
+- **趋势报告**：
+    - 生成周报/月报，分析长辈的认知能力变化趋势（提升/稳定/衰退）。
+    - 帮助家属尽早发现阿兹海默症等认知障碍的早期迹象。
 
----
+## 技术实现
 
-## 2. 已完成工作 ✅
+- **PhotoAnalysisService**: 调用通义千问视觉模型（`qwen-vl-plus`），提取照片元数据 (people, location, description)。
+- **CognitiveQuizService**:
+    - 负责即时生成 Quiz 问题。
+    - 调用 LLM 进行答案语义匹配 (`matchAnswerWithAI`)。
+    - 计算认知健康指标 (`calculateTrend`).
+- **MemorySyncService**: 负责照片文件的增量同步与本地缓存管理。
 
-### 2.1 数据层
-- `data/local/entity/MemoryPhotoEntity.kt` - 照片本地缓存
-- `data/local/entity/CognitiveLogEntity.kt` - 认知记录实体
-- `data/local/dao/CognitiveLogDao.kt` - 认知记录 DAO
-- `data/remote/CloudBaseApi.kt` - 照片/认知 API
-
-### 2.2 云函数
-| 函数 | 功能 | HTTP 路由 |
-|------|------|-----------|
-| `memory-photo-upload` | 上传照片 | `/memory-photo-upload` |
-| `memory-photo-list` | 照片列表 | `/memory-photo-list` |
-| `cognitive-log` | 记录测试结果 | `/cognitive-log` |
-| `cognitive-report` | 生成报告 | `/cognitive-report` |
-
-### 2.3 UI 界面
-- `ui/memory/MemoryQuizScreen.kt` - 认知测验
-- `ui/memory/MemoryQuizViewModel.kt` - 语音播放修复 ✅
-- `ui/memory/ElderPhotoGridScreen.kt` - 老人端网格视图✅
-- `ui/family/FamilyMonitoringScreen.kt` - 认知报告 Tab✅
-- `ui/components/HealthRecordComponents.kt` - CognitiveReportCard
-✅
----
-
-## 3. 待修复问题 ⚠️ 
-
-### 家人端老人端双端认知评估均因拥挤错行
-
-### 长辈端认知评估无数据，也无没数据时的默认卡片
-
----
-
-## 4. 数据流
-
-```
-老人答题 → CognitiveQuizService.saveQuizResult()
-         ├─ 本地: CognitiveLogDao.insert()
-         └─ 云端: CloudBaseService.logCognitiveResult()
-                            ↓
-               cognitive_logs 集合 (CloudBase)
-                            ↓
-家人查看 ← FamilyMonitoringScreen ← SyncRepository.getCognitiveReport()
-```
-
----
-
-## 5. 测试清单
-
-- [x] 记忆小游戏语音反馈播放
-- [x] 家人端"认知评估"Tab 显示
-- [x] 认知结果上传
-- [x] 家人端查看报告数据
-
----
-
-
+## 场景示例
+1. 家人上传了一张2018年春节全家福。
+2. AI 分析并标注：人物=[儿子, 孙子], 场景=餐厅, 标签=[春节, 团圆]。
+3. 次日早晨，长辈端主动关怀时弹出该照片，并语音提问："王奶奶，您还记得这张照片是在哪里拍的吗？"
+4. 长辈回答："这是那年过年在海鲜酒楼吃饭。"
+5. AI 判定为"正确"（匹配场景描述），并夸奖长辈。

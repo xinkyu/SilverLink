@@ -28,7 +28,8 @@ sealed class OnboardingDestination {
  */
 @Composable
 fun OnboardingNavigation(
-    onOnboardingComplete: () -> Unit
+    onOnboardingComplete: () -> Unit,
+    onSplashStateChanged: (Boolean) -> Unit = {} // 通知是否在启动页
 ) {
     val context = LocalContext.current
     val userPreferences = remember { UserPreferences.getInstance(context) }
@@ -36,6 +37,11 @@ fun OnboardingNavigation(
     
     var currentDestination by remember { 
         mutableStateOf<OnboardingDestination>(OnboardingDestination.Splash) 
+    }
+    
+    // 通知父组件当前是否在启动页
+    LaunchedEffect(currentDestination) {
+        onSplashStateChanged(currentDestination == OnboardingDestination.Splash)
     }
     
     // 检查是否已经激活，如果是则直接进入主应用

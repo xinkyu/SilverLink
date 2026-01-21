@@ -14,6 +14,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
@@ -51,6 +54,8 @@ fun SilverLinkTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false, // Disable dynamic color to enforce our high contrast theme
+    fontScale: Float = 1.0f, // 用户自定义字体缩放倍率
+    statusBarColor: Color? = null, // 自定义状态栏颜色，null 时使用背景色
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -62,11 +67,16 @@ fun SilverLinkTheme(
         else -> LightColorScheme
     }
     val view = LocalView.current
+    val finalStatusBarColor = statusBarColor ?: colorScheme.background
+    val finalNavBarColor = statusBarColor ?: colorScheme.background // 导航栏与状态栏使用相同颜色
+    val isLightStatusBar = statusBarColor == null && !darkTheme // 背景色时根据主题决定图标颜色
+    
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = Color(0xFFF49007).toArgb() // 使用指定橙色
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false // 浅色图标（白色）以在橙色背景上清晰显示
+            window.statusBarColor = finalStatusBarColor.toArgb()
+            window.navigationBarColor = finalNavBarColor.toArgb() // 设置导航栏颜色
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = isLightStatusBar
         }
     }
 
@@ -74,6 +84,20 @@ fun SilverLinkTheme(
         colorScheme = colorScheme,
         typography = Typography,
         shapes = Shapes, // Apply our new Shapes
-        content = content
+        content = {
+            val currentDensity = LocalDensity.current
+            // 结合系统字体缩放和应用内设置 (fontScale * systemFontScale)
+            // 或者直接使用应用设置覆盖。这里我们选择相乘，以保留系统无障碍设置的影响
+            val customDensity = Density(
+                density = currentDensity.density,
+                fontScale = currentDensity.fontScale * fontScale
+            )
+            
+            CompositionLocalProvider(
+                LocalDensity provides customDensity
+            ) {
+                content()
+            }
+        }
     )
 }

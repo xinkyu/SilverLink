@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.silverlink.app.ui.theme.SilverLinkTheme
@@ -42,13 +43,28 @@ class MainActivity : ComponentActivity() {
 
         
         setContent {
-            SilverLinkTheme {
-                // 检查是否已完成激活
-                val userConfig = userPrefs.userConfig.value
-                var showOnboarding by remember { 
-                    mutableStateOf(!userConfig.isActivated) 
-                }
-                
+            // 监听配置变化（包括字体大小）
+            val userConfig by userPrefs.userConfig.collectAsState()
+            
+            // 检查是否已完成激活
+            var showOnboarding by remember { 
+                mutableStateOf(!userConfig.isActivated) 
+            }
+            
+            // 跟踪是否在启动页
+            var isOnSplashScreen by remember { mutableStateOf(true) }
+            
+            // 根据是否在启动页决定状态栏颜色
+            val statusBarColor = if (showOnboarding && isOnSplashScreen) {
+                androidx.compose.ui.graphics.Color(0xFFF49007) // 橙色
+            } else {
+                null // 使用默认背景色
+            }
+            
+            SilverLinkTheme(
+                fontScale = userConfig.fontScale,
+                statusBarColor = statusBarColor
+            ) {
                 if (showOnboarding) {
                     // 显示引导流程
                     OnboardingNavigation(
@@ -56,6 +72,9 @@ class MainActivity : ComponentActivity() {
                             showOnboarding = false
                             // Onboarding完成后，检查并启动服务（如果是老人端）
                             startProactiveServiceIfElder(userPrefs)
+                        },
+                        onSplashStateChanged = { isSplash ->
+                            isOnSplashScreen = isSplash
                         }
                     )
                 } else {
