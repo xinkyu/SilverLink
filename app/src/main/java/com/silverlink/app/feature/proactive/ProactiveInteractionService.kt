@@ -63,8 +63,8 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         private const val INACTIVITY_THRESHOLD_MS_DEBUG = 60 * 1000L // 1 minute for debug
         private const val INACTIVITY_THRESHOLD_MS_REAL = 3 * 60 * 60 * 1000L // 3 hours
         
-        // Use debug threshold for demo purposes, switch to REAL for production
-        private const val INACTIVITY_THRESHOLD_MS = INACTIVITY_THRESHOLD_MS_DEBUG 
+        // Use REAL threshold for production
+        private const val INACTIVITY_THRESHOLD_MS = INACTIVITY_THRESHOLD_MS_REAL 
         
         // 连续唤醒失败次数阈值，超过此值向家人发送警报
         private const val MAX_CONSECUTIVE_FAILURES = 2
