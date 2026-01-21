@@ -41,7 +41,7 @@ fun RoleSelectionScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(WarmApricot)
+            .background(Color.White)
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
@@ -50,7 +50,7 @@ fun RoleSelectionScreen(
             text = "欢迎使用银龄守护",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF5D4037),
+            color = Color(0xFF1F2A44),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 32.dp, bottom = 16.dp),
@@ -60,7 +60,7 @@ fun RoleSelectionScreen(
         Text(
             text = "请选择您的身份",
             style = MaterialTheme.typography.titleLarge,
-            color = Color(0xFF8D6E63),
+            color = Color(0xFF5F6B7A),
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center
         )
@@ -70,7 +70,7 @@ fun RoleSelectionScreen(
         // 上卡片 - 我是长辈
         RoleCard(
             modifier = Modifier.weight(1f),
-            emoji = "👴",
+            emojiText = "👴👵",
             title = "我是长辈",
             subtitle = "开始使用我的智能伴侣",
             gradientColors = listOf(
@@ -83,7 +83,7 @@ fun RoleSelectionScreen(
         // 下卡片 - 我是家人
         RoleCard(
             modifier = Modifier.weight(1f),
-            emoji = "👩‍💼",
+            emojiText = "👦👧",
             title = "我是家人",
             subtitle = "为长辈配置智能伴侣",
             gradientColors = listOf(
@@ -103,7 +103,7 @@ fun RoleSelectionScreen(
 @Composable
 fun RoleCard(
     modifier: Modifier = Modifier,
-    emoji: String,
+    emojiText: String,
     title: String,
     subtitle: String,
     gradientColors: List<Color>,
@@ -130,14 +130,13 @@ fun RoleCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // Emoji 图标
                 Text(
-                    text = emoji,
-                    fontSize = 80.sp
+                    text = emojiText,
+                    fontSize = 40.sp
                 )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // 标题
                 Text(
                     text = title,

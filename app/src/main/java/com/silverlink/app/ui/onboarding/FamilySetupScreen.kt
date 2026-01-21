@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -83,9 +84,10 @@ import java.io.File
 
 /**
  * 家人端配置流程
- * 1. 输入老人称呼和方言设置
- * 2. 录制声音样本（用于声音复刻，支持方言TTS）
- * 3. 生成配对码和二维码
+ * 1. 配置老人信息
+ * 2. 配置智能伴侣（名称与方言）
+ * 3. 复刻音色
+ * 4. 生成配对码和二维码
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,25 +103,34 @@ fun FamilySetupScreen(
     var currentStep by remember { mutableStateOf(1) }
     var elderName by remember { mutableStateOf("") }
     var elderProfile by remember { mutableStateOf("") }
+    var assistantName by remember {
+        mutableStateOf(userPreferences.userConfig.value.assistantName.ifBlank { "小银" })
+    }
     var selectedDialect by remember { mutableStateOf(Dialect.NONE) }
     var clonedVoiceId by remember { mutableStateOf("") }
     var pairingCode by remember { mutableStateOf("") }
     var qrContent by remember { mutableStateOf("") }
+
     var isLoading by remember { mutableStateOf(false) }
+    
+    // 重大疾病信息
+    var hasMajorDisease by remember { mutableStateOf<Boolean?>(null) }
+    var majorDiseaseDetails by remember { mutableStateOf("") }
     
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(WarmApricot)
+            .background(Color(0xFFF5F7FB))
     ) {
         // 顶部导航栏
         TopAppBar(
             title = { 
                 Text(
                     text = when (currentStep) {
-                        1 -> "配置智能伴侣"
-                        2 -> "录制声音样本"
-                        else -> "分享给长辈"
+                        1 -> "配置老人信息"
+                        2 -> "配置智能伴侣"
+                        3 -> "复刻音色"
+                        else -> "配对"
                     },
                     fontWeight = FontWeight.Bold
                 )
@@ -137,88 +148,148 @@ fun FamilySetupScreen(
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
-                titleContentColor = Color(0xFF5D4037)
+                titleContentColor = Color(0xFF1F2A44)
             )
         )
         
         // 步骤指示器
         StepIndicator(
             currentStep = currentStep,
-            totalSteps = 3,
+            totalSteps = 4,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         )
         
-        when (currentStep) {
-            1 -> ElderInfoStep(
-                elderName = elderName,
-                onNameChange = { elderName = it },
-                elderProfile = elderProfile,
-                onProfileChange = { elderProfile = it },
-                selectedDialect = selectedDialect,
-                onDialectChange = { selectedDialect = it },
-                onNext = {
-                    if (elderName.isNotBlank()) {
-                        // 保存方言设置
+        Box(
+            modifier = Modifier.weight(1f)
+        ) {
+            when (currentStep) {
+                1 -> ElderInfoStep(
+                    elderName = elderName,
+                    onNameChange = { elderName = it },
+                    elderProfile = elderProfile,
+                    onProfileChange = { elderProfile = it },
+                    hasMajorDisease = hasMajorDisease,
+                    onHasMajorDiseaseChange = { hasMajorDisease = it },
+                    majorDiseaseDetails = majorDiseaseDetails,
+                    onMajorDiseaseDetailsChange = { majorDiseaseDetails = it },
+                    onNext = {
+                        if (elderName.isNotBlank() && hasMajorDisease != null) {
+                            // 如果选了有病但没填详情，不能下一步（虽然按钮状态会控制，这里作为双重保险）
+                            if (hasMajorDisease == true && majorDiseaseDetails.isBlank()) {
+                                return@ElderInfoStep
+                            }
+                            
+                            // 保存信息到 UserPreferences
+                            userPreferences.setMajorDiseaseInfo(hasMajorDisease!!, majorDiseaseDetails)
+                            
+                            currentStep = 2
+                        }
+                    }
+                )
+                2 -> CompanionConfigStep(
+                    assistantName = assistantName,
+                    onAssistantNameChange = { assistantName = it },
+                    selectedDialect = selectedDialect,
+                    onDialectChange = { selectedDialect = it },
+                    onNext = {
+                        userPreferences.setAssistantName(assistantName)
                         userPreferences.setDialect(selectedDialect)
-                        currentStep = 2
+                        currentStep = 3
                     }
-                }
-            )
-            2 -> VoiceRecordingStep(
-                elderName = elderName,
-                familyDeviceId = syncRepository.getDeviceId(),
-                selectedDialect = selectedDialect,
-                onVoiceCloned = { voiceId ->
-                    clonedVoiceId = voiceId
-                    userPreferences.setClonedVoiceId(voiceId)
-                },
-                onNext = {
-                    if (!isLoading) {
-                        isLoading = true
-                        // 创建配对码并同步到云端
-                        scope.launch {
-                            android.util.Log.d("FamilySetup", "onNext called, clonedVoiceId='$clonedVoiceId'")
-                            val result = syncRepository.createPairingCodeOnCloud(elderName, elderProfile, selectedDialect.name, clonedVoiceId)
-                            result.onSuccess { code ->
-                                pairingCode = code
-                                // 生成二维码内容（包含配对码、长辈称呼、方言和复刻音色ID）
-                                android.util.Log.d("FamilySetup", "Generating QR with clonedVoiceId='$clonedVoiceId'")
-                                qrContent = userPreferences.generateQRContent(
-                                    code, elderName, elderProfile, selectedDialect, clonedVoiceId
+                )
+                3 -> VoiceRecordingStep(
+                    elderName = elderName,
+                    assistantName = assistantName,
+                    familyDeviceId = syncRepository.getDeviceId(),
+                    selectedDialect = selectedDialect,
+                    onVoiceCloned = { voiceId ->
+                        clonedVoiceId = voiceId
+                        userPreferences.setClonedVoiceId(voiceId)
+                    },
+                    onNext = {
+                        if (!isLoading) {
+                            isLoading = true
+                            // 创建配对码并同步到云端
+                            scope.launch {
+                                android.util.Log.d("FamilySetup", "onNext called, clonedVoiceId='$clonedVoiceId'")
+                                // 将疾病信息附加到 elderProfile 中传给云端，以兼容旧版API
+                                val fullProfile = if (hasMajorDisease == true && majorDiseaseDetails.isNotBlank()) {
+                                    val diseaseInfo = "【重大疾病】$majorDiseaseDetails"
+                                    if (elderProfile.isBlank()) diseaseInfo else "$elderProfile。$diseaseInfo"
+                                } else {
+                                    elderProfile
+                                }
+                                
+                                val result = syncRepository.createPairingCodeOnCloud(
+                                    elderName,
+                                    fullProfile,
+                                    selectedDialect.name,
+                                    clonedVoiceId,
+                                    assistantName
                                 )
-                                currentStep = 3
+                                result.onSuccess { code ->
+                                    pairingCode = code
+                                    // 生成二维码内容（包含配对码、长辈称呼、方言和复刻音色ID）
+                                    android.util.Log.d("FamilySetup", "Generating QR with clonedVoiceId='$clonedVoiceId'")
+                                    qrContent = userPreferences.generateQRContent(
+                                        code, elderName, elderProfile, assistantName, selectedDialect, clonedVoiceId,
+                                        hasMajorDisease = hasMajorDisease ?: false,
+                                        majorDiseaseDetails = majorDiseaseDetails
+                                    )
+                                    currentStep = 4
+                                }
+                                isLoading = false
                             }
-                            isLoading = false
                         }
-                    }
-                },
-                onSkip = {
-                    if (!isLoading) {
-                        isLoading = true
-                        scope.launch {
-                            val result = syncRepository.createPairingCodeOnCloud(elderName, elderProfile, selectedDialect.name, "")
-                            result.onSuccess { code ->
-                                pairingCode = code
-                                qrContent = userPreferences.generateQRContent(
-                                    code, elderName, elderProfile, selectedDialect, ""
+                    },
+                    onSkip = {
+                        if (!isLoading) {
+                            isLoading = true
+                            scope.launch {
+                                val fullProfile = if (hasMajorDisease == true && majorDiseaseDetails.isNotBlank()) {
+                                    val diseaseInfo = "【重大疾病】$majorDiseaseDetails"
+                                    if (elderProfile.isBlank()) diseaseInfo else "$elderProfile。$diseaseInfo"
+                                } else {
+                                    elderProfile
+                                }
+
+                                val result = syncRepository.createPairingCodeOnCloud(
+                                    elderName,
+                                    fullProfile,
+                                    selectedDialect.name,
+                                    "",
+                                    assistantName
                                 )
-                                currentStep = 3
+                                result.onSuccess { code ->
+                                    pairingCode = code
+                                    qrContent = userPreferences.generateQRContent(
+                                        code,
+                                        elderName,
+                                        elderProfile,
+                                        assistantName,
+                                        selectedDialect,
+                                        "",
+                                        hasMajorDisease = hasMajorDisease ?: false,
+                                        majorDiseaseDetails = majorDiseaseDetails
+                                    )
+                                    currentStep = 4
+                                }
+                                isLoading = false
                             }
-                            isLoading = false
                         }
+                    },
+                    isLoading = isLoading
+                )
+                else -> PairingCodeStep(
+                    elderName = elderName,
+                    pairingCode = pairingCode,
+                    qrContent = qrContent,
+                    hasClonedVoice = clonedVoiceId.isNotBlank(),
+                    onComplete = {
+                        onSetupComplete()
                     }
-                },
-                isLoading = isLoading
-            )
-            3 -> PairingCodeStep(
-                elderName = elderName,
-                pairingCode = pairingCode,
-                qrContent = qrContent,
-                hasClonedVoice = clonedVoiceId.isNotBlank(),
-                onComplete = {
-                    onSetupComplete()
-                }
-            )
+                )
+            }
         }
     }
 }
@@ -242,7 +313,7 @@ fun StepIndicator(
                 modifier = Modifier
                     .size(32.dp)
                     .background(
-                        color = if (step <= currentStep) Color(0xFFFFB74D) else Color(0xFFBCAAA4),
+                        color = if (step <= currentStep) Color(0xFF3F51B5) else Color(0xFFD0D5DD),
                         shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
@@ -268,7 +339,7 @@ fun StepIndicator(
                         .width(40.dp)
                         .height(3.dp)
                         .background(
-                            color = if (step < currentStep) Color(0xFFFFB74D) else Color(0xFFBCAAA4)
+                            color = if (step < currentStep) Color(0xFF3F51B5) else Color(0xFFD0D5DD)
                         )
                 )
             }
@@ -286,15 +357,21 @@ fun ElderInfoStep(
     onNameChange: (String) -> Unit,
     elderProfile: String,
     onProfileChange: (String) -> Unit,
-    selectedDialect: Dialect,
-    onDialectChange: (Dialect) -> Unit,
+    hasMajorDisease: Boolean?,
+    onHasMajorDiseaseChange: (Boolean) -> Unit,
+    majorDiseaseDetails: String,
+    onMajorDiseaseDetailsChange: (String) -> Unit,
     onNext: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    // 是否可以点击下一步
+    val isNextEnabled = elderName.isNotBlank() && 
+            hasMajorDisease != null && 
+            (hasMajorDisease == false || majorDiseaseDetails.isNotBlank())
     
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -305,7 +382,7 @@ fun ElderInfoStep(
             imageVector = Icons.Default.Person,
             contentDescription = null,
             modifier = Modifier.size(80.dp),
-            tint = Color(0xFF8D6E63)
+            tint = Color(0xFF5F6B7A)
         )
         
         Spacer(modifier = Modifier.height(24.dp))
@@ -314,7 +391,7 @@ fun ElderInfoStep(
             text = "请输入长辈的称呼",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF5D4037)
+            color = Color(0xFF1F2A44)
         )
         
         Spacer(modifier = Modifier.height(8.dp))
@@ -322,7 +399,7 @@ fun ElderInfoStep(
         Text(
             text = "这将用于AI伴侣称呼长辈",
             style = MaterialTheme.typography.bodyLarge,
-            color = Color(0xFF8D6E63)
+            color = Color(0xFF5F6B7A)
         )
         
         Spacer(modifier = Modifier.height(32.dp))
@@ -338,8 +415,8 @@ fun ElderInfoStep(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFFFFB74D),
-                unfocusedBorderColor = Color(0xFFBCAAA4),
+                focusedBorderColor = Color(0xFF3F51B5),
+                unfocusedBorderColor = Color(0xFFD0D5DD),
                 focusedContainerColor = Color.White,
                 unfocusedContainerColor = Color.White
             ),
@@ -359,8 +436,8 @@ fun ElderInfoStep(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFFFFB74D),
-                unfocusedBorderColor = Color(0xFFBCAAA4),
+                focusedBorderColor = Color(0xFF3F51B5),
+                unfocusedBorderColor = Color(0xFFD0D5DD),
                 focusedContainerColor = Color.White,
                 unfocusedContainerColor = Color.White
             ),
@@ -370,6 +447,192 @@ fun ElderInfoStep(
 
         Spacer(modifier = Modifier.height(16.dp))
         
+        // 重大疾病必填项
+        Text(
+            text = "是否有重大疾病",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1F2A44),
+            modifier = Modifier.align(Alignment.Start)
+        )
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 否 选项
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clickable { onHasMajorDiseaseChange(false) }
+                    .padding(8.dp)
+            ) {
+                androidx.compose.material3.RadioButton(
+                    selected = hasMajorDisease == false,
+                    onClick = { onHasMajorDiseaseChange(false) },
+                    colors = androidx.compose.material3.RadioButtonDefaults.colors(
+                        selectedColor = Color(0xFF3F51B5)
+                    )
+                )
+                Text(
+                    text = "否",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color(0xFF1F2A44)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(24.dp))
+            
+            // 是 选项
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clickable { onHasMajorDiseaseChange(true) }
+                    .padding(8.dp)
+            ) {
+                androidx.compose.material3.RadioButton(
+                    selected = hasMajorDisease == true,
+                    onClick = { onHasMajorDiseaseChange(true) },
+                    colors = androidx.compose.material3.RadioButtonDefaults.colors(
+                        selectedColor = Color(0xFF3F51B5)
+                    )
+                )
+                Text(
+                    text = "是",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color(0xFF1F2A44)
+                )
+            }
+        }
+        
+        // 如果选了是，显示详情输入框
+        if (hasMajorDisease == true) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = majorDiseaseDetails,
+                onValueChange = onMajorDiseaseDetailsChange,
+                label = { Text("请填写疾病信息（必填）", fontSize = 16.sp) },
+                placeholder = { Text("如：高血压、糖尿病、心脏病等，AI将根据此信息提供更贴心的建议", fontSize = 14.sp) },
+                textStyle = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF3F51B5),
+                    unfocusedBorderColor = if (majorDiseaseDetails.isBlank()) Color(0xFFE53935) else Color(0xFFD0D5DD),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White
+                ),
+                minLines = 2,
+                maxLines = 4,
+                isError = majorDiseaseDetails.isBlank()
+            )
+            if (majorDiseaseDetails.isBlank()) {
+                Text(
+                    text = "请详细描述疾病信息，以便AI更好地照顾长辈",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFE53935),
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+        
+        // 下一步按钮
+        Button(
+            onClick = onNext,
+            enabled = isNextEnabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF3F51B5),
+                contentColor = Color.White,
+                disabledContainerColor = Color(0xFFD0D5DD)
+            )
+        ) {
+            Text(
+                text = "下一步",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+/**
+ * 步骤2: 配置智能伴侣
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CompanionConfigStep(
+    assistantName: String,
+    onAssistantNameChange: (String) -> Unit,
+    selectedDialect: Dialect,
+    onDialectChange: (Dialect) -> Unit,
+    onNext: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val isNextEnabled = assistantName.isNotBlank()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Icon(
+            imageVector = Icons.Default.SmartToy,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = Color(0xFF5F6B7A)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "设置AI伴侣名称",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1F2A44)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "默认名称为“小银”，可改为其他称呼",
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color(0xFF5F6B7A)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        OutlinedTextField(
+            value = assistantName,
+            onValueChange = onAssistantNameChange,
+            label = { Text("AI伴侣名称", fontSize = 18.sp) },
+            placeholder = { Text("例如：小银", fontSize = 18.sp) },
+            textStyle = MaterialTheme.typography.headlineSmall,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF3F51B5),
+                unfocusedBorderColor = Color(0xFFD0D5DD),
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White
+            )
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         // 方言选择下拉框
         Box(
             modifier = Modifier.fillMaxWidth()
@@ -389,14 +652,14 @@ fun ElderInfoStep(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFFFFB74D),
-                    unfocusedBorderColor = Color(0xFFBCAAA4),
+                    focusedBorderColor = Color(0xFF3F51B5),
+                    unfocusedBorderColor = Color(0xFFD0D5DD),
                     focusedContainerColor = Color.White,
                     unfocusedContainerColor = Color.White,
-                    disabledBorderColor = Color(0xFFBCAAA4),
+                    disabledBorderColor = Color(0xFFD0D5DD),
                     disabledContainerColor = Color.White,
-                    disabledTextColor = Color(0xFF5D4037),
-                    disabledLabelColor = Color(0xFF8D6E63)
+                    disabledTextColor = Color(0xFF1F2A44),
+                    disabledLabelColor = Color(0xFF5F6B7A)
                 ),
                 enabled = false
             )
@@ -422,21 +685,22 @@ fun ElderInfoStep(
                 }
             }
         }
-        
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         Spacer(modifier = Modifier.weight(1f))
-        
-        // 下一步按钮
+
         Button(
             onClick = onNext,
-            enabled = elderName.isNotBlank(),
+            enabled = isNextEnabled,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFFFB74D),
+                containerColor = Color(0xFF3F51B5),
                 contentColor = Color.White,
-                disabledContainerColor = Color(0xFFBCAAA4)
+                disabledContainerColor = Color(0xFFD0D5DD)
             )
         ) {
             Text(
@@ -445,17 +709,18 @@ fun ElderInfoStep(
                 fontWeight = FontWeight.Bold
             )
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
 /**
- * 步骤2: 录制声音样本
+ * 步骤3: 录制声音样本
  */
 @Composable
 fun VoiceRecordingStep(
     elderName: String,
+    assistantName: String,
     familyDeviceId: String,
     selectedDialect: Dialect,
     onVoiceCloned: (String) -> Unit,
@@ -527,7 +792,7 @@ fun VoiceRecordingStep(
             text = "录制家人的声音", // 修改标题
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF5D4037),
+            color = Color(0xFF1F2A44),
             textAlign = TextAlign.Center
         )
         
@@ -540,7 +805,7 @@ fun VoiceRecordingStep(
                 "录制 10-30 秒清晰语音，AI将模仿您的声音陪伴${elderName}"
             },
             style = MaterialTheme.typography.bodyLarge,
-            color = Color(0xFF8D6E63),
+            color = Color(0xFF5F6B7A),
             textAlign = TextAlign.Center
         )
         
@@ -559,13 +824,13 @@ fun VoiceRecordingStep(
                     text = "🎤 录音示范文本（建议朗读）",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5D4037)
+                    color = Color(0xFF1F2A44)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "\"${elderName}，我是[您的名字]。最近身体还好吗？要注意休息，多喝水。我会经常来陪您的，您想我了就跟小银说话。\"",
+                    text = "\"${elderName}，我是[您的名字]。最近身体还好吗？要注意休息，多喝水。我会经常来陪您的，您想我了就跟${assistantName.ifBlank { "小银" }}说话。\"",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF795548),
+                    color = Color(0xFF5F6B7A),
                     lineHeight = 22.sp
                 )
             }
@@ -578,13 +843,13 @@ fun VoiceRecordingStep(
             CloningState.CLONING -> {
                 CircularProgressIndicator(
                     modifier = Modifier.size(80.dp),
-                    color = Color(0xFFFFB74D)
+                    color = Color(0xFF3F51B5)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "正在创建专属声音...",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFF8D6E63)
+                    color = Color(0xFF5F6B7A)
                 )
             }
             CloningState.SUCCESS -> {
@@ -614,7 +879,7 @@ fun VoiceRecordingStep(
                             color = when (recordingState) {
                                 RecordingState.RECORDING -> Color(0xFFE53935)
                                 RecordingState.COMPLETED -> Color(0xFF4CAF50)
-                                else -> Color(0xFFFFB74D)
+                                else -> Color(0xFF3F51B5)
                             },
                             shape = CircleShape
                         )
@@ -674,7 +939,7 @@ fun VoiceRecordingStep(
                         else -> "点击开始录音"
                     },
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (recordingState == RecordingState.RECORDING) Color(0xFFE53935) else Color(0xFF8D6E63)
+                    color = if (recordingState == RecordingState.RECORDING) Color(0xFFE53935) else Color(0xFF5F6B7A)
                 )
                 
                 // 录音进度条
@@ -686,7 +951,7 @@ fun VoiceRecordingStep(
                             .fillMaxWidth(0.6f)
                             .height(6.dp),
                         color = Color(0xFFE53935),
-                        trackColor = Color(0xFFBCAAA4)
+                        trackColor = Color(0xFFD0D5DD)
                     )
                 }
             }
@@ -773,9 +1038,9 @@ fun VoiceRecordingStep(
                     .height(56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFB74D),
+                    containerColor = Color(0xFF3F51B5),
                     contentColor = Color.White,
-                    disabledContainerColor = Color(0xFFBCAAA4)
+                    disabledContainerColor = Color(0xFFD0D5DD)
                 )
             ) {
                 if (isLoading) {
@@ -806,7 +1071,7 @@ fun VoiceRecordingStep(
                 ) {
                     Text(
                         text = "跳过，使用默认声音",
-                        color = Color(0xFF8D6E63)
+                        color = Color(0xFF5F6B7A)
                     )
                 }
             }
@@ -827,7 +1092,7 @@ private enum class CloningState {
 }
 
 /**
- * 步骤3: 显示配对码
+ * 步骤4: 显示配对码
  */
 @Composable
 fun PairingCodeStep(
@@ -884,9 +1149,9 @@ fun PairingCodeStep(
         Spacer(modifier = Modifier.height(8.dp))
         
         Text(
-            text = "请让${elderName}扫描二维码或输入配对码",
+            text = "请在${elderName}端继续操作",
             style = MaterialTheme.typography.bodyLarge,
-            color = Color(0xFF5D4037),
+            color = Color(0xFF1F2A44),
             textAlign = TextAlign.Center
         )
         
@@ -918,7 +1183,7 @@ fun PairingCodeStep(
         Text(
             text = "或输入配对码",
             style = MaterialTheme.typography.titleMedium,
-            color = Color(0xFF8D6E63)
+            color = Color(0xFF5F6B7A)
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -933,7 +1198,7 @@ fun PairingCodeStep(
                 text = pairingCode,
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF5D4037),
+                color = Color(0xFF1F2A44),
                 letterSpacing = 6.sp,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
             )
@@ -949,7 +1214,7 @@ fun PairingCodeStep(
                 .height(64.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFFFB74D),
+                containerColor = Color(0xFF3F51B5),
                 contentColor = Color.White
             )
         ) {

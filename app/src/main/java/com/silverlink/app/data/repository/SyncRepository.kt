@@ -35,10 +35,11 @@ class SyncRepository(private val context: Context) {
         elderName: String,
         elderProfile: String = "",
         dialect: String = "NONE",
-        clonedVoiceId: String = ""
+        clonedVoiceId: String = "",
+        assistantName: String = userPrefs.userConfig.value.assistantName
     ): Result<String> = withContext(Dispatchers.IO) {
         // 生成本地配对码
-        val code = userPrefs.completeFamilySetup(elderName, elderProfile)
+        val code = userPrefs.completeFamilySetup(elderName, elderProfile, assistantName)
         
         val cleanCode = code.replace(" ", "")
         
@@ -47,6 +48,7 @@ class SyncRepository(private val context: Context) {
             code = cleanCode,
             elderName = elderName,
             elderProfile = elderProfile,
+            assistantName = assistantName,
             dialect = dialect,
             clonedVoiceId = clonedVoiceId,
             familyDeviceId = currentDeviceId
@@ -80,6 +82,10 @@ class SyncRepository(private val context: Context) {
                     if (pairingResult.elderProfile.isNotBlank()) {
                         userPrefs.setElderProfile(pairingResult.elderProfile)
                     }
+                    if (pairingResult.assistantName.isNotBlank()) {
+                        userPrefs.setAssistantName(pairingResult.assistantName)
+                        android.util.Log.d("SyncRepository", "从云端获取AI伴侣名称: ${pairingResult.assistantName}")
+                    }
                     if (pairingResult.dialect != "NONE" && pairingResult.dialect.isNotBlank()) {
                         val dialect = com.silverlink.app.data.local.Dialect.fromName(pairingResult.dialect)
                         userPrefs.setDialect(dialect)
@@ -92,6 +98,7 @@ class SyncRepository(private val context: Context) {
                     return@withContext Result.success(PairingInfo(
                         code = cleanCode,
                         elderName = pairingResult.elderName,
+                        assistantName = pairingResult.assistantName,
                         timestamp = System.currentTimeMillis()
                     ))
                 }

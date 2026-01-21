@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.data.local.ConversationEntity
+import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.ui.theme.CalmContainer
@@ -95,6 +96,9 @@ fun ChatScreen(
     viewModel: ChatViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val userPrefs = remember { UserPreferences.getInstance(context) }
+    val userConfig by userPrefs.userConfig.collectAsState()
+    val assistantName = userConfig.assistantName.ifBlank { "小银" }
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val voiceState by viewModel.voiceState.collectAsState()
@@ -201,7 +205,7 @@ fun ChatScreen(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "小银",
+                        text = assistantName,
                         style = MaterialTheme.typography.titleLarge
                     )
                     // 情绪指示器 - 始终显示

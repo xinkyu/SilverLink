@@ -3,6 +3,7 @@ package com.silverlink.app.ui.family
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.remote.AlertData
 import com.silverlink.app.data.remote.MedicationData
 import com.silverlink.app.data.remote.MedicationLogData
@@ -76,6 +77,7 @@ private data class CachedData<T>(
 class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(application) {
     
     private val syncRepository = SyncRepository.getInstance(application)
+    private val userPreferences = UserPreferences.getInstance(application)
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("Asia/Shanghai")
@@ -165,6 +167,16 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     // 认知报告加载状态
     private val _isCognitiveLoading = MutableStateFlow(false)
     val isCognitiveLoading: StateFlow<Boolean> = _isCognitiveLoading.asStateFlow()
+
+    // 认知评估 AI 分析
+    private val _cognitiveAnalysis = MutableStateFlow<String?>(null)
+    val cognitiveAnalysis: StateFlow<String?> = _cognitiveAnalysis.asStateFlow()
+
+    // 认知评估 AI 分析加载状态
+    private val _isCognitiveAnalyzing = MutableStateFlow(false)
+    val isCognitiveAnalyzing: StateFlow<Boolean> = _isCognitiveAnalyzing.asStateFlow()
+
+    private var lastCognitiveAnalysisKey: String? = null
     
     // 警报轮询Job
     private var alertPollingJob: kotlinx.coroutines.Job? = null
@@ -467,6 +479,15 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             val result = syncRepository.getCognitiveReport(days = 7)
             result.onSuccess { report ->
                 _cognitiveReport.value = report
+                if (report != null && report.totalQuestions > 0) {
+                    val key = "${report.startDate}|${report.endDate}|${report.totalQuestions}|${report.correctAnswers}|${report.averageResponseTimeMs}|${report.trend}"
+                    if (lastCognitiveAnalysisKey != key) {
+                        analyzeCognitiveReport(report)
+                        lastCognitiveAnalysisKey = key
+                    }
+                } else {
+                    _cognitiveAnalysis.value = null
+                }
             }.onFailure { e ->
                 android.util.Log.e("FamilyMonitoringViewModel", "获取认知报告失败: ${e.message}")
             }
@@ -474,6 +495,62 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             android.util.Log.e("FamilyMonitoringViewModel", "获取认知报告异常: ${e.message}")
         } finally {
             _isCognitiveLoading.value = false
+        }
+    }
+
+    private suspend fun analyzeCognitiveReport(report: com.silverlink.app.data.remote.CognitiveReportData) {
+        if (RetrofitClient.getApiKey().isBlank()) {
+            _cognitiveAnalysis.value = "AI 功能未配置，请在 local.properties 填写 QWEN_API_KEY"
+            return
+        }
+
+        _isCognitiveAnalyzing.value = true
+
+        try {
+            val elderName = userPreferences.userConfig.value.elderName.trim().ifBlank { "长辈" }
+            val ratePercent = (report.correctRate * 100).toInt()
+            val trendText = when (report.trend) {
+                "improving" -> "进步中"
+                "declining" -> "需关注"
+                else -> "保持稳定"
+            }
+
+            val prompt = """
+你是一名养老照护助手。请基于以下认知评估统计，给出简短分析与建议。
+要求：
+1) 用1-2句总结表现（正确率/平均用时/趋势）。
+2) 给出1-2条日常关怀与训练建议（避免诊断，面向家人可执行）。
+3) 语气简洁温和。
+4) 全文使用“${elderName}”称呼长辈，不使用“老人/老年人/长者”等词。
+
+统计数据：
+- 时间范围：${report.startDate} ~ ${report.endDate}
+- 总题数：${report.totalQuestions}
+- 答对：${report.correctAnswers}
+- 正确率：${ratePercent}%
+- 平均用时：${report.averageResponseTimeMs / 1000}秒
+- 趋势：$trendText
+""".trimIndent()
+
+            val request = QwenRequest(
+                input = Input(
+                    messages = listOf(
+                        Message(role = "user", content = prompt)
+                    )
+                )
+            )
+
+            val response = RetrofitClient.api.chat(request)
+            val content = response.output.choices?.firstOrNull()?.message?.content
+                ?: response.output.text
+                ?: "暂无分析结果"
+
+            _cognitiveAnalysis.value = content
+        } catch (e: Exception) {
+            android.util.Log.e("FamilyMonitoringViewModel", "认知分析失败: ${e.message}")
+            _cognitiveAnalysis.value = "认知分析暂不可用，请稍后重试。"
+        } finally {
+            _isCognitiveAnalyzing.value = false
         }
     }
     
@@ -586,6 +663,7 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         _isAnalyzing.value = true
 
         try {
+            val elderName = userPreferences.userConfig.value.elderName.trim().ifBlank { "长辈" }
             val rangeLabel = when (range) {
                 TimeRange.WEEK -> "本周"
                 TimeRange.MONTH -> "本月"
@@ -606,11 +684,12 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             }
 
             val prompt = """
-你是一名养老照护助手。请根据以下情绪备注，分析${rangeLabel}老人主要情绪分布的可能原因，并给出简短的关怀建议。
+你是一名养老照护助手。请根据以下情绪备注，分析${rangeLabel}${elderName}主要情绪分布的可能原因，并给出简短的关怀建议。
 要求：
 1) 按情绪分类输出原因分析（比如愉悦/平静/不愉快/焦虑/生气等）。
 2) 每个情绪给出1-2条原因推测（不要涉及诊断）。
-3) 最后给出1-2条总体关怀建议。
+3) 最后给出1-2条总体关怀建议（面向家人可执行）。
+4) 全文使用“${elderName}”称呼长辈，不使用“老人/老年人/长者”等词。
 
 情绪备注：
 $notesSection

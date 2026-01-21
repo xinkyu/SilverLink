@@ -448,8 +448,9 @@ class ProactiveInteractionService : Service(), SensorEventListener {
         latestMoodNote: String
     ): String {
         return try {
+            val assistantName = userPreferences.userConfig.value.assistantName.ifBlank { "小银" }
             val systemPrompt = """
-                你是SilverLink陪伴应用的语音助手"小银"。现在需要为久坐的长辈生成一句温暖的唤醒问候语。
+                你是SilverLink陪伴应用的语音助手"$assistantName"。现在需要为久坐的长辈生成一句温暖的唤醒问候语。
                 要求：
                 1. 简短（不超过30字）、温暖、自然
                 2. 建议起身活动，可以结合长辈的兴趣爱好

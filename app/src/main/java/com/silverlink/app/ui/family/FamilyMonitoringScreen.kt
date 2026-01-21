@@ -65,6 +65,7 @@ import com.silverlink.app.ui.components.MoodTimelineChart
 import com.silverlink.app.ui.components.TimeRangeSelector
 import com.silverlink.app.ui.components.CognitiveReportCard
 import com.silverlink.app.ui.components.CognitiveReportUiData
+import com.silverlink.app.ui.components.CognitiveAnalysisCard
 import com.silverlink.app.ui.components.LocationCard
 import com.silverlink.app.data.remote.AlertData
 
@@ -100,6 +101,8 @@ fun FamilyMonitoringScreen(
     // 认知报告状态
     val cognitiveReport by viewModel.cognitiveReport.collectAsState()
     val isCognitiveLoading by viewModel.isCognitiveLoading.collectAsState()
+    val cognitiveAnalysis by viewModel.cognitiveAnalysis.collectAsState()
+    val isCognitiveAnalyzing by viewModel.isCognitiveAnalyzing.collectAsState()
     
     // 位置状态
     val elderLocation by viewModel.elderLocation.collectAsState()
@@ -327,21 +330,30 @@ fun FamilyMonitoringScreen(
                                 enter = fadeIn() + expandVertically(),
                                 exit = fadeOut() + shrinkVertically()
                             ) {
-                                val reportUiData = cognitiveReport?.let { report ->
-                                    CognitiveReportUiData(
-                                        totalQuestions = report.totalQuestions,
-                                        correctAnswers = report.correctAnswers,
-                                        correctRate = report.correctRate,
-                                        averageResponseTimeMs = report.averageResponseTimeMs,
-                                        trend = report.trend,
-                                        startDate = report.startDate,
-                                        endDate = report.endDate
+                                Column {
+                                    val reportUiData = cognitiveReport?.let { report ->
+                                        CognitiveReportUiData(
+                                            totalQuestions = report.totalQuestions,
+                                            correctAnswers = report.correctAnswers,
+                                            correctRate = report.correctRate,
+                                            averageResponseTimeMs = report.averageResponseTimeMs,
+                                            trend = report.trend,
+                                            startDate = report.startDate,
+                                            endDate = report.endDate
+                                        )
+                                    }
+                                    CognitiveReportCard(
+                                        report = reportUiData,
+                                        isLoading = isCognitiveLoading
+                                    )
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    CognitiveAnalysisCard(
+                                        analysis = cognitiveAnalysis,
+                                        isLoading = isCognitiveAnalyzing
                                     )
                                 }
-                                CognitiveReportCard(
-                                    report = reportUiData,
-                                    isLoading = isCognitiveLoading
-                                )
                             }
                             
                             // 无数据提示

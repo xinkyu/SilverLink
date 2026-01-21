@@ -121,7 +121,7 @@ fun ElderActivationScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(WarmApricot)
+                .background(Color.White)
         ) {
             // 顶部导航栏
             TopAppBar(

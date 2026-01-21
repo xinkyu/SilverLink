@@ -210,6 +210,7 @@ data class CreatePairingRequest(
     val code: String,
     val elderName: String,
     val elderProfile: String = "",
+    val assistantName: String = "小银",
     val dialect: String = "NONE",
     val clonedVoiceId: String = "",
     val familyDeviceId: String,
@@ -330,6 +331,7 @@ data class PairingCodeData(
 data class PairingResult(
     val elderName: String,
     val elderProfile: String = "",
+    val assistantName: String = "小银",
     val dialect: String = "NONE",
     val clonedVoiceId: String = "",
     val familyDeviceId: String,
