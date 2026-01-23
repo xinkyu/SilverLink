@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.ui.components.ChartType
@@ -72,12 +73,20 @@ fun HistoryScreen(
     val cognitiveReport by viewModel.cognitiveReport.collectAsState()
     val isCognitiveLoading by viewModel.isCognitiveLoading.collectAsState()
     
+    val isDarkTheme = isSystemInDarkTheme()
     val gradientBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFFFF8F0),
-            Color(0xFFFFF0E6),
-            Color(0xFFFFE8DA)
-        )
+        colors = if (isDarkTheme) {
+            listOf(
+                MaterialTheme.colorScheme.surface,
+                MaterialTheme.colorScheme.background
+            )
+        } else {
+            listOf(
+                Color(0xFFFFF8F0),
+                Color(0xFFFFF0E6),
+                Color(0xFFFFE8DA)
+            )
+        }
     )
     
     Scaffold(
@@ -253,7 +262,7 @@ private fun EmptyStateHint(type: String) {
             Text(
                 text = "暂无${type}记录",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -123,12 +124,20 @@ fun FamilyMonitoringScreen(
         }
     }
     
+    val isDarkTheme = isSystemInDarkTheme()
     val gradientBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFF0F4FF),
-            Color(0xFFE8F0FF),
-            Color(0xFFE0EAFF)
-        )
+        colors = if (isDarkTheme) {
+            listOf(
+                MaterialTheme.colorScheme.surface,
+                MaterialTheme.colorScheme.background
+            )
+        } else {
+            listOf(
+                Color(0xFFF0F4FF),
+                Color(0xFFE8F0FF),
+                Color(0xFFE0EAFF)
+            )
+        }
     )
     
     val familyPrimary = Color(0xFF3F51B5)
@@ -173,7 +182,7 @@ fun FamilyMonitoringScreen(
                             Text(
                                 "正在获取长辈健康数据...",
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = Color.Gray
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -423,13 +432,13 @@ private fun NotPairedView() {
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold
                 ),
-                color = Color(0xFF5D4037)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = "请先在「设置」中与长辈设备配对\n配对后即可查看长辈的健康记录",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
         }
@@ -462,13 +471,13 @@ private fun ErrorView(
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold
                 ),
-                color = Color(0xFF5D4037)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(24.dp))
@@ -510,7 +519,7 @@ private fun EmptyStateHint(type: String) {
             Text(
                 text = "暂无${type}记录",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

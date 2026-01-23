@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,6 +47,7 @@ fun FallDetectionScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val userPreferences = remember { UserPreferences.getInstance(context) }
+    val isDarkTheme = isSystemInDarkTheme()
     
     // 状态
     var isEnabled by remember { mutableStateOf(userPreferences.isFallDetectionEnabled()) }
@@ -152,7 +154,7 @@ fun FallDetectionScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .background(Color(0xFFF5F5F5)),
+                .background(if (isDarkTheme) MaterialTheme.colorScheme.background else Color(0xFFF5F5F5)),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 字体大小设置
@@ -160,7 +162,7 @@ fun FallDetectionScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
@@ -175,7 +177,7 @@ fun FallDetectionScreen(
                     Text(
                         text = "当前：${"%.0f".format(fontScale * 100)}%",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Slider(
@@ -203,7 +205,7 @@ fun FallDetectionScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
@@ -268,7 +270,7 @@ fun FallDetectionScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
@@ -332,7 +334,7 @@ fun FallDetectionScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
@@ -387,7 +389,7 @@ fun FallDetectionScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
@@ -463,7 +465,7 @@ fun FallDetectionScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .clickable { onNavigateToContacts() },
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
@@ -582,12 +584,13 @@ private fun SensitivityOption(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val selectedColor = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
             .background(
-                color = if (isSelected) Color(0xFFE3F2FD) else Color.Transparent,
+                color = if (isSelected) selectedColor.copy(alpha = 0.1f) else Color.Transparent,
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(12.dp),
@@ -596,7 +599,7 @@ private fun SensitivityOption(
         RadioButton(
             selected = isSelected,
             onClick = null, // Handled by Row click
-            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF1976D2))
+            colors = RadioButtonDefaults.colors(selectedColor = selectedColor)
         )
         Spacer(modifier = Modifier.width(8.dp))
         Column {
@@ -604,13 +607,13 @@ private fun SensitivityOption(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isSelected) Color(0xFF1976D2) else Color.Black
+                    color = if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurface
                 )
             )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

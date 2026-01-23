@@ -56,15 +56,40 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _ttsState = MutableStateFlow<TtsState>(TtsState.Idle)
     val ttsState: StateFlow<TtsState> = _ttsState.asStateFlow()
 
-    // 照片意图状态 - 用于触发导航到记忆画廊
+    // 语音命令意图状态 - 用于触发导航和执行操作
+    enum class SafetyFeature { FALL_DETECTION, PROACTIVE_INTERACTION, LOCATION_SHARING }
+    
+    sealed class VoiceCommandIntent {
+        object None : VoiceCommandIntent()
+        // 导航类
+        object OpenGallery : VoiceCommandIntent()
+        data class SearchPhotos(val query: String) : VoiceCommandIntent()
+        object OpenMedicationAdd : VoiceCommandIntent()      // 拍照加药
+        object OpenMedicationFind : VoiceCommandIntent()     // 视觉识别找药
+        object OpenMemoryQuiz : VoiceCommandIntent()         // 记忆小游戏
+        data class OpenMoodAnalysis(val period: String) : VoiceCommandIntent()  // 情绪分析(周/月/年)
+        object OpenSafetySettings : VoiceCommandIntent()     // 安全守护页面
+        object OpenContacts : VoiceCommandIntent()           // 紧急联系人页面
+        // 设置调整类 (直接执行)
+        data class AdjustFontSize(val increase: Boolean) : VoiceCommandIntent()
+        data class ToggleSafetyFeature(val feature: SafetyFeature, val enable: Boolean) : VoiceCommandIntent()
+        // 添加联系人
+        data class AddContact(val name: String, val relationship: String, val phone: String) : VoiceCommandIntent()
+    }
+    
+    // 兼容旧 API
+    @Deprecated("Use VoiceCommandIntent instead", ReplaceWith("VoiceCommandIntent"))
     sealed class PhotoIntent {
         object None : PhotoIntent()
         object OpenGallery : PhotoIntent()
         data class SearchPhotos(val query: String) : PhotoIntent()
     }
     
-    private val _photoIntent = MutableStateFlow<PhotoIntent>(PhotoIntent.None)
-    val photoIntent: StateFlow<PhotoIntent> = _photoIntent.asStateFlow()
+    private val _voiceCommandIntent = MutableStateFlow<VoiceCommandIntent>(VoiceCommandIntent.None)
+    val voiceCommandIntent: StateFlow<VoiceCommandIntent> = _voiceCommandIntent.asStateFlow()
+    
+    // 兼容旧 API: photoIntent 映射到 voiceCommandIntent
+    val photoIntent: StateFlow<VoiceCommandIntent> = _voiceCommandIntent
 
     // 会话管理
     private val _conversations = MutableStateFlow<List<ConversationEntity>>(emptyList())
@@ -421,47 +446,128 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * 检测照片相关意图
      * 返回 true 表示检测到照片意图，已处理，不需要继续发送到 AI
      */
-    private fun detectPhotoIntent(text: String): Boolean {
-        val galleryKeywords = listOf("看照片", "看看照片", "老照片", "翻相册", "记忆相册", "看相册")
-        val searchKeywords = listOf("找照片", "搜照片", "有没有", "那年", "那次", "去哪里", "谁带我")
+    private fun detectVoiceCommand(text: String): Boolean {
+        val elderName = getElderName()
+        val prefix = if (elderName.isNotBlank()) "${elderName}，" else ""
         
-        // 检测是否是打开相册的意图
+        // ========== 导航类命令 ==========
+        
+        // 记忆相册
+        val galleryKeywords = listOf("看照片", "看看照片", "老照片", "翻相册", "记忆相册", "看相册", "打开相册")
         if (galleryKeywords.any { text.contains(it) }) {
-            _photoIntent.value = PhotoIntent.OpenGallery
-            
-            // 语音回复
-            val elderName = getElderName()
-            val response = if (elderName.isNotBlank()) {
-                "${elderName}，好的，这就打开记忆相册给您看。"
-            } else {
-                "好的，这就打开记忆相册给您看。"
-            }
-            
-            viewModelScope.launch {
-                val assistantMessage = Message("assistant", response)
-                _messages.value = _messages.value + assistantMessage
-                saveMessageToDb(assistantMessage, null)
-                speakText(response)
-            }
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenGallery
+            respondAndSpeak("${prefix}好的，这就打开记忆相册给您看。")
             return true
         }
         
-        // 检测是否是搜索照片的意图
+        // 搜索照片
+        val searchKeywords = listOf("找照片", "搜照片", "有没有", "那年", "那次", "去哪里", "谁带我")
         if (searchKeywords.any { text.contains(it) }) {
-            _photoIntent.value = PhotoIntent.SearchPhotos(text)
-            
-            val elderName = getElderName()
-            val response = if (elderName.isNotBlank()) {
-                "${elderName}，我帮您找找相关的照片。"
-            } else {
-                "我帮您找找相关的照片。"
+            _voiceCommandIntent.value = VoiceCommandIntent.SearchPhotos(text)
+            respondAndSpeak("${prefix}我帮您找找相关的照片。")
+            return true
+        }
+        
+        // 拍照加药
+        val addMedicationKeywords = listOf("拍照加药", "帮我加药", "添加药品", "录入药品", "打开加药")
+        if (addMedicationKeywords.any { text.contains(it) }) {
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenMedicationAdd
+            respondAndSpeak("${prefix}好的，这就打开拍照加药功能。")
+            return true
+        }
+        
+        // 视觉识别找药
+        val findMedicationKeywords = listOf("帮我找药", "看看这个药", "这个药对不对", "识别药品", "认一下药", "这是什么药")
+        if (findMedicationKeywords.any { text.contains(it) }) {
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenMedicationFind
+            respondAndSpeak("${prefix}好的，我来帮您看看这个药。")
+            return true
+        }
+        
+        // 记忆小游戏
+        val memoryQuizKeywords = listOf("记忆小游戏", "玩游戏", "记忆游戏", "做题", "玩玩游戏", "玩一玩")
+        if (memoryQuizKeywords.any { text.contains(it) }) {
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenMemoryQuiz
+            respondAndSpeak("${prefix}好的，我们来玩记忆小游戏吧！")
+            return true
+        }
+        
+        // 情绪分析
+        val moodAnalysisKeywords = listOf("分析", "情绪", "心情")
+        if (moodAnalysisKeywords.any { text.contains(it) }) {
+            val period = when {
+                text.contains("这周") || text.contains("本周") || text.contains("一周") -> "week"
+                text.contains("这月") || text.contains("本月") || text.contains("一个月") -> "month"
+                text.contains("这年") || text.contains("今年") || text.contains("一年") -> "year"
+                else -> "week"
             }
-            
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenMoodAnalysis(period)
+            val periodText = when (period) {
+                "week" -> "这周"
+                "month" -> "这个月"
+                "year" -> "今年"
+                else -> "这周"
+            }
+            respondAndSpeak("${prefix}好的，我来给您看看${periodText}的情绪变化。")
+            return true
+        }
+        
+        // ========== 设置调整类命令 ==========
+        
+        // 字体大小
+        val fontIncreaseKeywords = listOf("增大字体", "字体大一点", "放大字", "字大一点", "字体调大")
+        if (fontIncreaseKeywords.any { text.contains(it) }) {
+            executeSettingsCommand(VoiceCommandIntent.AdjustFontSize(increase = true))
+            return true
+        }
+        val fontDecreaseKeywords = listOf("减小字体", "字体小一点", "缩小字", "字小一点", "字体调小")
+        if (fontDecreaseKeywords.any { text.contains(it) }) {
+            executeSettingsCommand(VoiceCommandIntent.AdjustFontSize(increase = false))
+            return true
+        }
+        
+        // 跌倒检测
+        val fallDetectionOnKeywords = listOf("打开跌倒检测", "开启跌倒检测", "跌倒检测打开")
+        if (fallDetectionOnKeywords.any { text.contains(it) }) {
+            executeSettingsCommand(VoiceCommandIntent.ToggleSafetyFeature(SafetyFeature.FALL_DETECTION, true))
+            return true
+        }
+        val fallDetectionOffKeywords = listOf("关闭跌倒检测", "关掉跌倒检测")
+        if (fallDetectionOffKeywords.any { text.contains(it) }) {
+            executeSettingsCommand(VoiceCommandIntent.ToggleSafetyFeature(SafetyFeature.FALL_DETECTION, false))
+            return true
+        }
+        
+        // 久坐守护
+        val proactiveOnKeywords = listOf("打开久坐守护", "开启久坐守护", "久坐守护打开", "打开久坐提醒", "打开久坐", "久坐无响应")
+        if (proactiveOnKeywords.any { text.contains(it) }) {
+            executeSettingsCommand(VoiceCommandIntent.ToggleSafetyFeature(SafetyFeature.PROACTIVE_INTERACTION, true))
+            return true
+        }
+        val proactiveOffKeywords = listOf("关闭久坐守护", "关掉久坐守护", "关闭久坐提醒")
+        if (proactiveOffKeywords.any { text.contains(it) }) {
+            executeSettingsCommand(VoiceCommandIntent.ToggleSafetyFeature(SafetyFeature.PROACTIVE_INTERACTION, false))
+            return true
+        }
+        
+        // 位置共享
+        val locationOnKeywords = listOf("打开位置共享", "开启位置共享", "位置共享打开", "共享位置")
+        if (locationOnKeywords.any { text.contains(it) }) {
+            executeSettingsCommand(VoiceCommandIntent.ToggleSafetyFeature(SafetyFeature.LOCATION_SHARING, true))
+            return true
+        }
+        val locationOffKeywords = listOf("关闭位置共享", "关掉位置共享")
+        if (locationOffKeywords.any { text.contains(it) }) {
+            executeSettingsCommand(VoiceCommandIntent.ToggleSafetyFeature(SafetyFeature.LOCATION_SHARING, false))
+            return true
+        }
+        
+        // ========== 联系人添加 ==========
+        val addContactKeywords = listOf("增加联系人", "添加联系人", "加联系人", "紧急联系人")
+        if (addContactKeywords.any { text.contains(it) }) {
+            // 尝试从文本中解析联系人信息
             viewModelScope.launch {
-                val assistantMessage = Message("assistant", response)
-                _messages.value = _messages.value + assistantMessage
-                saveMessageToDb(assistantMessage, null)
-                speakText(response)
+                parseAndAddContact(text)
             }
             return true
         }
@@ -470,10 +576,149 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     /**
-     * 清除照片意图状态（导航后调用）
+     * 兼容旧 API
      */
+    @Deprecated("Use detectVoiceCommand instead")
+    private fun detectPhotoIntent(text: String): Boolean = detectVoiceCommand(text)
+    
+    /**
+     * 语音回复并保存消息
+     */
+    private fun respondAndSpeak(response: String) {
+        viewModelScope.launch {
+            val assistantMessage = Message("assistant", response)
+            _messages.value = _messages.value + assistantMessage
+            saveMessageToDb(assistantMessage, null)
+            speakText(response)
+        }
+    }
+    
+    /**
+     * 执行设置调整类命令
+     */
+    private fun executeSettingsCommand(intent: VoiceCommandIntent) {
+        val elderName = getElderName()
+        val prefix = if (elderName.isNotBlank()) "${elderName}，" else ""
+        
+        when (intent) {
+            is VoiceCommandIntent.AdjustFontSize -> {
+                val currentScale = userPrefs.getFontScale()
+                val newScale = if (intent.increase) {
+                    (currentScale + 0.1f).coerceAtMost(1.5f)
+                } else {
+                    (currentScale - 0.1f).coerceAtLeast(0.9f)
+                }
+                userPrefs.setFontScale(newScale)
+                val actionText = if (intent.increase) "调大" else "调小"
+                respondAndSpeak("${prefix}好的，字体已经${actionText}了。")
+            }
+            is VoiceCommandIntent.ToggleSafetyFeature -> {
+                val (featureName, success) = when (intent.feature) {
+                    SafetyFeature.FALL_DETECTION -> {
+                        userPrefs.setFallDetectionEnabled(intent.enable)
+                        if (intent.enable) {
+                            com.silverlink.app.feature.falldetection.FallDetectionService.start(getApplication())
+                        } else {
+                            com.silverlink.app.feature.falldetection.FallDetectionService.stop(getApplication())
+                        }
+                        "跌倒检测" to true
+                    }
+                    SafetyFeature.PROACTIVE_INTERACTION -> {
+                        userPrefs.setProactiveInteractionEnabled(intent.enable)
+                        if (intent.enable) {
+                            com.silverlink.app.feature.proactive.ProactiveInteractionService.start(getApplication())
+                        } else {
+                            com.silverlink.app.feature.proactive.ProactiveInteractionService.stop(getApplication())
+                        }
+                        "久坐守护" to true
+                    }
+                    SafetyFeature.LOCATION_SHARING -> {
+                        userPrefs.setLocationSharingEnabled(intent.enable)
+                        if (intent.enable) {
+                            com.silverlink.app.feature.location.LocationTrackingService.start(getApplication())
+                        } else {
+                            com.silverlink.app.feature.location.LocationTrackingService.stop(getApplication())
+                        }
+                        "位置共享" to true
+                    }
+                }
+                val actionText = if (intent.enable) "开启" else "关闭"
+                respondAndSpeak("${prefix}好的，${featureName}已${actionText}。")
+            }
+            else -> { /* 非设置类命令不在此处理 */ }
+        }
+    }
+    
+    /**
+     * 解析并添加联系人
+     */
+    private suspend fun parseAndAddContact(text: String) {
+        val elderName = getElderName()
+        val prefix = if (elderName.isNotBlank()) "${elderName}，" else ""
+        
+        try {
+            // 使用 AI 提取联系人信息
+            val request = QwenRequest(
+                input = Input(
+                    messages = listOf(
+                        Message("system", """
+                            从用户输入中提取联系人信息，返回JSON格式（不要用markdown代码块包裹）：
+                            {"name": "姓名", "relationship": "关系", "phone": "手机号"}
+                            如果信息不完整，对应字段返回空字符串。
+                            只返回JSON，不要其他文字。
+                        """.trimIndent()),
+                        Message("user", text)
+                    )
+                )
+            )
+            
+            val response = RetrofitClient.api.chat(request)
+            val jsonText = response.output.choices?.firstOrNull()?.message?.content
+                ?: response.output.text
+                ?: "{}"
+            
+            // 解析 JSON
+            val json = org.json.JSONObject(jsonText.trim())
+            val name = json.optString("name", "").trim()
+            val relationship = json.optString("relationship", "").trim()
+            val phone = json.optString("phone", "").trim()
+            
+            if (name.isBlank() || phone.isBlank()) {
+                respondAndSpeak("${prefix}请告诉我联系人的姓名和手机号，比如说：添加紧急联系人张三，是我儿子，电话13800138000。")
+                return
+            }
+            
+            // 保存到数据库
+            val contactDao = AppDatabase.getInstance(getApplication()).emergencyContactDao()
+            val contact = com.silverlink.app.data.local.entity.EmergencyContactEntity(
+                name = name,
+                phone = phone,
+                relationship = relationship
+            )
+            contactDao.insertContact(contact)
+            
+            val relationshipText = if (relationship.isNotBlank()) "（${relationship}）" else ""
+            respondAndSpeak("${prefix}好的，已经添加${name}${relationshipText}为紧急联系人。")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse contact info", e)
+            respondAndSpeak("${prefix}抱歉，我没听清楚联系人信息，请再说一遍。")
+        }
+    }
+    
+    /**
+     * 清除语音命令意图状态（导航后调用）
+     */
+    fun clearVoiceCommandIntent() {
+        _voiceCommandIntent.value = VoiceCommandIntent.None
+    }
+    
+    /**
+     * 兼容旧 API
+     */
+    @Deprecated("Use clearVoiceCommandIntent instead")
     fun clearPhotoIntent() {
-        _photoIntent.value = PhotoIntent.None
+        clearVoiceCommandIntent()
     }
 
     /**

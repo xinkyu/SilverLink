@@ -71,6 +71,11 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
     var showMemoryQuiz by remember { mutableStateOf(false) }
     var showPhotoDetail by remember { mutableStateOf(false) }
     var selectedPhotoIndex by remember { mutableStateOf(0) }
+    
+    // 语音命令导航状态
+    var showMedicationAdd by remember { mutableStateOf(false) }
+    var showEmergencyContacts by remember { mutableStateOf(false) }
+    var moodAnalysisPeriod by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -183,6 +188,30 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                     onNavigateToGallery = {
                         selectedTab = 2
                         showMemoryQuiz = false
+                        showPhotoDetail = false
+                    },
+                    onNavigateToMedicationAdd = {
+                        selectedTab = 1
+                        showMedicationAdd = true
+                    },
+                    onNavigateToMedicationFind = {
+                        // 已在ChatScreen中直接处理
+                    },
+                    onNavigateToMemoryQuiz = {
+                        selectedTab = 2
+                        showMemoryQuiz = true
+                    },
+                    onNavigateToMoodAnalysis = { period ->
+                        selectedTab = 3
+                        moodAnalysisPeriod = period
+                    },
+                    onNavigateToSafetySettings = {
+                        selectedTab = 4
+                        showEmergencyContacts = false
+                    },
+                    onNavigateToContacts = {
+                        selectedTab = 4
+                        showEmergencyContacts = true
                     }
                 )
                 1 -> ReminderScreen()
@@ -214,15 +243,13 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                 3 -> HistoryScreen()
                 4 -> {
                     // 安全守护 Tab
-                    var showContacts by remember { mutableStateOf(false) }
-                    
-                    if (showContacts) {
+                    if (showEmergencyContacts) {
                         com.silverlink.app.feature.falldetection.EmergencyContactScreen(
-                            onBack = { showContacts = false }
+                            onBack = { showEmergencyContacts = false }
                         )
                     } else {
                         com.silverlink.app.feature.falldetection.FallDetectionScreen(
-                            onNavigateToContacts = { showContacts = true }
+                            onNavigateToContacts = { showEmergencyContacts = true }
                         )
                     }
                 }

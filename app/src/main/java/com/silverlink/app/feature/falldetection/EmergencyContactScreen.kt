@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -99,18 +100,19 @@ fun EmergencyContactScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddDialog = true },
-                containerColor = Color(0xFF1976D2),
-                contentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
                 Icon(Icons.Default.Add, contentDescription = "添加")
             }
         }
     ) { innerPadding ->
+        val isDarkTheme = isSystemInDarkTheme()
         Box(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .background(Color(0xFFF5F5F5))
+                .background(if (isDarkTheme) MaterialTheme.colorScheme.background else Color(0xFFF5F5F5))
         ) {
             if (contacts.isEmpty()) {
                 // 空状态
@@ -123,18 +125,18 @@ fun EmergencyContactScreen(
                         imageVector = Icons.Default.Person,
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
-                        tint = Color.Gray
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "暂无紧急联系人",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = "请点击右下角添加家人电话",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
@@ -182,7 +184,7 @@ fun ContactItem(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -198,8 +200,8 @@ fun ContactItem(
                 Surface(
                     modifier = Modifier.size(48.dp),
                     shape = CircleShape,
-                    color = Color(0xFFE3F2FD),
-                    contentColor = Color(0xFF1976D2)
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
@@ -222,20 +224,20 @@ fun ContactItem(
                             Text(
                                 text = "(${contact.relationship})",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF1976D2)
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                         if (contact.isPrimary) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
-                                color = Color(0xFFE8F5E9),
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(
                                     text = "首选",
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF2E7D32)
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
                         }
@@ -246,13 +248,13 @@ fun ContactItem(
                             imageVector = Icons.Default.Phone,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
-                            tint = Color.Gray
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = contact.phone,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -262,7 +264,7 @@ fun ContactItem(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "删除",
-                    tint = Color.Gray
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

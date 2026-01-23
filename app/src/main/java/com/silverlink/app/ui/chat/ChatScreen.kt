@@ -93,6 +93,12 @@ import java.util.Locale
 fun ChatScreen(
     modifier: Modifier = Modifier,
     onNavigateToGallery: () -> Unit = {},
+    onNavigateToMedicationAdd: () -> Unit = {},
+    onNavigateToMedicationFind: () -> Unit = {},
+    onNavigateToMemoryQuiz: () -> Unit = {},
+    onNavigateToMoodAnalysis: (String) -> Unit = {},
+    onNavigateToSafetySettings: () -> Unit = {},
+    onNavigateToContacts: () -> Unit = {},
     viewModel: ChatViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -191,12 +197,52 @@ fun ChatScreen(
         }
     }
     
-    // 监听照片意图 - 检测到后导航到记忆相册
-    val photoIntent by viewModel.photoIntent.collectAsState()
-    LaunchedEffect(photoIntent) {
-        if (photoIntent !is ChatViewModel.PhotoIntent.None) {
-            onNavigateToGallery()
-            viewModel.clearPhotoIntent()
+    // 监听语音命令意图 - 检测到后执行对应导航
+    val voiceCommandIntent by viewModel.voiceCommandIntent.collectAsState()
+    LaunchedEffect(voiceCommandIntent) {
+        when (val intent = voiceCommandIntent) {
+            is ChatViewModel.VoiceCommandIntent.None -> { /* 不处理 */ }
+            is ChatViewModel.VoiceCommandIntent.OpenGallery -> {
+                onNavigateToGallery()
+                viewModel.clearVoiceCommandIntent()
+            }
+            is ChatViewModel.VoiceCommandIntent.SearchPhotos -> {
+                onNavigateToGallery()
+                viewModel.clearVoiceCommandIntent()
+            }
+            is ChatViewModel.VoiceCommandIntent.OpenMedicationAdd -> {
+                onNavigateToMedicationAdd()
+                viewModel.clearVoiceCommandIntent()
+            }
+            is ChatViewModel.VoiceCommandIntent.OpenMedicationFind -> {
+                // 直接打开相机拍照找药
+                if (hasCameraPermission) {
+                    showPillCameraScreen = true
+                } else {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
+                viewModel.clearVoiceCommandIntent()
+            }
+            is ChatViewModel.VoiceCommandIntent.OpenMemoryQuiz -> {
+                onNavigateToMemoryQuiz()
+                viewModel.clearVoiceCommandIntent()
+            }
+            is ChatViewModel.VoiceCommandIntent.OpenMoodAnalysis -> {
+                onNavigateToMoodAnalysis(intent.period)
+                viewModel.clearVoiceCommandIntent()
+            }
+            is ChatViewModel.VoiceCommandIntent.OpenSafetySettings -> {
+                onNavigateToSafetySettings()
+                viewModel.clearVoiceCommandIntent()
+            }
+            is ChatViewModel.VoiceCommandIntent.OpenContacts -> {
+                onNavigateToContacts()
+                viewModel.clearVoiceCommandIntent()
+            }
+            // 设置类和联系人添加类命令已在 ViewModel 中直接处理，无需导航
+            else -> { 
+                viewModel.clearVoiceCommandIntent()
+            }
         }
     }
 
