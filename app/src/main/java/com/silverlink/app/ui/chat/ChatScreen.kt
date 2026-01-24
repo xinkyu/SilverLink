@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -110,10 +111,13 @@ fun ChatScreen(
     val voiceState by viewModel.voiceState.collectAsState()
     val currentEmotion by viewModel.currentEmotion.collectAsState()
     val ttsState by viewModel.ttsState.collectAsState()
+    val conversationState by viewModel.conversationState.collectAsState()
+    val partialTranscript by viewModel.partialTranscript.collectAsState()
     val conversations by viewModel.conversations.collectAsState()
     val currentConversationId by viewModel.currentConversationId.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
+    var showCallScreen by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     
     // 会话列表底部弹窗状态
@@ -181,6 +185,12 @@ fun ChatScreen(
         if (voiceState is VoiceState.Error) {
             Toast.makeText(context, (voiceState as VoiceState.Error).message, Toast.LENGTH_SHORT).show()
             viewModel.resetVoiceState()
+        }
+    }
+
+    LaunchedEffect(showCallScreen) {
+        if (!showCallScreen) {
+            viewModel.stopRealtimeConversation()
         }
     }
 
@@ -268,6 +278,13 @@ fun ChatScreen(
                         modifier = Modifier.padding(end = 8.dp)
                     )
                 }
+                IconButton(onClick = { showCallScreen = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.Call,
+                        contentDescription = "实时通话",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
                 // 找药按钮 - 拍照识别药品
                 IconButton(onClick = { 
                     if (hasCameraPermission) {
@@ -300,53 +317,84 @@ fun ChatScreen(
                 }
             }
         )
-        // Chat History
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            state = listState,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(messages) { message ->
-                ChatBubble(message)
-            }
-            if (isLoading) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        if (showCallScreen) {
+            RealtimeCallScreen(
+                assistantName = assistantName,
+                conversationState = conversationState,
+                partialTranscript = partialTranscript,
+                onEndCall = { showCallScreen = false },
+                onStartCall = {
+                    if (hasAudioPermission) {
+                        viewModel.startRealtimeConversation()
+                    } else {
+                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            )
+        } else {
+            // Chat History
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (partialTranscript.isNotBlank()) {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "正在听：$partialTranscript",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                items(messages) { message ->
+                    ChatBubble(message)
+                }
+                if (isLoading) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             }
-        }
 
-        // Input Area
-        ChatInputArea(
-            text = inputText,
-            voiceState = voiceState,
-            onTextChanged = { inputText = it },
-            onSendClick = {
-                if (inputText.isNotBlank()) {
-                    viewModel.sendMessage(inputText)
-                    inputText = ""
-                    keyboardController?.hide()
+            // Input Area
+            ChatInputArea(
+                text = inputText,
+                voiceState = voiceState,
+                onTextChanged = { inputText = it },
+                onSendClick = {
+                    if (inputText.isNotBlank()) {
+                        viewModel.sendMessage(inputText)
+                        inputText = ""
+                        keyboardController?.hide()
+                    }
+                },
+                onVoiceStart = {
+                    if (hasAudioPermission) {
+                        viewModel.startRecording()
+                    } else {
+                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+                onVoiceEnd = {
+                    viewModel.stopRecordingAndRecognize()
                 }
-            },
-            onVoiceStart = {
-                if (hasAudioPermission) {
-                    viewModel.startRecording()
-                } else {
-                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            },
-            onVoiceEnd = {
-                viewModel.stopRecordingAndRecognize()
-            }
-        )
+            )
+        }
     }
     
     // 历史会话列表底部弹窗
@@ -560,6 +608,7 @@ fun ChatInputArea(
             }
         }
     }
+
 }
 
 /**

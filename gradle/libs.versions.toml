@@ -1,6 +1,6 @@
 [versions]
 agp = "8.6.0"
-kotlin = "2.0.0"
+kotlin = "2.2.21"
 coreKtx = "1.13.1"
 junit = "4.13.2"
 junitVersion = "1.2.1"
@@ -10,9 +10,10 @@ activityCompose = "1.9.1"
 composeBom = "2024.06.00"
 retrofit = "2.11.0"
 okhttp = "4.12.0"
-room = "2.6.1"
-ksp = "2.0.0-1.0.22"
+room = "2.8.4"
+ksp = "2.2.21-2.0.4"
 workmanager = "2.9.0"
+androidVad = "2.0.10"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -46,6 +47,9 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 
 # WorkManager
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }
+
+# VAD
+android-vad-webrtc = { group = "com.github.gkonovalov.android-vad", name = "webrtc", version.ref = "androidVad" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

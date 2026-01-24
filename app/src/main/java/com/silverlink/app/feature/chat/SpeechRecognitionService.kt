@@ -57,10 +57,81 @@ class SpeechRecognitionService {
         }
     }
 
+    suspend fun recognizePcm(audioBytes: ByteArray): Result<SpeechResult> {
+        return try {
+            if (audioBytes.isEmpty()) {
+                return Result.failure(Exception("音频数据为空"))
+            }
+            val wavBytes = pcmToWav(audioBytes)
+            val base64Audio = Base64.encodeToString(wavBytes, Base64.NO_WRAP)
+            val textResult = transcribeAudio(base64Audio, "wav")
+            if (textResult.isFailure) {
+                return Result.failure(textResult.exceptionOrNull() ?: Exception("语音识别失败"))
+            }
+            val text = textResult.getOrThrow()
+            val emotion = analyzeEmotion(base64Audio, text, "wav")
+            Result.success(SpeechResult(text = text, emotion = emotion))
+        } catch (e: Exception) {
+            Result.failure(Exception("语音识别失败: ${e.message}"))
+        }
+    }
+
+    private fun pcmToWav(
+        pcmData: ByteArray,
+        sampleRate: Int = 16000,
+        channels: Int = 1,
+        bitsPerSample: Int = 16
+    ): ByteArray {
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        val totalDataLen = pcmData.size + 36
+        val totalLen = pcmData.size + 44
+        val header = ByteArray(44)
+
+        header[0] = 'R'.code.toByte()
+        header[1] = 'I'.code.toByte()
+        header[2] = 'F'.code.toByte()
+        header[3] = 'F'.code.toByte()
+        writeInt(header, 4, totalDataLen)
+        header[8] = 'W'.code.toByte()
+        header[9] = 'A'.code.toByte()
+        header[10] = 'V'.code.toByte()
+        header[11] = 'E'.code.toByte()
+        header[12] = 'f'.code.toByte()
+        header[13] = 'm'.code.toByte()
+        header[14] = 't'.code.toByte()
+        header[15] = ' '.code.toByte()
+        writeInt(header, 16, 16)
+        writeShort(header, 20, 1)
+        writeShort(header, 22, channels.toShort())
+        writeInt(header, 24, sampleRate)
+        writeInt(header, 28, byteRate)
+        writeShort(header, 32, (channels * bitsPerSample / 8).toShort())
+        writeShort(header, 34, bitsPerSample.toShort())
+        header[36] = 'd'.code.toByte()
+        header[37] = 'a'.code.toByte()
+        header[38] = 't'.code.toByte()
+        header[39] = 'a'.code.toByte()
+        writeInt(header, 40, pcmData.size)
+
+        return header + pcmData
+    }
+
+    private fun writeInt(data: ByteArray, offset: Int, value: Int) {
+        data[offset] = (value and 0xFF).toByte()
+        data[offset + 1] = ((value shr 8) and 0xFF).toByte()
+        data[offset + 2] = ((value shr 16) and 0xFF).toByte()
+        data[offset + 3] = ((value shr 24) and 0xFF).toByte()
+    }
+
+    private fun writeShort(data: ByteArray, offset: Int, value: Short) {
+        data[offset] = (value.toInt() and 0xFF).toByte()
+        data[offset + 1] = ((value.toInt() shr 8) and 0xFF).toByte()
+    }
+
     /**
      * 语音转文字
      */
-    private suspend fun transcribeAudio(base64Audio: String): Result<String> {
+    private suspend fun transcribeAudio(base64Audio: String, format: String = "m4a"): Result<String> {
         val request = QwenAsrRequest(
             model = "qwen2-audio-instruct",
             input = AsrInput(
@@ -68,7 +139,7 @@ class SpeechRecognitionService {
                     AsrMessage(
                         role = "user",
                         content = listOf(
-                            AsrContentItem.audio(base64Audio, "m4a"),
+                            AsrContentItem.audio(base64Audio, format),
                             AsrContentItem.text("请将这段语音转换为文字，只输出转换后的文字内容，不要添加任何其他说明。")
                         )
                     )
@@ -90,7 +161,7 @@ class SpeechRecognitionService {
      * 分析语音情绪
      * 使用 Qwen-Audio 分析语音中的情感
      */
-    private suspend fun analyzeEmotion(base64Audio: String, transcribedText: String): Emotion {
+    private suspend fun analyzeEmotion(base64Audio: String, transcribedText: String, format: String = "m4a"): Emotion {
         return try {
             val request = QwenAsrRequest(
                 model = "qwen2-audio-instruct",
@@ -99,7 +170,7 @@ class SpeechRecognitionService {
                         AsrMessage(
                             role = "user",
                             content = listOf(
-                                AsrContentItem.audio(base64Audio, "m4a"),
+                                AsrContentItem.audio(base64Audio, format),
                                 AsrContentItem.text("""
                                     请分析这段语音中说话人的情绪状态。
                                     只回答以下情绪之一: HAPPY, SAD, ANGRY, ANXIOUS, NEUTRAL

@@ -41,10 +41,10 @@ class TextToSpeechService {
         private const val WS_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
         // 复刻音色使用 cosyvoice-v3-plus 模型（支持方言指令）
         private const val MODEL_CLONED = "cosyvoice-v3-plus"
-        // 系统音色使用 cosyvoice-v1 模型（兼容 longxiaochun 等预置音色）
-        private const val MODEL_SYSTEM = "cosyvoice-v1"
+        // 系统音色使用 cosyvoice-v2 模型
+        private const val MODEL_SYSTEM = "cosyvoice-v2"
         // 默认系统音色（当没有复刻音色时使用）
-        private const val DEFAULT_VOICE = "longxiaochun"
+        private const val DEFAULT_VOICE = "longanqin"
         private const val FORMAT = "mp3"
         private const val SAMPLE_RATE = 22050
     }
@@ -75,7 +75,7 @@ class TextToSpeechService {
     
     /**
      * 获取当前应使用的模型
-     * 复刻音色需要 cosyvoice-v3-plus，系统音色使用 cosyvoice-v1
+     * 复刻音色需要 cosyvoice-v3-plus，系统音色使用 cosyvoice-v2
      */
     private fun getCurrentModel(): String {
         return if (isUsingClonedVoice()) MODEL_CLONED else MODEL_SYSTEM
