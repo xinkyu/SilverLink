@@ -10,6 +10,21 @@
 - 全双工与打断：AI 正在播报时检测到用户开口，立即停止 TTS 播放并进入监听。
 - 状态机：Idle / Listening / Processing / Speaking / Interrupted / Error。
 - 低延迟：建议引入流式 ASR/TTS，优先播放第一句，减少等待感。
+- **回声消除 (AEC)**：通过共享 Audio Session ID 和软件算法，防止 AI 语音被误识别为用户输入。
+
+## 回声消除方案实现 (Echo Cancellation)
+
+为了解决 AI 播放语音时被麦克风重新采集导致“自己对话自己”的问题，系统采取了硬件+软件双重保障：
+
+### 1. 硬件级回声消除 (Hardware AEC)
+- **共享 Audio Session**：`AudioRecord`（录音）和 `AudioTrack`（播放）共享同一个 `audioSessionId`。
+- **PcmAudioPlayer**：弃用 `MediaPlayer`，使用基于 `AudioTrack` 的自定义播放器 `PcmAudioPlayer`，支持显式设置 Session ID。
+- **系统支持**：通过共享 Session ID，Android 系统的 `AcousticEchoCanceler` 能够准确识别设备输出的音频并从输入信号中消除。
+
+### 2. 软件级过滤优化
+- **高阈值打断**：在 AI 播放期间，将 VAD 的打断阈值 (`bargeInRmsThreshold`) 提高，避免低音量的回声触发打断。
+- **连续帧确认**：要求连续多帧（如 3 帧）检测到有效语音才触发打断，过滤瞬态噪声。
+- **播放冷却期**：AI 开始播放的前 500ms 内禁用打断检测，防止播放初期的瞬间高音量造成误触发。
 
 ## 流式 ASR 方案（Qwen3-ASR-Flash-Realtime）
 
@@ -45,7 +60,7 @@
 ## 打断逻辑流程 (文字流程图)
 
 1) VAD 监听中，AI 处于 Speaking。
-2) VAD 触发 speechStart。
+2) 用户打断，触发 VAD speechStart（需满足高 RMS 阈值与连续帧要求）。
 3) 进入 Interrupted：立即 stop 播放器，取消当前 TTS 播放队列。
 4) 切换状态到 Listening，启动 ASR 缓冲与流式上送。
 5) VAD 触发 speechEnd，进入 Processing。

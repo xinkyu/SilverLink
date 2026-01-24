@@ -10,7 +10,7 @@
 
 ## 🎯 核心功能
 
-- **AI 陪伴对话**：按住说话 - 语音识别 - 智能回复
+- **AI 陪伴对话**：支持按住说话与实时全双工对话模式
 - **AI 视觉识别**：拍照识别药品名称、剂量与服药时间
 - **AI 用药核对**：实时相机预览，稳住画面自动核对药品名称、剂量与服药时间
 - **智能用药提醒**：多时段提醒、全屏提示、每日重置
@@ -25,6 +25,7 @@
 ## 📚 功能文档 (Feature Documentation)
 
 - [🤖 聊天与 AI 陪伴 (Chat & AI Companion)](docs/features/chat_companion.md)
+- [📞 实时对话模式 (Real-time Conversation)](docs/features/realtime_conversation_mode.md)
 - [🛡️ 安全与跌倒检测 (Safety & Fall Detection)](docs/features/safety_alert.md)
 - [📍 位置追踪 (Location Tracking)](docs/features/location_tracking.md)
 - [📷 记忆时光机 (Memory Time Machine)](docs/features/memory_time_machine.md)
@@ -49,6 +50,7 @@
 - **情绪陪伴**：对话文本自动识别情绪（AI 优先，关键词兜底），驱动情绪徽章与语气响应。
 - **安全与关怀**：系统提示包含“身体不适建议就医/联系家人”“识别诈骗风险提醒”等安全策略。
 - **会话管理**：支持新建/切换/删除会话，自动生成会话标题并持久化本地聊天记录。
+- **实时对话模式**：模拟打电话体验，支持双向实时交流。具备 VAD 自动检测、智能打断与回声消除功能，提供更自然的陪伴体验。
 
 ### 3) 智能用药管理与提醒（老人端）
 
