@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="true" />
+    <uses-feature android:name="android.hardware.sensor.heartrate" android:required="false" />
+
+    <application
+        android:name=".WatchApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SilverLinkWear">
+
+        <activity
+            android:name=".WatchMainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SilverLinkWear">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ui.FallAlertActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SilverLinkWear"
+            android:showOnLockScreen="true"
+            android:launchMode="singleTop" />
+
+        <activity
+            android:name=".ui.MedicationAlertActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SilverLinkWear"
+            android:showOnLockScreen="true"
+            android:launchMode="singleTop" />
+
+        <service
+            android:name=".service.WatchFallDetectionService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <service
+            android:name=".service.WatchHealthMonitorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <receiver
+            android:name=".service.MedicationAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".service.BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

@@ -14,6 +14,7 @@ room = "2.8.4"
 ksp = "2.2.21-2.0.4"
 workmanager = "2.9.0"
 androidVad = "2.0.10"
+kotlinxSerializationJson = "1.6.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -51,8 +52,12 @@ androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", ve
 # VAD
 android-vad-webrtc = { group = "com.github.gkonovalov.android-vad", name = "webrtc", version.ref = "androidVad" }
 
+# Serialization
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

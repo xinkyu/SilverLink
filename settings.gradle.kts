@@ -22,3 +22,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "SilverLink"
 include(":app")
+include(":shared")
+include(":wear")
+include(":oppo-sdk-bridge")
