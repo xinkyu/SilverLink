@@ -44,3 +44,12 @@ build_log*.txt
 **/node_modules/
 
 build_output.txt
+docs/银龄守护 - 第十九届全国大学生软件创新大赛-项目计划书1.0.0.pdf
+docs/CLOUD_DEPLOYMENT_GUIDE.md
+
+# Claude Code temp files
+tmpclaude-*
+nul
+
+# Competition assets (not source)
+支持清单.jpg
