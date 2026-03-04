@@ -17,6 +17,7 @@ import com.silverlink.app.feature.chat.AudioPlayerHelper
 import com.silverlink.app.feature.chat.AudioRecorder
 import com.silverlink.app.feature.chat.SpeechRecognitionService
 import com.silverlink.app.feature.chat.TextToSpeechService
+import com.silverlink.app.feature.emotion.EmotionRecognitionService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -103,7 +104,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var isCreatingConversation = false
 
     private val audioRecorder = AudioRecorder(application)
-    private val speechService = SpeechRecognitionService()
+    private val speechService = SpeechRecognitionService(application)
     private val ttsService = TextToSpeechService()
     private val audioPlayer = AudioPlayerHelper(application)
     private var currentAudioFile: String? = null
@@ -345,20 +346,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 根据文字输入检测情绪 (使用 AI 分析)
+     * 根据文字输入检测情绪 (使用本地 ONNX 模型)
      * 同时保存到本地历史和上传到云端
      */
     private fun detectEmotionFromText(text: String) {
         viewModelScope.launch {
             try {
-                val emotion = analyzeTextEmotionWithAI(text)
+                val emotionService = EmotionRecognitionService.getInstance(getApplication())
+                val emotion = emotionService.analyzeTextEmotion(text)
                 _currentEmotion.value = emotion
-                Log.d(TAG, "AI emotion detected: ${emotion.name} from: $text")
-                
+                Log.d(TAG, "ONNX text emotion detected: ${emotion.name} from: $text")
+
                 // 保存情绪记录到本地
                 saveMoodLog(emotion, text)
             } catch (e: Exception) {
-                Log.e(TAG, "AI emotion analysis failed, using fallback", e)
+                Log.e(TAG, "ONNX text emotion analysis failed, using fallback", e)
                 // 失败时使用关键词匹配作为备用
                 val fallbackEmotion = guessEmotionFromKeywords(text)
                 _currentEmotion.value = fallbackEmotion
@@ -395,27 +397,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save mood log", e)
         }
-    }
-
-    /**
-     * 使用 Qwen AI 分析文字情绪
-     */
-    private suspend fun analyzeTextEmotionWithAI(text: String): Emotion {
-        val request = QwenRequest(
-            input = Input(
-                messages = listOf(
-                    Message("system", "你是一个情绪分析助手。分析用户输入的情绪，只回答以下情绪之一：HAPPY, SAD, ANGRY, ANXIOUS, NEUTRAL。不要解释，只输出一个情绪词。"),
-                    Message("user", text)
-                )
-            )
-        )
-        
-        val response = RetrofitClient.api.chat(request)
-        val emotionLabel = response.output.choices?.firstOrNull()?.message?.content 
-            ?: response.output.text 
-            ?: "NEUTRAL"
-        
-        return Emotion.fromLabel(emotionLabel.trim())
     }
 
     /**

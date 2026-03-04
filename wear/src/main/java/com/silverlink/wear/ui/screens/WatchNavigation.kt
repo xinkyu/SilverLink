@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silverlink.wear.WatchApp
 
 enum class WatchScreen {
     HOME, HEALTH, SOS, MEDICATION, SLEEP, HEART, SETTINGS
@@ -40,6 +41,9 @@ fun WatchNavigation() {
 
 @Composable
 fun WatchHomeScreen(onNavigate: (WatchScreen) -> Unit) {
+    val prefs = remember { WatchApp.instance.watchPreferences }
+    val heartRate = prefs.heartRate
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -52,7 +56,7 @@ fun WatchHomeScreen(onNavigate: (WatchScreen) -> Unit) {
         ) {
             // Heart rate display
             Text(
-                text = "72",
+                text = if (heartRate > 0) "$heartRate" else "--",
                 fontSize = 48.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFF49007)

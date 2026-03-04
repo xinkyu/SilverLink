@@ -16,8 +16,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silverlink.wear.WatchApp
 
 data class WatchMedicationItem(
+    val id: Int,
     val name: String,
     val dosage: String,
     val time: String,
@@ -26,12 +28,22 @@ data class WatchMedicationItem(
 
 @Composable
 fun MedicationScreen(onBack: () -> Unit) {
+    val prefs = remember { WatchApp.instance.watchPreferences }
+    val storedMedications = prefs.getMedications()
+
     val medications = remember {
-        mutableStateListOf(
-            WatchMedicationItem("降压药", "1片", "08:00"),
-            WatchMedicationItem("降糖药", "2片", "12:00"),
-            WatchMedicationItem("安眠药", "1片", "21:00")
-        )
+        val items = storedMedications.flatMap { med ->
+            med.times.map { time ->
+                WatchMedicationItem(
+                    id = med.id,
+                    name = med.name,
+                    dosage = med.dosage,
+                    time = time,
+                    isTaken = med.isTakenToday
+                )
+            }
+        }
+        mutableStateListOf(*items.toTypedArray())
     }
 
     Box(
@@ -54,18 +66,28 @@ fun MedicationScreen(onBack: () -> Unit) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(medications.size) { index ->
-                    val med = medications[index]
-                    MedicationCard(
-                        medication = med,
-                        onConfirm = {
-                            medications[index] = med.copy(isTaken = true)
-                        }
-                    )
+            if (medications.isEmpty()) {
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "暂无用药记录",
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+                Spacer(modifier = Modifier.weight(1f))
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(medications.size) { index ->
+                        val med = medications[index]
+                        MedicationCard(
+                            medication = med,
+                            onConfirm = {
+                                medications[index] = med.copy(isTaken = true)
+                            }
+                        )
+                    }
                 }
             }
 

@@ -62,6 +62,9 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    androidResources {
+        noCompress += listOf("onnx")
+    }
 }
 
 dependencies {
@@ -114,6 +117,9 @@ dependencies {
     
     // Google Play Services Location
     implementation("com.google.android.gms:play-services-location:21.0.1")
+
+    // ONNX Runtime for on-device emotion recognition
+    implementation(libs.onnxruntime.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

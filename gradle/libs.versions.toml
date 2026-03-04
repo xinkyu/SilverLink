@@ -15,6 +15,7 @@ ksp = "2.0.0-1.0.22"
 workmanager = "2.9.0"
 androidVad = "2.0.10"
 kotlinxSerializationJson = "1.6.0"
+onnxruntime = "1.17.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,6 +55,9 @@ android-vad-webrtc = { group = "com.github.gkonovalov.android-vad", name = "webr
 
 # Serialization
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+
+# ONNX Runtime
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

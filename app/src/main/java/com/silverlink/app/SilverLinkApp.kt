@@ -1,14 +1,19 @@
 package com.silverlink.app
 
 import android.app.Application
+import android.util.Log
 import androidx.room.Room
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.silverlink.app.data.local.AppDatabase
+import com.silverlink.app.feature.emotion.EmotionRecognitionService
 import com.silverlink.app.feature.memory.MemorySyncService
 import com.silverlink.app.feature.reminder.DailyResetWorker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
@@ -29,6 +34,16 @@ class SilverLinkApp : Application() {
 
         // 安排记忆照片后台同步
         MemorySyncService.schedule(this)
+
+        // 后台初始化 ONNX 情绪识别模型
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                EmotionRecognitionService.getInstance(this@SilverLinkApp).initialize()
+                Log.d("SilverLinkApp", "Emotion recognition models loaded")
+            } catch (e: Exception) {
+                Log.e("SilverLinkApp", "Failed to load emotion models", e)
+            }
+        }
     }
 
     /**

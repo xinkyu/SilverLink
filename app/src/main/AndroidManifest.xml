@@ -121,6 +121,13 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- Watch Connection Service -->
+        <service
+            android:name=".feature.watch.WatchConnectionService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
     </application>
 
 </manifest>

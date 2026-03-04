@@ -28,13 +28,18 @@ enum class Emotion(val displayName: String, val promptHint: String) {
     companion object {
         /**
          * 从情感标签解析情绪
+         * 支持中英文标签，包括 ONNX 模型输出的标签
          */
         fun fromLabel(label: String): Emotion {
             return when (label.uppercase().trim()) {
-                "HAPPY", "JOY", "EXCITED", "开心", "高兴", "喜悦" -> HAPPY
-                "SAD", "UNHAPPY", "DEPRESSED", "难过", "伤心", "沮丧" -> SAD
-                "ANGRY", "FRUSTRATED", "ANNOYED", "生气", "愤怒", "烦躁" -> ANGRY
-                "ANXIOUS", "WORRIED", "NERVOUS", "FEAR", "焦虑", "担心", "紧张", "害怕" -> ANXIOUS
+                "HAPPY", "JOY", "EXCITED", "HAPPINESS", "SURPRISE",
+                "开心", "高兴", "喜悦" -> HAPPY
+                "SAD", "UNHAPPY", "DEPRESSED", "SADNESS",
+                "难过", "伤心", "沮丧" -> SAD
+                "ANGRY", "FRUSTRATED", "ANNOYED", "ANGER", "DISGUST",
+                "生气", "愤怒", "烦躁" -> ANGRY
+                "ANXIOUS", "WORRIED", "NERVOUS", "FEAR",
+                "焦虑", "担心", "紧张", "害怕" -> ANXIOUS
                 else -> NEUTRAL
             }
         }

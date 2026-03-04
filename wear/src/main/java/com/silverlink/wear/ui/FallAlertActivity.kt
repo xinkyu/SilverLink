@@ -19,41 +19,60 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silverlink.wear.service.SOSHelper
 import com.silverlink.wear.ui.theme.WatchTheme
 
 class FallAlertActivity : ComponentActivity() {
+
+    private var countdownTimer: CountDownTimer? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             WatchTheme {
                 FallAlertScreen(
-                    onCancel = { finish() },
+                    onCancel = {
+                        countdownTimer?.cancel()
+                        finish()
+                    },
+                    onTimerCreated = { timer -> countdownTimer = timer },
                     onConfirmFall = {
-                        // TODO: Trigger SOS via NearbyBridge
+                        SOSHelper.triggerSOS(
+                            this@FallAlertActivity,
+                            SOSHelper.SOSTriggerSource.FALL_DETECTION
+                        )
                         finish()
                     }
                 )
             }
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        countdownTimer?.cancel()
+    }
 }
 
 @Composable
 private fun FallAlertScreen(
     onCancel: () -> Unit,
+    onTimerCreated: (CountDownTimer) -> Unit,
     onConfirmFall: () -> Unit
 ) {
     var countdown by remember { mutableIntStateOf(30) }
 
     LaunchedEffect(Unit) {
-        object : CountDownTimer(30000, 1000) {
+        val timer = object : CountDownTimer(30000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 countdown = (millisUntilFinished / 1000).toInt()
             }
             override fun onFinish() {
                 onConfirmFall()
             }
-        }.start()
+        }
+        onTimerCreated(timer)
+        timer.start()
     }
 
     val pulseAnim = rememberInfiniteTransition(label = "alert_pulse")

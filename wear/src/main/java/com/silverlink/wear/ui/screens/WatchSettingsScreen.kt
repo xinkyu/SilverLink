@@ -10,14 +10,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silverlink.wear.WatchApp
+import com.silverlink.wear.service.WatchFallDetectionService
 
 @Composable
 fun WatchSettingsScreen(onBack: () -> Unit) {
-    var fallDetectionEnabled by remember { mutableStateOf(true) }
-    var highSensitivity by remember { mutableStateOf(false) }
+    val prefs = remember { WatchApp.instance.watchPreferences }
+    val context = LocalContext.current
+    var fallDetectionEnabled by remember { mutableStateOf(prefs.fallDetectionEnabled) }
+    var highSensitivity by remember { mutableStateOf(prefs.highSensitivity) }
 
     Box(
         modifier = Modifier
@@ -43,7 +48,15 @@ fun WatchSettingsScreen(onBack: () -> Unit) {
             SettingsRow(
                 label = "跌倒检测",
                 checked = fallDetectionEnabled,
-                onCheckedChange = { fallDetectionEnabled = it }
+                onCheckedChange = {
+                    fallDetectionEnabled = it
+                    prefs.fallDetectionEnabled = it
+                    if (it) {
+                        WatchFallDetectionService.start(context)
+                    } else {
+                        WatchFallDetectionService.stop(context)
+                    }
+                }
             )
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -52,7 +65,10 @@ fun WatchSettingsScreen(onBack: () -> Unit) {
             SettingsRow(
                 label = "高灵敏度",
                 checked = highSensitivity,
-                onCheckedChange = { highSensitivity = it }
+                onCheckedChange = {
+                    highSensitivity = it
+                    prefs.highSensitivity = it
+                }
             )
 
             Spacer(modifier = Modifier.weight(1f))

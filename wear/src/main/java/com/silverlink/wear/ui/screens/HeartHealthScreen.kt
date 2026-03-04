@@ -12,9 +12,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silverlink.wear.WatchApp
 
 @Composable
 fun HeartHealthScreen(onBack: () -> Unit) {
+    val prefs = remember { WatchApp.instance.watchPreferences }
+    val currentHR = prefs.heartRate
+    val minHR = prefs.minHeartRate
+    val maxHR = prefs.maxHeartRate
+    val heartStatus = when {
+        currentHR == 0 -> "暂无数据"
+        currentHR < 60 -> "心率偏低"
+        currentHR > 100 -> "心率偏高"
+        else -> "心率正常"
+    }
+    val statusColor = when {
+        currentHR == 0 -> Color.Gray
+        currentHR in 60..100 -> Color(0xFF4CAF50)
+        else -> Color(0xFFEF5350)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -45,7 +62,7 @@ fun HeartHealthScreen(onBack: () -> Unit) {
 
             // Current heart rate
             Text(
-                text = "72",
+                text = if (currentHR > 0) "$currentHR" else "--",
                 fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFF49007)
@@ -64,11 +81,21 @@ fun HeartHealthScreen(onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("58", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+                    Text(
+                        text = if (minHR > 0) "$minHR" else "--",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4CAF50)
+                    )
                     Text("最低", fontSize = 10.sp, color = Color.Gray)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("92", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF5350))
+                    Text(
+                        text = if (maxHR > 0) "$maxHR" else "--",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFEF5350)
+                    )
                     Text("最高", fontSize = 10.sp, color = Color.Gray)
                 }
             }
@@ -76,9 +103,9 @@ fun HeartHealthScreen(onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "心率正常",
+                text = heartStatus,
                 fontSize = 12.sp,
-                color = Color(0xFF4CAF50)
+                color = statusColor
             )
 
             Spacer(modifier = Modifier.height(8.dp))

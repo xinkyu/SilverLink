@@ -15,9 +15,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silverlink.wear.WatchApp
+import java.text.NumberFormat
 
 @Composable
 fun HealthDashboard(onBack: () -> Unit) {
+    val prefs = remember { WatchApp.instance.watchPreferences }
+    val heartRate = prefs.heartRate
+    val steps = prefs.steps
+    val bloodOxygen = prefs.bloodOxygen
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -41,7 +48,7 @@ fun HealthDashboard(onBack: () -> Unit) {
             HealthMetricRow(
                 icon = Icons.Filled.Favorite,
                 label = "心率",
-                value = "72",
+                value = if (heartRate > 0) "$heartRate" else "--",
                 unit = "BPM",
                 color = Color(0xFFEF5350)
             )
@@ -52,7 +59,7 @@ fun HealthDashboard(onBack: () -> Unit) {
             HealthMetricRow(
                 icon = Icons.Filled.DirectionsWalk,
                 label = "步数",
-                value = "3,482",
+                value = if (steps > 0) NumberFormat.getInstance().format(steps) else "--",
                 unit = "步",
                 color = Color(0xFF4CAF50)
             )
@@ -63,7 +70,7 @@ fun HealthDashboard(onBack: () -> Unit) {
             HealthMetricRow(
                 icon = Icons.Filled.Air,
                 label = "血氧",
-                value = "98",
+                value = if (bloodOxygen > 0) "$bloodOxygen" else "--",
                 unit = "%",
                 color = Color(0xFF2196F3)
             )

@@ -12,14 +12,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silverlink.wear.service.SOSHelper
 
 @Composable
 fun SOSScreen(onBack: () -> Unit) {
     var sosTriggered by remember { mutableStateOf(false) }
+    var contactName by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
     val pulseAnim = rememberInfiniteTransition(label = "pulse")
     val scale by pulseAnim.animateFloat(
@@ -55,7 +59,13 @@ fun SOSScreen(onBack: () -> Unit) {
                         .scale(scale)
                         .clip(CircleShape)
                         .background(Color(0xFFEF5350))
-                        .clickable { sosTriggered = true },
+                        .clickable {
+                            sosTriggered = true
+                            contactName = SOSHelper.triggerSOS(
+                                context,
+                                SOSHelper.SOSTriggerSource.MANUAL
+                            )
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -73,7 +83,11 @@ fun SOSScreen(onBack: () -> Unit) {
                 }
             } else {
                 Text(
-                    text = "正在呼叫\n紧急联系人...",
+                    text = if (contactName != null) {
+                        "正在呼叫\n$contactName..."
+                    } else {
+                        "已发送求助信号\n请设置紧急联系人"
+                    },
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFEF5350),
