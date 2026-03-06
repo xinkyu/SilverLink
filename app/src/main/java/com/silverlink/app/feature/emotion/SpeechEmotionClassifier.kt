@@ -10,7 +10,7 @@ import java.nio.FloatBuffer
 import kotlin.math.exp
 
 /**
- * Speech emotion classifier using DistilHuBERT ONNX model (8-bit quantized).
+ * Speech emotion classifier using DistilHuBERT ONNX model (FP32 full precision, from paper).
  * Classifies audio waveforms into 4 emotions:
  * anger, happiness, neutral, sadness
  */
@@ -18,11 +18,11 @@ class SpeechEmotionClassifier {
 
     companion object {
         private const val TAG = "SpeechEmotionClassifier"
-        private const val MODEL_ASSET = "models/emotion_model_mobile.onnx"
-        private const val MODEL_FILE = "emotion_model_mobile.onnx"
+        private const val MODEL_ASSET = "models/distilhubert_full.onnx"
+        private const val MODEL_FILE = "distilhubert_full.onnx"
     }
 
-    val labels = listOf("neutral", "happiness", "anger", "sadness")
+    val labels = listOf("anger", "happiness", "neutral", "sadness")
 
     private val environment = OrtEnvironment.getEnvironment()
     private var session: OrtSession? = null
