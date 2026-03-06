@@ -15,9 +15,9 @@ import com.silverlink.app.data.model.Emotion
  *   surprise → HAPPY   (merged: typically positive in elderly context)
  *
  * Speech model (4 classes → 5 app classes):
- *   anger     → ANGRY
- *   happiness → HAPPY
  *   neutral   → NEUTRAL
+ *   happiness → HAPPY
+ *   anger     → ANGRY
  *   sadness   → SAD
  *   (ANXIOUS is not produced by the speech model)
  */
@@ -50,9 +50,9 @@ object EmotionMapper {
         require(probabilities.size == 4) { "Expected 4 probabilities, got ${probabilities.size}" }
 
         val mapping = arrayOf(
-            Emotion.ANGRY,   // index 0: anger
+            Emotion.NEUTRAL, // index 0: neutral
             Emotion.HAPPY,   // index 1: happiness
-            Emotion.NEUTRAL, // index 2: neutral
+            Emotion.ANGRY,   // index 2: anger
             Emotion.SAD      // index 3: sadness
         )
 

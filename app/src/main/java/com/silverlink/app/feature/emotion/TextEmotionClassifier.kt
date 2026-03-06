@@ -5,6 +5,7 @@ import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import java.io.File
 import java.nio.LongBuffer
 import kotlin.math.exp
 
@@ -17,7 +18,8 @@ class TextEmotionClassifier {
 
     companion object {
         private const val TAG = "TextEmotionClassifier"
-        private const val MODEL_PATH = "models/emotionEnglishDistilrobertaBase.onnx"
+        private const val MODEL_ASSET = "models/emotionEnglishDistilrobertaBase.onnx"
+        private const val MODEL_FILE = "emotionEnglishDistilrobertaBase.onnx"
     }
 
     val labels = listOf("anger", "disgust", "fear", "joy", "neutral", "sadness", "surprise")
@@ -27,11 +29,24 @@ class TextEmotionClassifier {
 
     fun initialize(context: Context) {
         Log.d(TAG, "Loading text emotion model...")
-        val modelBytes = context.assets.open(MODEL_PATH).use { it.readBytes() }
+        // Copy model from assets to internal storage to avoid OOM from readBytes()
+        // OrtSession can then memory-map the file instead of loading into Java heap
+        val modelFile = File(context.filesDir, MODEL_FILE)
+        // Check if model needs to be (re)copied: missing or size changed (model updated in assets)
+        val assetSize = context.assets.open(MODEL_ASSET).use { it.available().toLong() }
+        if (!modelFile.exists() || modelFile.length() != assetSize) {
+            Log.d(TAG, "Copying model to internal storage (asset=${assetSize}, cached=${if (modelFile.exists()) modelFile.length() else "none"})...")
+            context.assets.open(MODEL_ASSET).use { input ->
+                modelFile.outputStream().use { output ->
+                    input.copyTo(output, bufferSize = 8192)
+                }
+            }
+            Log.d(TAG, "Model copied: ${modelFile.length()} bytes")
+        }
         val sessionOptions = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(2)
         }
-        session = environment.createSession(modelBytes, sessionOptions)
+        session = environment.createSession(modelFile.absolutePath, sessionOptions)
         Log.d(TAG, "Text emotion model loaded successfully")
     }
 

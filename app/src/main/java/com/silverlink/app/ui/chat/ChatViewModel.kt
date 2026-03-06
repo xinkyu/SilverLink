@@ -349,23 +349,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * 根据文字输入检测情绪 (使用本地 ONNX 模型)
      * 同时保存到本地历史和上传到云端
      */
-    private fun detectEmotionFromText(text: String) {
-        viewModelScope.launch {
-            try {
-                val emotionService = EmotionRecognitionService.getInstance(getApplication())
-                val emotion = emotionService.analyzeTextEmotion(text)
-                _currentEmotion.value = emotion
-                Log.d(TAG, "ONNX text emotion detected: ${emotion.name} from: $text")
-
-                // 保存情绪记录到本地
-                saveMoodLog(emotion, text)
-            } catch (e: Exception) {
-                Log.e(TAG, "ONNX text emotion analysis failed, using fallback", e)
-                // 失败时使用关键词匹配作为备用
-                val fallbackEmotion = guessEmotionFromKeywords(text)
-                _currentEmotion.value = fallbackEmotion
-                saveMoodLog(fallbackEmotion, text)
+    private suspend fun detectEmotionFromText(text: String) {
+        try {
+            val emotionService = EmotionRecognitionService.getInstance(getApplication())
+            // 如果未初始化（App启动时初始化失败），尝试重新初始化
+            if (!emotionService.isReady()) {
+                Log.w(TAG, "EmotionRecognitionService not initialized, attempting re-init...")
+                emotionService.initialize()
+                Log.d(TAG, "EmotionRecognitionService re-initialized successfully")
             }
+            val emotion = emotionService.analyzeTextEmotion(text)
+            _currentEmotion.value = emotion
+            Log.d(TAG, "ONNX text emotion detected: ${emotion.name} from: $text")
+
+            // 保存情绪记录到本地
+            saveMoodLog(emotion, text)
+        } catch (e: Throwable) {
+            Log.e(TAG, "ONNX text emotion analysis failed, using fallback", e)
+            // 失败时使用关键词匹配作为备用
+            val fallbackEmotion = guessEmotionFromKeywords(text)
+            _currentEmotion.value = fallbackEmotion
+            saveMoodLog(fallbackEmotion, text)
         }
     }
     
@@ -829,15 +833,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // 对文字输入也进行情绪检测
-        detectEmotionFromText(content)
+        // 对文字输入也进行情绪检测（注意：不要在这里启动独立协程，
+        // 需要等情绪检测完成后再保存消息和构建prompt）
 
         val userMessage = Message("user", content)
         val currentHistory = _messages.value
         _messages.value = currentHistory + userMessage
 
         viewModelScope.launch {
-            // 保存用户消息到数据库
+            // 先完成情绪检测（顺序执行），这样后续保存和prompt构建能使用正确的情绪
+            detectEmotionFromText(content)
+
+            // 保存用户消息到数据库（此时 _currentEmotion 已更新）
             saveMessageToDb(userMessage, _currentEmotion.value)
 
             _isLoading.value = true

@@ -15,7 +15,7 @@ ksp = "2.0.0-1.0.22"
 workmanager = "2.9.0"
 androidVad = "2.0.10"
 kotlinxSerializationJson = "1.6.0"
-onnxruntime = "1.17.0"
+onnxruntime = "1.19.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

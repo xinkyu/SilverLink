@@ -41,23 +41,42 @@ class EmotionRecognitionService private constructor(private val context: Context
     @Volatile
     private var isInitialized = false
 
+    @Volatile
+    private var isSpeechModelReady = false
+
+    /**
+     * Check if the text emotion models are initialized and ready for inference.
+     */
+    fun isReady(): Boolean = isInitialized
+
     /**
      * Initialize ONNX models and tokenizer. Call from Application.onCreate() on a background thread.
+     * Text model initialization failure is fatal; speech model failure is non-fatal (graceful degradation).
      */
     suspend fun initialize() = withContext(Dispatchers.IO) {
         if (isInitialized) return@withContext
         try {
             Log.d(TAG, "Initializing emotion recognition models...")
+            // 文本情绪模型（核心功能，失败则抛异常）
             tokenizer.initialize(context)
             textClassifier.initialize(context)
-            speechClassifier.initialize(context)
             isInitialized = true
-            Log.d(TAG, "Emotion recognition models initialized successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize emotion recognition models", e)
+            Log.d(TAG, "Text emotion model initialized successfully")
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to initialize text emotion model", e)
             throw e
         }
+
+        // 语音情绪模型（独立初始化，失败不影响文本模型）
+        try {
+            speechClassifier.initialize(context)
+            isSpeechModelReady = true
+            Log.d(TAG, "Speech emotion model initialized successfully")
+        } catch (e: Throwable) {
+            Log.w(TAG, "Speech emotion model failed to load (speech emotion will be unavailable)", e)
+        }
     }
+
 
     /**
      * Analyze emotion from Chinese text.
@@ -95,6 +114,7 @@ class EmotionRecognitionService private constructor(private val context: Context
      */
     suspend fun analyzeSpeechEmotion(audioFilePath: String): Emotion = withContext(Dispatchers.IO) {
         check(isInitialized) { "EmotionRecognitionService not initialized" }
+        check(isSpeechModelReady) { "Speech emotion model not available" }
 
         // Step 1: Preprocess audio
         val waveform = audioPreprocessor.processAudioFile(audioFilePath)

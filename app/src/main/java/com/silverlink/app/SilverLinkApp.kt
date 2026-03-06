@@ -8,6 +8,8 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.silverlink.app.data.local.AppDatabase
+import com.silverlink.app.data.local.Dialect
+import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.feature.emotion.EmotionRecognitionService
 import com.silverlink.app.feature.memory.MemorySyncService
 import com.silverlink.app.feature.reminder.DailyResetWorker
@@ -25,9 +27,10 @@ class SilverLinkApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        
+
         // Initialize Room Database using Singleton
         database = AppDatabase.getInstance(this)
+
 
         // 安排每日凌晨重置任务
         scheduleDailyReset()
@@ -40,7 +43,7 @@ class SilverLinkApp : Application() {
             try {
                 EmotionRecognitionService.getInstance(this@SilverLinkApp).initialize()
                 Log.d("SilverLinkApp", "Emotion recognition models loaded")
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e("SilverLinkApp", "Failed to load emotion models", e)
             }
         }
