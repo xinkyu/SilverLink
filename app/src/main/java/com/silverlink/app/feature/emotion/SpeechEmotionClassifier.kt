@@ -18,8 +18,8 @@ class SpeechEmotionClassifier {
 
     companion object {
         private const val TAG = "SpeechEmotionClassifier"
-        private const val MODEL_ASSET = "models/distilhubert_full.onnx"
-        private const val MODEL_FILE = "distilhubert_full.onnx"
+        private const val MODEL_ASSET = "models/distilhubert_full_quant.onnx"
+        private const val MODEL_FILE = "distilhubert_full_quant.onnx"
     }
 
     val labels = listOf("anger", "happiness", "neutral", "sadness")
