@@ -95,7 +95,7 @@ class SpeechRecognitionService(private val context: Context) {
         return try {
             val emotionService = EmotionRecognitionService.getInstance(context)
             emotionService.analyzeSpeechEmotion(audioFilePath)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "ONNX speech emotion analysis failed, using text-based guess", e)
             guessEmotionFromText(transcribedText)
         }

@@ -6,18 +6,18 @@ const app = cloud.init({
 
 /**
  * 声音复刻音频代理下载
- * 
+ *
  * 支持两种 URL 格式：
  * 1. 查询参数: /voice-audio-download?fileId=cloud://...
  * 2. 路径格式: /voice-audio-download?path=voice_cloning/familyId/filename.m4a
- * 
+ *
  * 路径格式更简洁，推荐用于第三方 API 调用（如阿里云声音复刻）
  */
 exports.main = async (event, context) => {
   try {
     const queryParams = event.queryStringParameters || {};
     const { fileId: rawFileId, path: rawPath } = queryParams;
-    
+
     const method =
       event.httpMethod ||
       (event.requestContext && event.requestContext.http
@@ -38,7 +38,7 @@ exports.main = async (event, context) => {
       }
       // 构造完整的 fileId
       // 注意: 需要知道 bucket 信息，这里从环境变量或硬编码获取
-      const envId = process.env.TCB_ENV || "silverlink-9gdqj1ne4d834dab";
+      const envId = process.env.TCB_ENV || "silverlink-3ghlz8es381befbf";
       const bucket = `7369-${envId}-1396514174`;
       fileId = `cloud://${envId}.${bucket}/${decodedPath}`;
       console.log("Using path-based fileId:", fileId);
