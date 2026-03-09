@@ -745,8 +745,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _currentEmotion.value = speechResult.emotion
                     Log.d(TAG, "Detected emotion: ${speechResult.emotion.displayName}")
                     
-                    // 自动发送识别的文字
-                    sendMessage(speechResult.text)
+                    // 自动发送识别的文字；跳过 text-only 复判，避免覆盖跨模态结果
+                    sendMessage(speechResult.text, skipTextEmotionDetection = true)
                 },
                 onFailure = { error ->
                     _voiceState.value = VoiceState.Error(error.message ?: "识别失败")
@@ -816,7 +816,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 发送消息
      */
-    fun sendMessage(content: String) {
+    fun sendMessage(content: String, skipTextEmotionDetection: Boolean = false) {
         if (content.isBlank()) return
 
         // 停止当前的 TTS 播放
@@ -841,8 +841,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _messages.value = currentHistory + userMessage
 
         viewModelScope.launch {
-            // 先完成情绪检测（顺序执行），这样后续保存和prompt构建能使用正确的情绪
-            detectEmotionFromText(content)
+            // 语音链路已完成跨模态情绪识别时，避免再用 text-only 覆盖结果。
+            if (skipTextEmotionDetection) {
+                Log.d(TAG, "Skipping text-only emotion detection; using current emotion=${_currentEmotion.value.name}")
+                saveMoodLog(_currentEmotion.value, content)
+            } else {
+                // 先完成情绪检测（顺序执行），这样后续保存和prompt构建能使用正确的情绪
+                detectEmotionFromText(content)
+            }
 
             // 保存用户消息到数据库（此时 _currentEmotion 已更新）
             saveMessageToDb(userMessage, _currentEmotion.value)

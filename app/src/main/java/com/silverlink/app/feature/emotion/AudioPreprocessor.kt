@@ -8,32 +8,26 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
- * Audio preprocessor for the DistilHuBERT speech emotion model.
- * Decodes M4A/AAC to PCM and applies the required preprocessing pipeline:
- * 1. Decode to 16kHz float PCM
- * 2. Top-threshold silence trim at 20dB
- * 3. Pre-emphasis filter: y[n] = x[n] - 0.97 * x[n-1]
- * 4. Peak normalize to 0.95
- * 5. Pad/truncate to 8 seconds (128,000 samples)
+ * Audio preprocessor for the MemoCMT cross-modal emotion model.
+ * Decodes M4A/AAC to PCM and prepares raw waveform input:
+ * 1. Decode to 16kHz float PCM mono
+ * 2. Normalize to [-1.0, 1.0]
+ * 3. Pad/truncate to 160,220 samples (~10 seconds)
  */
 class AudioPreprocessor {
 
     companion object {
         private const val TAG = "AudioPreprocessor"
         const val SAMPLE_RATE = 16000
-        const val MAX_DURATION_SECONDS = 8.0f
-        val MAX_SAMPLES = (SAMPLE_RATE * MAX_DURATION_SECONDS).toInt() // 128000
-        const val PRE_EMPHASIS_COEFF = 0.97f
-        const val PEAK_NORMALIZE_TARGET = 0.95f
-        const val TRIM_THRESHOLD_DB = 20.0f
+        const val MAX_SAMPLES = 160220 // ~10.01 seconds at 16kHz
+        private const val TRIM_TOP_DB = 25.0
     }
 
     /**
-     * Process an audio file and return a preprocessed float waveform.
+     * Process an audio file and return a float waveform for MemoCMT model input.
      */
     fun processAudioFile(filePath: String): FloatArray {
         val file = File(filePath)
@@ -50,19 +44,25 @@ class AudioPreprocessor {
             return FloatArray(MAX_SAMPLES)
         }
 
-        // 2. Top-threshold trim at 20dB below peak
-        val trimmed = trimSilence(rawPcm, TRIM_THRESHOLD_DB)
-        Log.d(TAG, "Trimmed to ${trimmed.size} samples")
+        val decodedRms = computeRms(rawPcm)
+        val decodedPeak = rawPcm.maxOf { abs(it) }
 
-        // 3. Pre-emphasis filter
-        val emphasized = applyPreEmphasis(trimmed, PRE_EMPHASIS_COEFF)
+        // 2) VAD-like trim (remove leading/trailing low-energy region)
+        val trimmed = trimSilence(rawPcm, TRIM_TOP_DB)
 
-        // 4. Peak normalize to 0.95
-        val normalized = peakNormalize(emphasized, PEAK_NORMALIZE_TARGET)
+        // 3) Peak normalization to align with notebook preprocessing
+        val normalized = normalizeByPeak(trimmed)
 
-        // 5. Pad or truncate to exactly MAX_SAMPLES
+        // 4) Pad or truncate to exactly MAX_SAMPLES
         val result = padOrTruncate(normalized, MAX_SAMPLES)
-        Log.d(TAG, "Final waveform: ${result.size} samples")
+        val finalRms = computeRms(result)
+        val finalPeak = result.maxOf { abs(it) }
+        Log.d(
+            TAG,
+            "Waveform stats: decodedLen=${rawPcm.size}, trimmedLen=${trimmed.size}, " +
+                "decodedRms=${"%.6f".format(decodedRms)}, decodedPeak=${"%.6f".format(decodedPeak)}, " +
+                "finalLen=${result.size}, finalRms=${"%.6f".format(finalRms)}, finalPeak=${"%.6f".format(finalPeak)}"
+        )
 
         return result
     }
@@ -136,16 +136,26 @@ class AudioPreprocessor {
             val outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 10000)
             if (outputBufferIndex >= 0) {
                 val outputBuffer = codec.getOutputBuffer(outputBufferIndex)!!
-                outputBuffer.order(ByteOrder.LITTLE_ENDIAN)
+                if (bufferInfo.size > 0) {
+                    // Respect codec buffer boundaries; otherwise stale bytes can corrupt waveform.
+                    outputBuffer.position(bufferInfo.offset)
+                    outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
 
-                // Convert Int16 PCM to Float32 [-1.0, 1.0]
-                val shortBuffer = outputBuffer.asShortBuffer()
-                val numSamples = shortBuffer.remaining()
-                for (i in 0 until numSamples) {
-                    val sample = shortBuffer.get()
-                    // If stereo, take only the first channel (left)
-                    if (channelCount == 1 || i % channelCount == 0) {
-                        pcmSamples.add(sample.toFloat() / 32768.0f)
+                    val pcmBytes = ByteArray(bufferInfo.size)
+                    outputBuffer.get(pcmBytes)
+
+                    val shortBuffer = ByteBuffer.wrap(pcmBytes)
+                        .order(ByteOrder.LITTLE_ENDIAN)
+                        .asShortBuffer()
+
+                    // Convert Int16 PCM to Float32 [-1.0, 1.0]
+                    val numSamples = shortBuffer.remaining()
+                    for (i in 0 until numSamples) {
+                        val sample = shortBuffer.get()
+                        // If stereo, take only the first channel (left)
+                        if (channelCount == 1 || i % channelCount == 0) {
+                            pcmSamples.add(sample.toFloat() / 32768.0f)
+                        }
                     }
                 }
 
@@ -194,59 +204,6 @@ class AudioPreprocessor {
     }
 
     /**
-     * Trim silence from the beginning and end of the signal.
-     * Removes samples below thresholdDb below the peak amplitude.
-     */
-    private fun trimSilence(samples: FloatArray, thresholdDb: Float): FloatArray {
-        if (samples.isEmpty()) return samples
-
-        val peak = samples.maxOf { abs(it) }
-        if (peak == 0f) return samples
-
-        val threshold = peak * 10f.pow(-thresholdDb / 20f)
-
-        var start = 0
-        while (start < samples.size && abs(samples[start]) < threshold) {
-            start++
-        }
-
-        var end = samples.size - 1
-        while (end > start && abs(samples[end]) < threshold) {
-            end--
-        }
-
-        return if (start >= end) {
-            samples // Don't trim to empty
-        } else {
-            samples.copyOfRange(start, end + 1)
-        }
-    }
-
-    /**
-     * Apply pre-emphasis filter: y[n] = x[n] - coeff * x[n-1]
-     */
-    private fun applyPreEmphasis(samples: FloatArray, coeff: Float): FloatArray {
-        if (samples.isEmpty()) return samples
-        val result = FloatArray(samples.size)
-        result[0] = samples[0]
-        for (i in 1 until samples.size) {
-            result[i] = samples[i] - coeff * samples[i - 1]
-        }
-        return result
-    }
-
-    /**
-     * Peak normalize to target max amplitude.
-     */
-    private fun peakNormalize(samples: FloatArray, target: Float): FloatArray {
-        if (samples.isEmpty()) return samples
-        val maxAbs = samples.maxOf { abs(it) }
-        if (maxAbs == 0f) return samples
-        val scale = target / maxAbs
-        return FloatArray(samples.size) { samples[it] * scale }
-    }
-
-    /**
      * Pad with zeros or truncate to exactly targetLength samples.
      */
     private fun padOrTruncate(samples: FloatArray, targetLength: Int): FloatArray {
@@ -259,5 +216,48 @@ class AudioPreprocessor {
                 padded
             }
         }
+    }
+
+    /**
+     * Trim leading/trailing low-energy samples, similar to librosa.effects.trim(top_db=25).
+     */
+    private fun trimSilence(samples: FloatArray, topDb: Double): FloatArray {
+        if (samples.isEmpty()) return samples
+        val peak = samples.maxOf { abs(it) }
+        if (peak <= 1e-8f) return samples
+
+        // Relative amplitude threshold from dB: amp_ratio = 10^(-db/20)
+        val threshold = peak * Math.pow(10.0, -topDb / 20.0).toFloat()
+
+        var start = 0
+        while (start < samples.size && abs(samples[start]) < threshold) {
+            start++
+        }
+
+        var end = samples.size - 1
+        while (end >= start && abs(samples[end]) < threshold) {
+            end--
+        }
+
+        return if (start > end) {
+            // Keep minimal content if everything is below threshold
+            samples
+        } else {
+            samples.copyOfRange(start, end + 1)
+        }
+    }
+
+    /** Peak normalization to [-1, 1] while preserving waveform shape. */
+    private fun normalizeByPeak(samples: FloatArray): FloatArray {
+        if (samples.isEmpty()) return samples
+        val peak = samples.maxOf { abs(it) }
+        if (peak <= 1e-8f) return samples
+        return FloatArray(samples.size) { i -> samples[i] / peak }
+    }
+
+    private fun computeRms(samples: FloatArray): Double {
+        if (samples.isEmpty()) return 0.0
+        val meanSquare = samples.fold(0.0) { acc, v -> acc + (v * v) } / samples.size
+        return sqrt(meanSquare)
     }
 }

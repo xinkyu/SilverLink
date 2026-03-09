@@ -7,13 +7,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Singleton facade for on-device emotion recognition.
+ * Singleton facade for on-device cross-modal emotion recognition.
  *
- * Text emotion pipeline:
- *   Chinese text → Qwen translation → English → RoBERTa tokenizer → DistilRoBERTa ONNX → 7 classes → mapped to Emotion
+ * Uses MemoCMT architecture (DistilBERT + DistilHuBERT with cross-attention fusion)
+ * to jointly analyze text and audio for emotion classification.
  *
- * Speech emotion pipeline:
- *   M4A audio → decode to PCM → preprocess → DistilHuBERT ONNX → 4 classes → mapped to Emotion
+ * Cross-modal pipeline:
+ *   Chinese text → Qwen translation → English → WordPiece tokenize → token IDs
+ *   Audio file → decode to PCM → 16kHz mono waveform
+ *   → MemoCMT ONNX (cross-attention fusion) → 4 classes → mapped to Emotion
+ *
+ * Text-only pipeline (no audio available):
+ *   Chinese text → Qwen translation → English → WordPiece tokenize → token IDs
+ *   + zero audio → MemoCMT ONNX → 4 classes → mapped to Emotion
+ *
+ * Speech-only pipeline (no text available):
+ *   Audio file → decode to PCM → 16kHz mono waveform
+ *   + empty text tokens → MemoCMT ONNX → 4 classes → mapped to Emotion
  */
 class EmotionRecognitionService private constructor(private val context: Context) {
 
@@ -32,112 +42,132 @@ class EmotionRecognitionService private constructor(private val context: Context
         }
     }
 
-    private val textClassifier = TextEmotionClassifier()
-    private val speechClassifier = SpeechEmotionClassifier()
-    private val tokenizer = RobertaTokenizer()
+    private val classifier = MemoCmtClassifier()
+    private val tokenizer = WordPieceTokenizer()
     private val audioPreprocessor = AudioPreprocessor()
     private val translationService = TranslationService()
+
+    private fun logTokenStats(mode: String, tokenIds: LongArray) {
+        val nonPad = tokenIds.count { it != 0L }
+        val unk = tokenIds.count { it == 100L }
+        val head = tokenIds.take(16).joinToString(prefix = "[", postfix = "]")
+        Log.d(TAG, "$mode token stats: nonPad=$nonPad, unk=$unk, head=$head")
+    }
 
     @Volatile
     private var isInitialized = false
 
-    @Volatile
-    private var isSpeechModelReady = false
-
     /**
-     * Check if the text emotion models are initialized and ready for inference.
+     * Check if the model is initialized and ready for inference.
      */
     fun isReady(): Boolean = isInitialized
 
     /**
-     * Initialize ONNX models and tokenizer. Call from Application.onCreate() on a background thread.
-     * Text model initialization failure is fatal; speech model failure is non-fatal (graceful degradation).
+     * Initialize ONNX model and tokenizer. Call from Application.onCreate() on a background thread.
      */
     suspend fun initialize() = withContext(Dispatchers.IO) {
         if (isInitialized) return@withContext
         try {
-            Log.d(TAG, "Initializing emotion recognition models...")
-            // 文本情绪模型（核心功能，失败则抛异常）
+            Log.d(TAG, "Initializing MemoCMT cross-modal emotion model...")
             tokenizer.initialize(context)
-            textClassifier.initialize(context)
+            classifier.initialize(context)
             isInitialized = true
-            Log.d(TAG, "Text emotion model initialized successfully")
+            Log.d(TAG, "MemoCMT model initialized successfully")
         } catch (e: Throwable) {
-            Log.e(TAG, "Failed to initialize text emotion model", e)
+            Log.e(TAG, "Failed to initialize MemoCMT model", e)
             throw e
-        }
-
-        // 语音情绪模型（独立初始化，失败不影响文本模型）
-        try {
-            speechClassifier.initialize(context)
-            isSpeechModelReady = true
-            Log.d(TAG, "Speech emotion model initialized successfully")
-        } catch (e: Throwable) {
-            Log.w(TAG, "Speech emotion model failed to load (speech emotion will be unavailable)", e)
         }
     }
 
+    /**
+     * Cross-modal emotion analysis: fuses text and audio for best accuracy.
+     * Pipeline: translate text → tokenize + preprocess audio → MemoCMT ONNX → Emotion
+     *
+     * Note: Requires network for the translation step.
+     */
+    suspend fun analyzeCrossModal(chineseText: String, audioFilePath: String): Emotion = withContext(Dispatchers.IO) {
+        check(isInitialized) { "EmotionRecognitionService not initialized" }
+
+        // Text branch: translate + tokenize
+        val englishText = translationService.translateToEnglish(chineseText)
+        Log.d(TAG, "Text for classification: '$englishText'")
+        val tokenIds = tokenizer.encode(englishText)
+        logTokenStats("cross-modal", tokenIds)
+
+        // Audio branch: decode + preprocess
+        val audioWaveform = audioPreprocessor.processAudioFile(audioFilePath)
+
+        // Cross-modal inference
+        val result = classifier.classify(tokenIds, audioWaveform)
+        Log.d(TAG, "MemoCMT cross-modal result: ${result.label} (${String.format("%.3f", result.confidence)}) | ${
+            result.allScores.entries.joinToString { "${it.key}=${String.format("%.3f", it.value)}" }
+        }")
+
+        val emotion = EmotionMapper.mapResult(result)
+        Log.d(TAG, "Emotion: ${emotion.name}")
+        emotion
+    }
 
     /**
-     * Analyze emotion from Chinese text.
-     * Pipeline: translate to English → tokenize → DistilRoBERTa ONNX → map to Emotion
+     * Analyze emotion from Chinese text only (audio input is zeroed).
+     * Pipeline: translate → tokenize → MemoCMT ONNX (text + zero audio) → Emotion
      *
      * Note: Requires network for the translation step.
      */
     suspend fun analyzeTextEmotion(chineseText: String): Emotion = withContext(Dispatchers.IO) {
         check(isInitialized) { "EmotionRecognitionService not initialized" }
 
-        // Step 1: Translate Chinese to English
         val englishText = translationService.translateToEnglish(chineseText)
         Log.d(TAG, "Text for classification: '$englishText'")
+        val tokenIds = tokenizer.encode(englishText)
+        logTokenStats("text-only", tokenIds)
 
-        // Step 2: Tokenize
-        val tokens = tokenizer.encode(englishText)
+        // Zero audio (text-only mode)
+        val zeroAudio = FloatArray(MemoCmtClassifier.AUDIO_MAX_LENGTH)
 
-        // Step 3: ONNX inference
-        val probabilities = textClassifier.classify(tokens)
-        Log.d(TAG, "Text emotion probabilities: ${
-            textClassifier.labels.zip(probabilities).joinToString { "${it.first}=${String.format("%.3f", it.second)}" }
+        val result = classifier.classify(tokenIds, zeroAudio)
+        Log.d(TAG, "MemoCMT text-only result: ${result.label} (${String.format("%.3f", result.confidence)}) | ${
+            result.allScores.entries.joinToString { "${it.key}=${String.format("%.3f", it.value)}" }
         }")
 
-        // Step 4: Map to app Emotion
-        val emotion = EmotionMapper.mapTextEmotion(probabilities)
-        Log.d(TAG, "Text emotion result: ${emotion.name}")
+        val emotion = EmotionMapper.mapResult(result)
+        Log.d(TAG, "Text emotion: ${emotion.name}")
         emotion
     }
 
     /**
-     * Analyze emotion from an audio file.
-     * Pipeline: decode M4A → preprocess → DistilHuBERT ONNX → map to Emotion
+     * Analyze emotion from audio only (text input is empty tokens).
+     * Pipeline: decode audio → preprocess → MemoCMT ONNX (empty text + audio) → Emotion
      *
      * Fully offline - no network required.
      */
     suspend fun analyzeSpeechEmotion(audioFilePath: String): Emotion = withContext(Dispatchers.IO) {
         check(isInitialized) { "EmotionRecognitionService not initialized" }
-        check(isSpeechModelReady) { "Speech emotion model not available" }
 
-        // Step 1: Preprocess audio
-        val waveform = audioPreprocessor.processAudioFile(audioFilePath)
+        // Empty text tokens (CLS + SEP + padding)
+        val emptyTokenIds = LongArray(MemoCmtClassifier.TEXT_MAX_LENGTH).apply {
+            this[0] = 101L  // [CLS]
+            this[1] = 102L  // [SEP]
+        }
 
-        // Step 2: ONNX inference
-        val probabilities = speechClassifier.classify(waveform)
-        Log.d(TAG, "Speech emotion probabilities: ${
-            speechClassifier.labels.zip(probabilities).joinToString { "${it.first}=${String.format("%.3f", it.second)}" }
+        val audioWaveform = audioPreprocessor.processAudioFile(audioFilePath)
+
+        val result = classifier.classify(emptyTokenIds, audioWaveform)
+        Log.d(TAG, "MemoCMT speech-only result: ${result.label} (${String.format("%.3f", result.confidence)}) | ${
+            result.allScores.entries.joinToString { "${it.key}=${String.format("%.3f", it.value)}" }
         }")
 
-        // Step 3: Map to app Emotion
-        val emotion = EmotionMapper.mapSpeechEmotion(probabilities)
-        Log.d(TAG, "Speech emotion result: ${emotion.name}")
+        val emotion = EmotionMapper.mapResult(result)
+        Log.d(TAG, "Speech emotion: ${emotion.name}")
         emotion
     }
 
     /**
-     * Release ONNX sessions and free resources.
+     * Release ONNX session and free resources.
      */
     fun release() {
-        textClassifier.close()
-        speechClassifier.close()
+        classifier.close()
         isInitialized = false
-        Log.d(TAG, "Emotion recognition models released")
+        Log.d(TAG, "MemoCMT model released")
     }
 }
