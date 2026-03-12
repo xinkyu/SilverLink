@@ -57,8 +57,7 @@ class SyncRepository(private val context: Context) {
         if (cloudResult.isSuccess) {
             Result.success(code)
         } else {
-            // 云端失败时仍返回本地配对码，支持本地配对
-            Result.success(code)
+            Result.failure(cloudResult.exceptionOrNull() ?: Exception("云端创建配对码失败"))
         }
     }
     

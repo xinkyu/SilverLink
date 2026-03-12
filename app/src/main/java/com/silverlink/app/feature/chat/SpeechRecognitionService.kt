@@ -89,15 +89,21 @@ class SpeechRecognitionService(private val context: Context) {
     }
 
     /**
-     * 使用本地 ONNX DistilHuBERT 模型分析语音情绪
+     * 使用 MemoCMT 跨模态模型分析情绪（同时利用文本和音频）
      */
     private suspend fun analyzeEmotion(audioFilePath: String, transcribedText: String): Emotion {
         return try {
             val emotionService = EmotionRecognitionService.getInstance(context)
-            emotionService.analyzeSpeechEmotion(audioFilePath)
-        } catch (e: Exception) {
-            Log.e(TAG, "ONNX speech emotion analysis failed, using text-based guess", e)
-            guessEmotionFromText(transcribedText)
+            // 优先使用跨模态分析（文本+音频融合），准确率更高
+            emotionService.analyzeCrossModal(transcribedText, audioFilePath)
+        } catch (e: Throwable) {
+            Log.e(TAG, "MemoCMT cross-modal analysis failed, trying speech-only", e)
+            try {
+                EmotionRecognitionService.getInstance(context).analyzeSpeechEmotion(audioFilePath)
+            } catch (e2: Throwable) {
+                Log.e(TAG, "Speech-only analysis also failed, using keyword guess", e2)
+                guessEmotionFromText(transcribedText)
+            }
         }
     }
 
