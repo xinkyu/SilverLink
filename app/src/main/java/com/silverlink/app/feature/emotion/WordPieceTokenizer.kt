@@ -74,6 +74,20 @@ class WordPieceTokenizer {
     }
 
     /**
+     * Encode text to token IDs and produce the corresponding attention mask.
+     * Mask is 1 for real tokens ([CLS], content, [SEP]) and 0 for [PAD] positions.
+     *
+     * @return Pair(inputIds, attentionMask) both of length MAX_LENGTH
+     */
+    fun encodeWithMask(text: String): Pair<LongArray, LongArray> {
+        val inputIds = encode(text)
+        val attentionMask = LongArray(MAX_LENGTH) { i ->
+            if (inputIds[i] != padTokenId) 1L else 0L
+        }
+        return Pair(inputIds, attentionMask)
+    }
+
+    /**
      * WordPiece tokenization for a single word.
      * Tries to match the longest sub-word from left to right.
      * Sub-words after the first are prefixed with "##".

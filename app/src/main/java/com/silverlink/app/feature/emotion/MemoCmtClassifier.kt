@@ -13,21 +13,22 @@ import java.nio.LongBuffer
 import kotlin.math.exp
 
 /**
- * MemoCMT cross-modal emotion classifier using DistilBERT + DistilHuBERT ONNX model.
- * Fuses text and audio modalities via cross-attention to classify 4 emotions:
- * Angry, Happy, Sad, Neutral
- *
- * Based on paper: s41598-025-89202-x (MemoCMT: Cross-Modal Transformer for Multimodal Emotion Recognition)
+ * SER classifier using BERT + VGGish mel-spectrogram ONNX model.
+ * Inputs: input_ids [batch, seq], attention_mask [batch, seq], mel_spectrogram [batch, 1, 96, 64]
+ * Classifies 4 emotions: Angry, Happy, Sad, Neutral
  */
 class MemoCmtClassifier {
 
     companion object {
         private const val TAG = "MemoCmtClassifier"
-        private const val MODEL_ASSET = "models/model_mobile.onnx"
-        private const val MODEL_FILE = "model_mobile.onnx"
+        private const val MODEL_ASSET = "models/4m_ser_bert_vggish_fp16.onnx"
+        private const val DATA_ASSET  = "models/4m_ser_bert_vggish_fp16.onnx.data"
+        private const val MODEL_FILE  = "4m_ser_bert_vggish_fp16.onnx"
+        private const val DATA_FILE   = "4m_ser_bert_vggish_fp16.onnx.data"
 
-        const val TEXT_MAX_LENGTH = 297
-        const val AUDIO_MAX_LENGTH = 160220
+        /** VGGish mel spectrogram dimensions */
+        const val MEL_FRAMES = 96
+        const val MEL_BINS = 64
 
         val LABELS = arrayOf("Angry", "Happy", "Sad", "Neutral")
     }
@@ -37,37 +38,45 @@ class MemoCmtClassifier {
     private var ioMetadataLogged = false
 
     fun initialize(context: Context) {
-        Log.d(TAG, "Loading MemoCMT cross-modal model...")
-        Log.d(TAG, "Model config: asset=$MODEL_ASSET, cacheFile=$MODEL_FILE")
-        // Copy model from assets to internal storage for memory-mapped loading
+        Log.d(TAG, "Loading BERT+VGGish emotion model...")
+        // .onnx and .data must live side-by-side in the same directory
         val modelFile = File(context.filesDir, MODEL_FILE)
-        val assetSize = context.assets.open(MODEL_ASSET).use { it.available().toLong() }
-        Log.d(TAG, "Asset size: $assetSize bytes, cache path: ${modelFile.absolutePath}")
-        if (!modelFile.exists() || modelFile.length() != assetSize) {
-            Log.d(TAG, "Copying model to internal storage (asset=$assetSize, cached=${if (modelFile.exists()) modelFile.length() else "none"})...")
-            context.assets.open(MODEL_ASSET).use { input ->
-                modelFile.outputStream().use { output ->
-                    input.copyTo(output, bufferSize = 8192)
-                }
-            }
-            Log.d(TAG, "Model copied: ${modelFile.length()} bytes")
-        }
-        Log.d(TAG, "Cache file size after check: ${modelFile.length()} bytes")
+        val dataFile  = File(context.filesDir, DATA_FILE)
+
+        copyAssetIfNeeded(context, MODEL_ASSET, modelFile)
+        copyAssetIfNeeded(context, DATA_ASSET,  dataFile)
+
         val sessionOptions = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(2)
         }
         session = environment.createSession(modelFile.absolutePath, sessionOptions)
-        Log.d(TAG, "MemoCMT model loaded successfully")
+        Log.d(TAG, "BERT+VGGish model loaded successfully")
+    }
+
+    private fun copyAssetIfNeeded(context: Context, assetPath: String, destFile: File) {
+        val assetSize = context.assets.open(assetPath).use { it.available().toLong() }
+        if (!destFile.exists() || destFile.length() != assetSize) {
+            Log.d(TAG, "Copying $assetPath → ${destFile.name} ($assetSize bytes)...")
+            context.assets.open(assetPath).use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output, bufferSize = 65536)
+                }
+            }
+            Log.d(TAG, "Copied ${destFile.name}: ${destFile.length()} bytes")
+        } else {
+            Log.d(TAG, "${destFile.name} already cached (${destFile.length()} bytes)")
+        }
     }
 
     /**
-     * Cross-modal emotion classification using both text and audio inputs.
+     * Emotion classification using BERT text inputs and VGGish mel spectrogram.
      *
-     * @param tokenIds DistilBERT WordPiece token IDs, padded to TEXT_MAX_LENGTH (297)
-     * @param audioWaveform 16kHz mono float waveform, padded/truncated to AUDIO_MAX_LENGTH (160220)
+     * @param tokenIds      BERT token IDs (variable length, includes [CLS]/[SEP]/padding)
+     * @param attentionMask BERT attention mask (1 = real token, 0 = padding), same length as tokenIds
+     * @param melSpectrogram VGGish mel spectrogram, flattened [MEL_FRAMES * MEL_BINS] = 6144 floats
      * @return EmotionResult with label, confidence, and all scores
      */
-    fun classify(tokenIds: LongArray, audioWaveform: FloatArray): EmotionResult {
+    fun classify(tokenIds: LongArray, attentionMask: LongArray, melSpectrogram: FloatArray): EmotionResult {
         val ortSession = session ?: throw IllegalStateException("Model not initialized")
 
         if (!ioMetadataLogged) {
@@ -78,19 +87,28 @@ class MemoCmtClassifier {
             Log.d(TAG, "Session outputs: [$outputInfo]")
         }
 
-        // Text input: [1, 297], int64 with explicit native-endian direct buffer.
-        val textTensor = createLongTensor(tokenIds)
+        // Text inputs: [1, seqLen] int64
+        val inputIdsTensor = createLongTensor(tokenIds)
+        val attentionMaskTensor = createLongTensor(attentionMask)
 
-        // Audio input: [1, 160220], float32 with explicit native-endian direct buffer.
-        val audioTensor = createFloatTensor(audioWaveform)
-
-        Log.d(TAG, "Input text head(10): ${tokenIds.take(10)}")
-        Log.d(
-            TAG,
-            "Input audio head(8): ${audioWaveform.take(8).joinToString(prefix = "[", postfix = "]") { String.format("%.6f", it) }}"
+        // Audio input: [1, 1, MEL_FRAMES, MEL_BINS] float32
+        val melTensor = OnnxTensor.createTensor(
+            environment,
+            createDirectFloatBuffer(melSpectrogram),
+            longArrayOf(1L, 1L, MEL_FRAMES.toLong(), MEL_BINS.toLong())
         )
 
-        val inputMap = mapOf("input_text" to textTensor, "input_audio" to audioTensor)
+        Log.d(TAG, "Input ids head(10): ${tokenIds.take(10)}")
+        Log.d(
+            TAG,
+            "Mel spectrogram head(8): ${melSpectrogram.take(8).joinToString(prefix = "[", postfix = "]") { String.format("%.6f", it) }}"
+        )
+
+        val inputMap = mapOf(
+            "input_ids" to inputIdsTensor,
+            "attention_mask" to attentionMaskTensor,
+            "mel_spectrogram" to melTensor
+        )
         val outputNames = ortSession.outputInfo.keys
         val preferLogits = outputNames.firstOrNull { it.equals("logits", ignoreCase = true) }
         val results = if (preferLogits != null) {
@@ -107,8 +125,9 @@ class MemoCmtClassifier {
                 if (preferLogits != null) " (from output='$preferLogits')" else " (from output index 0)"
         )
 
-        textTensor.close()
-        audioTensor.close()
+        inputIdsTensor.close()
+        attentionMaskTensor.close()
+        melTensor.close()
         results.close()
 
         val probabilities = softmax(logits)
@@ -135,18 +154,14 @@ class MemoCmtClassifier {
         )
     }
 
-    private fun createFloatTensor(values: FloatArray): OnnxTensor {
+    private fun createDirectFloatBuffer(values: FloatArray): FloatBuffer {
         val byteBuffer = ByteBuffer
             .allocateDirect(values.size * Float.SIZE_BYTES)
             .order(ByteOrder.nativeOrder())
         val floatBuffer: FloatBuffer = byteBuffer.asFloatBuffer()
         floatBuffer.put(values)
         floatBuffer.rewind()
-        return OnnxTensor.createTensor(
-            environment,
-            floatBuffer,
-            longArrayOf(1, values.size.toLong())
-        )
+        return floatBuffer
     }
 
     fun close() {

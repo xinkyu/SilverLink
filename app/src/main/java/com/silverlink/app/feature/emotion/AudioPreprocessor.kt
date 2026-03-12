@@ -8,63 +8,186 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
-import kotlin.math.sqrt
+import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.log10
+import kotlin.math.PI
 
 /**
- * Audio preprocessor for the MemoCMT cross-modal emotion model.
- * Decodes M4A/AAC to PCM and prepares raw waveform input:
+ * Audio preprocessor for the BERT+VGGish emotion model.
+ * Decodes M4A/AAC to PCM and computes a VGGish-style mel spectrogram:
  * 1. Decode to 16kHz float PCM mono
- * 2. Normalize to [-1.0, 1.0]
- * 3. Pad/truncate to 160,220 samples (~10 seconds)
+ * 2. Peak-normalize
+ * 3. Compute STFT (25ms window / 10ms hop / 512-point FFT)
+ * 4. Apply 64 triangular mel filterbanks (125–7500 Hz, HTK scale)
+ * 5. Log10-compress and pick 96 frames → output [96 × 64] = 6144 floats
  */
 class AudioPreprocessor {
 
     companion object {
         private const val TAG = "AudioPreprocessor"
         const val SAMPLE_RATE = 16000
-        const val MAX_SAMPLES = 160220 // ~10.01 seconds at 16kHz
-        private const val TRIM_TOP_DB = 25.0
+
+        // VGGish STFT parameters
+        private const val WINDOW_SAMPLES = 400   // 25 ms at 16 kHz
+        private const val HOP_SAMPLES = 160       // 10 ms at 16 kHz
+        private const val FFT_SIZE = 512
+        private const val MEL_BINS = 64
+        private const val MEL_FRAMES = 96
+        private const val MEL_FMIN = 125.0        // Hz
+        private const val MEL_FMAX = 7500.0       // Hz
+        private const val LOG_OFFSET = 0.01   // VGGish standard: np.log(mel + 0.01)
     }
 
     /**
-     * Process an audio file and return a float waveform for MemoCMT model input.
+     * Process an audio file and return a VGGish mel spectrogram for model input.
+     * Output is [MEL_FRAMES × MEL_BINS] = 6144 floats, row-major (frames first).
      */
-    fun processAudioFile(filePath: String): FloatArray {
+    fun processAudioToMelSpectrogram(filePath: String): FloatArray {
         val file = File(filePath)
         if (!file.exists()) {
             throw IllegalArgumentException("Audio file does not exist: $filePath")
         }
 
-        // 1. Decode M4A/AAC to raw PCM float samples
         val rawPcm = decodeToFloat(filePath)
         Log.d(TAG, "Decoded ${rawPcm.size} samples from $filePath")
 
         if (rawPcm.isEmpty()) {
-            Log.w(TAG, "Empty audio, returning zero-padded waveform")
-            return FloatArray(MAX_SAMPLES)
+            Log.w(TAG, "Empty audio, returning zero mel spectrogram")
+            return FloatArray(MEL_FRAMES * MEL_BINS)
         }
 
-        val decodedRms = computeRms(rawPcm)
-        val decodedPeak = rawPcm.maxOf { abs(it) }
+        // Peak normalization
+        val normalized = normalizeByPeak(rawPcm)
 
-        // 2) VAD-like trim (remove leading/trailing low-energy region)
-        val trimmed = trimSilence(rawPcm, TRIM_TOP_DB)
+        // Compute mel spectrogram and select MEL_FRAMES frames from center
+        val mel = computeMelSpectrogram(normalized)
+        Log.d(TAG, "Mel spectrogram: ${mel.size / MEL_BINS} frames × $MEL_BINS bins")
 
-        // 3) Peak normalization to align with notebook preprocessing
-        val normalized = normalizeByPeak(trimmed)
+        return mel
+    }
 
-        // 4) Pad or truncate to exactly MAX_SAMPLES
-        val result = padOrTruncate(normalized, MAX_SAMPLES)
-        val finalRms = computeRms(result)
-        val finalPeak = result.maxOf { abs(it) }
-        Log.d(
-            TAG,
-            "Waveform stats: decodedLen=${rawPcm.size}, trimmedLen=${trimmed.size}, " +
-                "decodedRms=${"%.6f".format(decodedRms)}, decodedPeak=${"%.6f".format(decodedPeak)}, " +
-                "finalLen=${result.size}, finalRms=${"%.6f".format(finalRms)}, finalPeak=${"%.6f".format(finalPeak)}"
-        )
+    /**
+     * Compute VGGish-style mel spectrogram.
+     * Returns [MEL_FRAMES × MEL_BINS] floats (row-major), selecting MEL_FRAMES frames
+     * from the center of the audio to represent the most emotionally relevant segment.
+     */
+    private fun computeMelSpectrogram(pcm: FloatArray): FloatArray {
+        val hannWindow = FloatArray(WINDOW_SAMPLES) { n ->
+            (0.5 * (1.0 - cos(2.0 * PI * n / (WINDOW_SAMPLES - 1)))).toFloat()
+        }
+        val melFilterbank = buildMelFilterbank()
 
-        return result
+        // Number of STFT frames from this audio
+        val totalFrames = if (pcm.size < WINDOW_SAMPLES) 0 else
+            (pcm.size - WINDOW_SAMPLES) / HOP_SAMPLES + 1
+
+        // Compute how many frames we actually need to fill MEL_FRAMES output frames
+        val needFrames = MEL_FRAMES
+        val startFrame = if (totalFrames <= needFrames) 0 else (totalFrames - needFrames) / 2
+
+        val re = DoubleArray(FFT_SIZE)
+        val im = DoubleArray(FFT_SIZE)
+        val output = FloatArray(MEL_FRAMES * MEL_BINS)
+
+        for (outFrame in 0 until MEL_FRAMES) {
+            val srcFrame = startFrame + outFrame
+            val sampleStart = srcFrame * HOP_SAMPLES
+
+            // Fill FFT buffer with windowed frame (zero-pad if out of range)
+            re.fill(0.0)
+            im.fill(0.0)
+            for (k in 0 until WINDOW_SAMPLES) {
+                val idx = sampleStart + k
+                re[k] = if (idx < pcm.size) (pcm[idx] * hannWindow[k]).toDouble() else 0.0
+            }
+
+            fft(re, im)
+
+            // Power spectrum (one-sided, bins 0..FFT_SIZE/2)
+            val power = DoubleArray(FFT_SIZE / 2 + 1) { k -> re[k] * re[k] + im[k] * im[k] }
+
+            // Apply mel filterbank and log-compress
+            for (m in 0 until MEL_BINS) {
+                var energy = 0.0
+                for (k in power.indices) {
+                    energy += melFilterbank[m][k] * power[k]
+                }
+                output[outFrame * MEL_BINS + m] = ln(energy.coerceAtLeast(LOG_OFFSET.toDouble())).toFloat()
+            }
+        }
+        return output
+    }
+
+    /** Build 64 triangular mel filterbank weights, shape [MEL_BINS][FFT_SIZE/2+1]. */
+    private fun buildMelFilterbank(): Array<DoubleArray> {
+        val numBins = FFT_SIZE / 2 + 1
+        val melMin = hzToMel(MEL_FMIN)
+        val melMax = hzToMel(MEL_FMAX)
+
+        // MEL_BINS + 2 linearly spaced points in mel scale
+        val melPoints = DoubleArray(MEL_BINS + 2) { i ->
+            melMin + i * (melMax - melMin) / (MEL_BINS + 1)
+        }
+        // Convert mel points to FFT bin indices
+        val binIdx = IntArray(MEL_BINS + 2) { i ->
+            ((melToHz(melPoints[i]) / (SAMPLE_RATE / 2.0)) * (numBins - 1)).toInt().coerceIn(0, numBins - 1)
+        }
+
+        return Array(MEL_BINS) { m ->
+            DoubleArray(numBins) { k ->
+                when {
+                    k < binIdx[m] || k > binIdx[m + 2] -> 0.0
+                    k <= binIdx[m + 1] -> {
+                        val denom = (binIdx[m + 1] - binIdx[m]).toDouble()
+                        if (denom <= 0) 0.0 else (k - binIdx[m]) / denom
+                    }
+                    else -> {
+                        val denom = (binIdx[m + 2] - binIdx[m + 1]).toDouble()
+                        if (denom <= 0) 0.0 else (binIdx[m + 2] - k) / denom
+                    }
+                }
+            }
+        }
+    }
+
+    private fun hzToMel(hz: Double): Double = 2595.0 * log10(1.0 + hz / 700.0)
+    private fun melToHz(mel: Double): Double = 700.0 * (Math.pow(10.0, mel / 2595.0) - 1.0)
+
+    /** In-place iterative Cooley-Tukey FFT (power-of-2 size). */
+    private fun fft(re: DoubleArray, im: DoubleArray) {
+        val n = re.size
+        // Bit-reversal permutation
+        var j = 0
+        for (i in 1 until n) {
+            var bit = n shr 1
+            while (j and bit != 0) { j = j xor bit; bit = bit shr 1 }
+            j = j xor bit
+            if (i < j) {
+                re[i] = re[j].also { re[j] = re[i] }
+                im[i] = im[j].also { im[j] = im[i] }
+            }
+        }
+        // Butterfly iterations
+        var len = 2
+        while (len <= n) {
+            val angle = -2.0 * PI / len
+            val wr = cos(angle); val wi = kotlin.math.sin(angle)
+            var step = 0
+            while (step < n) {
+                var wre = 1.0; var wim = 0.0
+                for (k in 0 until len / 2) {
+                    val i1 = step + k; val i2 = i1 + len / 2
+                    val vr = wre * re[i2] - wim * im[i2]
+                    val vi = wre * im[i2] + wim * re[i2]
+                    re[i2] = re[i1] - vr; im[i2] = im[i1] - vi
+                    re[i1] += vr;          im[i1] += vi
+                    val tmp = wre * wr - wim * wi; wim = wre * wi + wim * wr; wre = tmp
+                }
+                step += len
+            }
+            len = len shl 1
+        }
     }
 
     /**
@@ -203,61 +326,11 @@ class AudioPreprocessor {
         return output
     }
 
-    /**
-     * Pad with zeros or truncate to exactly targetLength samples.
-     */
-    private fun padOrTruncate(samples: FloatArray, targetLength: Int): FloatArray {
-        return when {
-            samples.size == targetLength -> samples
-            samples.size > targetLength -> samples.copyOfRange(0, targetLength)
-            else -> {
-                val padded = FloatArray(targetLength)
-                samples.copyInto(padded)
-                padded
-            }
-        }
-    }
-
-    /**
-     * Trim leading/trailing low-energy samples, similar to librosa.effects.trim(top_db=25).
-     */
-    private fun trimSilence(samples: FloatArray, topDb: Double): FloatArray {
-        if (samples.isEmpty()) return samples
-        val peak = samples.maxOf { abs(it) }
-        if (peak <= 1e-8f) return samples
-
-        // Relative amplitude threshold from dB: amp_ratio = 10^(-db/20)
-        val threshold = peak * Math.pow(10.0, -topDb / 20.0).toFloat()
-
-        var start = 0
-        while (start < samples.size && abs(samples[start]) < threshold) {
-            start++
-        }
-
-        var end = samples.size - 1
-        while (end >= start && abs(samples[end]) < threshold) {
-            end--
-        }
-
-        return if (start > end) {
-            // Keep minimal content if everything is below threshold
-            samples
-        } else {
-            samples.copyOfRange(start, end + 1)
-        }
-    }
-
     /** Peak normalization to [-1, 1] while preserving waveform shape. */
     private fun normalizeByPeak(samples: FloatArray): FloatArray {
         if (samples.isEmpty()) return samples
         val peak = samples.maxOf { abs(it) }
         if (peak <= 1e-8f) return samples
         return FloatArray(samples.size) { i -> samples[i] / peak }
-    }
-
-    private fun computeRms(samples: FloatArray): Double {
-        if (samples.isEmpty()) return 0.0
-        val meanSquare = samples.fold(0.0) { acc, v -> acc + (v * v) } / samples.size
-        return sqrt(meanSquare)
     }
 }
