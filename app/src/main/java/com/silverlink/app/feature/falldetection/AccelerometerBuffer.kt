@@ -104,6 +104,35 @@ class AccelerometerBuffer(
     }
     
     /**
+     * 获取原始加速度序列，供深度学习模型输入
+     *
+     * @return FloatArray of shape [4 * 100]，通道优先排列:
+     *         [x0..x99, y0..y99, z0..z99, mag0..mag99]
+     */
+    fun getRawSequence(): FloatArray {
+        val seqLen = 100
+        val channels = 4
+        val result = FloatArray(channels * seqLen)
+
+        val samples = if (buffer.size > seqLen) {
+            buffer.subList(buffer.size - seqLen, buffer.size)
+        } else {
+            buffer
+        }
+
+        val offset = seqLen - samples.size
+
+        for (i in samples.indices) {
+            result[0 * seqLen + offset + i] = samples[i].x
+            result[1 * seqLen + offset + i] = samples[i].y
+            result[2 * seqLen + offset + i] = samples[i].z
+            result[3 * seqLen + offset + i] = samples[i].magnitude
+        }
+
+        return result
+    }
+
+    /**
      * 清空缓冲区
      */
     fun clear() {

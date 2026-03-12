@@ -20,9 +20,13 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    androidResources {
+        noCompress += listOf("onnx")
+    }
 }
 
 dependencies {
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.onnxruntime.android)
     testImplementation(libs.junit)
 }

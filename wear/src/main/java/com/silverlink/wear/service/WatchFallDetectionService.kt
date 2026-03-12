@@ -20,6 +20,7 @@ import android.os.VibratorManager
 import android.util.Log
 import com.silverlink.shared.detection.AccelerometerBuffer
 import com.silverlink.shared.detection.FallClassifier
+import com.silverlink.shared.detection.FallDetectionDLClassifier
 import com.silverlink.wear.ui.FallAlertActivity
 import kotlinx.coroutines.*
 import kotlin.math.abs
@@ -55,7 +56,13 @@ class WatchFallDetectionService : Service(), SensorEventListener {
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     private val accelBuffer = AccelerometerBuffer()
-    private val classifier = FallClassifier(
+    
+    // 深度学习分类器
+    private var dlClassifier: FallDetectionDLClassifier? = null
+    private var useDLClassifier = false
+    
+    // 降级后备：规则分类器
+    private val fallbackClassifier = FallClassifier(
         logger = FallClassifier.Logger { tag, msg -> Log.d(tag, msg) }
     )
 
@@ -101,6 +108,21 @@ class WatchFallDetectionService : Service(), SensorEventListener {
             return
         }
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
+        
+        // 初始化 DL 分类器
+        try {
+            val modelBytes = assets.open("fall_detection_model.onnx").use { it.readBytes() }
+            dlClassifier = FallDetectionDLClassifier(
+                modelBytes = modelBytes,
+                logger = FallDetectionDLClassifier.Logger { tag, msg -> Log.d(tag, msg) }
+            )
+            useDLClassifier = true
+            Log.i(TAG, "✅ Watch DL Classifier loaded (ONNX)")
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ Watch DL model load failed, using rule-based: ${e.message}")
+            useDLClassifier = false
+        }
+        
         Log.d(TAG, "Watch fall detection service started")
     }
 
@@ -165,13 +187,26 @@ class WatchFallDetectionService : Service(), SensorEventListener {
             DetectionState.MONITORING -> {
                 if (!accelBuffer.isFull()) return
                 val features = accelBuffer.getFeatures() ?: return
-                if (!classifier.quickPrescreen(features)) return
-
-                val result = classifier.classify(features)
-                if (result.fallProbability >= FallClassifier.FALL_PROBABILITY_THRESHOLD) {
-                    Log.i(TAG, "Possible fall (prob=${result.fallProbability})")
-                    detectionState = DetectionState.CONFIRMING
-                    confirmationStartTime = currentTime
+                
+                if (useDLClassifier && dlClassifier != null) {
+                    // DL 路径
+                    if (!dlClassifier!!.quickPrescreen(features)) return
+                    val rawSequence = accelBuffer.getRawSequence()
+                    val result = dlClassifier!!.classify(rawSequence)
+                    if (result.fallProbability >= FallDetectionDLClassifier.FALL_PROBABILITY_THRESHOLD) {
+                        Log.i(TAG, "DL: possible fall (prob=${result.fallProbability})")
+                        detectionState = DetectionState.CONFIRMING
+                        confirmationStartTime = currentTime
+                    }
+                } else {
+                    // 降级路径
+                    if (!fallbackClassifier.quickPrescreen(features)) return
+                    val result = fallbackClassifier.classify(features)
+                    if (result.fallProbability >= FallClassifier.FALL_PROBABILITY_THRESHOLD) {
+                        Log.i(TAG, "Fallback: possible fall (prob=${result.fallProbability})")
+                        detectionState = DetectionState.CONFIRMING
+                        confirmationStartTime = currentTime
+                    }
                 }
             }
             DetectionState.CONFIRMING -> {
@@ -238,6 +273,7 @@ class WatchFallDetectionService : Service(), SensorEventListener {
         super.onDestroy()
         sensorManager.unregisterListener(this)
         serviceScope.cancel()
+        dlClassifier?.close()
         wakeLock?.let { if (it.isHeld) it.release() }
         Log.d(TAG, "Watch fall detection service stopped")
     }

@@ -28,8 +28,8 @@ import java.util.concurrent.TimeUnit
  */
 object CloudBaseService {
     
-    // 直接硬编码测试，排除本地配置文件的干扰
-    private const val CLOUD_BASE_URL: String = "https://silverlink-9gdqj1ne4d834dab-1396514174.ap-shanghai.app.tcloudbase.com/"
+    // 读取 BuildConfig 中的配置，避免硬编码旧链接
+    private val CLOUD_BASE_URL: String = BuildConfig.CLOUDBASE_URL
     
     private val json = Json {
         ignoreUnknownKeys = true
@@ -864,8 +864,8 @@ object CloudBaseService {
     ): Result<LocationQueryResult> = withContext(Dispatchers.IO) {
         try {
             Log.d("CloudBase", "查询位置(OkHttp): elderDeviceId=$elderDeviceId")
-            // 直接拼装 URL，绕过 Retrofit，确保万无一失
-            val baseUrl = "https://silverlink-9gdqj1ne4d834dab-1396514174.ap-shanghai.app.tcloudbase.com/location-query"
+            // 拼装 URL，复用上面定义的 CLOUD_BASE_URL
+            val baseUrl = "${CLOUD_BASE_URL}location-query"
             val url = "$baseUrl?elderDeviceId=$elderDeviceId&familyDeviceId=${familyDeviceId ?: ""}"
             
             val request = okhttp3.Request.Builder()

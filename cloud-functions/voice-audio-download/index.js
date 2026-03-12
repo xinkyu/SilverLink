@@ -38,8 +38,8 @@ exports.main = async (event, context) => {
       }
       // 构造完整的 fileId
       // 注意: 需要知道 bucket 信息，这里从环境变量或硬编码获取
-      const envId = process.env.TCB_ENV || "silverlink-9gdqj1ne4d834dab";
-      const bucket = `7369-${envId}-1396514174`;
+      const envId = process.env.TCB_ENV || "silverlink-3ghlz8es381befbf";
+      const bucket = `7369-${envId}-1408550226`;
       fileId = `cloud://${envId}.${bucket}/${decodedPath}`;
       console.log("Using path-based fileId:", fileId);
     } else if (rawFileId) {
