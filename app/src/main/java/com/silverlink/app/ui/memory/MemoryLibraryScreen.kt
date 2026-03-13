@@ -21,8 +21,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.silverlink.app.data.remote.MemoryPhotoData
+import com.silverlink.app.ui.components.UnifiedTopBar
 
 /**
  * 家人端记忆库主屏幕
@@ -76,30 +81,19 @@ fun MemoryLibraryScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    Text(
-                        "📸 记忆相册",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+            UnifiedTopBar(
+                title = "记忆相册",
+                icon = Icons.Default.CameraAlt,
+                rightContent = {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFFF1F5F9), shape = RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Color.Gray)
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primaryContainer
-                )
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { imagePickerLauncher.launch("image/*") },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("上传照片", fontWeight = FontWeight.Bold) }
+                }
             )
         }
     ) { padding ->
@@ -126,7 +120,8 @@ fun MemoryLibraryScreen(
                 else -> {
                     PhotoGrid(
                         photos = photos,
-                        onPhotoClick = { /* TODO: 预览照片 */ }
+                        onPhotoClick = { /* TODO: 预览照片 */ },
+                        onUploadPhotoClick = { imagePickerLauncher.launch("image/*") }
                     )
                 }
             }
@@ -244,19 +239,46 @@ private fun EmptyStateView(onUpload: () -> Unit) {
 @Composable
 private fun PhotoGrid(
     photos: List<MemoryPhotoData>,
-    onPhotoClick: (MemoryPhotoData) -> Unit
+    onPhotoClick: (MemoryPhotoData) -> Unit,
+    onUploadPhotoClick: () -> Unit
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(photos) { photo ->
-            PhotoGridItem(
-                photo = photo,
-                onClick = { onPhotoClick(photo) }
-            )
+    Column {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(photos) { photo ->
+                PhotoGridItem(
+                    photo = photo,
+                    onClick = { onPhotoClick(photo) }
+                )
+            }
+        }
+        
+        // Image 5 Style Add Button below photos
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 24.dp)
+                .height(100.dp)
+                .clickable { onUploadPhotoClick() }
+                .drawBehind { 
+                    drawRoundRect(
+                        color = Color(0xFFFFB74D), 
+                        style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)),
+                        cornerRadius = CornerRadius(16.dp.toPx())
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFFFF8A00), modifier = Modifier.size(32.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("添加更多回忆", color = Color(0xFFFF8A00), fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }

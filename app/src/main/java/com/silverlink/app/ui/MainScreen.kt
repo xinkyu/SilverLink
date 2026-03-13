@@ -100,7 +100,7 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = WarmPrimary,
                         selectedTextColor = WarmPrimary,
-                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                        indicatorColor = Color.Transparent
                     )
                 )
                 NavigationBarItem(
@@ -119,7 +119,7 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = WarmPrimary,
                         selectedTextColor = WarmPrimary,
-                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                        indicatorColor = Color.Transparent
                     )
                 )
                 NavigationBarItem(
@@ -138,7 +138,7 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = WarmPrimary,
                         selectedTextColor = WarmPrimary,
-                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                        indicatorColor = Color.Transparent
                     )
                 )
                 NavigationBarItem(
@@ -157,7 +157,7 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = WarmPrimary,
                         selectedTextColor = WarmPrimary,
-                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                        indicatorColor = Color.Transparent
                     )
                 )
                 NavigationBarItem(
@@ -176,7 +176,7 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = WarmPrimary,
                         selectedTextColor = WarmPrimary,
-                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                        indicatorColor = Color.Transparent
                     )
                 )
             }
@@ -288,7 +288,7 @@ private fun FamilyMainScreen(modifier: Modifier = Modifier) {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color(0xFF3F51B5),
                         selectedTextColor = Color(0xFF3F51B5),
-                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                        indicatorColor = Color.Transparent
                     )
                 )
                 NavigationBarItem(
@@ -307,7 +307,7 @@ private fun FamilyMainScreen(modifier: Modifier = Modifier) {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color(0xFF3F51B5),
                         selectedTextColor = Color(0xFF3F51B5),
-                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer
+                        indicatorColor = Color.Transparent
                     )
                 )
             }

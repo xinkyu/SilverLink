@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -21,6 +23,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,7 +42,7 @@ import com.silverlink.app.ui.components.ChartType
 import com.silverlink.app.ui.components.ChartTypeToggle
 import com.silverlink.app.ui.components.CognitiveReportCard
 import com.silverlink.app.ui.components.CognitiveReportUiData
-import com.silverlink.app.ui.components.HealthTopBar
+import com.silverlink.app.ui.components.UnifiedTopBar
 import com.silverlink.app.ui.components.HeroStatusDisplay
 import com.silverlink.app.ui.components.MedicationStatusDisplay
 import com.silverlink.app.ui.components.MedicationSummaryCard
@@ -91,9 +98,19 @@ fun HistoryScreen(
     
     Scaffold(
         topBar = {
-            HealthTopBar(
+            UnifiedTopBar(
                 title = "健康记录",
-                onRefresh = { viewModel.refresh() }
+                icon = Icons.Default.DateRange,
+                rightContent = {
+                    IconButton(
+                        onClick = { viewModel.refresh() },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFFFFF3E0), shape = RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "刷新", tint = Color(0xFFFF8A00))
+                    }
+                }
             )
         }
     ) { innerPadding ->

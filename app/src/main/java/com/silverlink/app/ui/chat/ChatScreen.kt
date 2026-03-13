@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -55,9 +56,10 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
+import com.silverlink.app.ui.components.UnifiedTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -262,67 +264,58 @@ fun ChatScreen(
     }
 
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopAppBar(
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = assistantName,
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    // 情绪指示器 - 始终显示
-                    Spacer(modifier = Modifier.width(12.dp))
-                    EmotionBadge(emotion = currentEmotion)
-                }
+        UnifiedTopBar(
+            title = assistantName,
+            icon = Icons.Default.Face,
+            titleSuffix = {
+                EmotionBadge(emotion = currentEmotion)
             },
-            actions = {
-                // TTS 播放状态指示
-                if (ttsState is TtsState.Speaking) {
-                    Text(
-                        text = "🔊",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                }
-                // 找药按钮 - 拍照识别药品
-                IconButton(onClick = { 
-                    if (hasCameraPermission) {
-                        showPillCameraScreen = true
-                    } else {
-                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            rightContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (ttsState is TtsState.Speaking) {
+                        Text(
+                            text = "🔊",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
                     }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.CameraAlt,
-                        contentDescription = "找药",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                // 新对话按钮
-                IconButton(onClick = { viewModel.createNewConversation() }) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = "新对话",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                // 历史会话按钮
-                IconButton(onClick = { showConversationSheet = true }) {
-                    Icon(
-                        imageVector = Icons.Filled.History,
-                        contentDescription = "历史会话",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                // 记忆中心按钮
-                IconButton(onClick = {
-                    viewModel.refreshMemoryCenter()
-                    showMemoryCenterSheet = true
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Psychology,
-                        contentDescription = "记忆中心",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    IconButton(onClick = { 
+                        if (hasCameraPermission) {
+                            showPillCameraScreen = true
+                        } else {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.CameraAlt,
+                            contentDescription = "找药",
+                            tint = Color.Gray
+                        )
+                    }
+                    IconButton(onClick = { viewModel.createNewConversation() }) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "新对话",
+                            tint = Color.Gray
+                        )
+                    }
+                    IconButton(onClick = { showConversationSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = "历史会话",
+                            tint = Color.Gray
+                        )
+                    }
+                    IconButton(onClick = {
+                        viewModel.refreshMemoryCenter()
+                        showMemoryCenterSheet = true
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.Psychology,
+                            contentDescription = "记忆中心",
+                            tint = Color.Gray
+                        )
+                    }
                 }
             }
         )

@@ -29,6 +29,7 @@ import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.UserPreferences.FallDetectionSensitivity
 import com.silverlink.app.feature.location.LocationTrackingService
 import com.silverlink.app.feature.proactive.ProactiveInteractionService
+import com.silverlink.app.ui.components.UnifiedTopBar
 import kotlinx.coroutines.launch
 
 private enum class EnableTarget {
@@ -140,12 +141,9 @@ fun FallDetectionScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("安全守护") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+            UnifiedTopBar(
+                title = "安全守护",
+                icon = Icons.Default.Security
             )
         }
     ) { innerPadding ->
