@@ -66,6 +66,15 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val _takenTimes = MutableStateFlow<Map<Int, Set<String>>>(emptyMap())
     val takenTimes: StateFlow<Map<Int, Set<String>>> = _takenTimes.asStateFlow()
 
+    private val _todayTotalTasks = MutableStateFlow(0)
+    val todayTotalTasks: StateFlow<Int> = _todayTotalTasks.asStateFlow()
+
+    private val _todayCompletedTasks = MutableStateFlow(0)
+    val todayCompletedTasks: StateFlow<Int> = _todayCompletedTasks.asStateFlow()
+
+    private val _weeklyPunctualityRate = MutableStateFlow(100)
+    val weeklyPunctualityRate: StateFlow<Int> = _weeklyPunctualityRate.asStateFlow()
+
     init {
         viewModelScope.launch {
             // 监听本地药品变化
@@ -249,6 +258,16 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             alarmScheduler.cancelAll(medication)
             dao.deleteMedication(medication)
+            
+            // 老人端删除时同步到云端
+            if (userPreferences.userConfig.value.role == UserRole.ELDER) {
+                try {
+                    syncRepository.deleteMedicationForSelf(medication.name, medication.dosage)
+                    Log.d("ReminderViewModel", "药品已从云端删除: ${medication.name}")
+                } catch (e: Exception) {
+                    Log.e("ReminderViewModel", "从云端删除药品失败: ${e.message}")
+                }
+            }
         }
     }
 
@@ -325,6 +344,34 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                         dao.updateMedication(med.copy(isTakenToday = allTaken))
                     }
                 }
+                
+                // 计算统计数据
+                val today = java.util.Date()
+                val calendar = java.util.Calendar.getInstance().apply { time = today }
+                val dateTodayFormat = dateFormat.format(today)
+                
+                calendar.add(java.util.Calendar.DAY_OF_YEAR, -6)
+                val dateWeekAgoFormat = dateFormat.format(calendar.time)
+
+                val todayLogs = historyDao.getMedicationLogsByDate(dateTodayFormat)
+                val uniqueTodayLogs = todayLogs.distinctBy { log -> "${log.date}|${log.medicationId}|${log.scheduledTime}" }
+                val todayCompleted = uniqueTodayLogs.count { it.status == "taken" }
+                val totalTasksPerDay = currentMeds.sumOf { med -> med.getTimeList().size }
+
+                val weeklyLogs = historyDao.getMedicationLogsByDateRange(dateWeekAgoFormat, dateTodayFormat)
+                val uniqueWeeklyLogs = weeklyLogs.distinctBy { log -> "${log.date}|${log.medicationId}|${log.scheduledTime}" }
+                val weeklyCompleted = uniqueWeeklyLogs.count { it.status == "taken" }
+
+                val weeklyTotalExpected = totalTasksPerDay * 7
+                val rate = if (weeklyTotalExpected == 0) {
+                    100
+                } else {
+                    ((weeklyCompleted.toDouble() / weeklyTotalExpected.toDouble()) * 100).toInt().coerceAtMost(100)
+                }
+
+                _todayTotalTasks.value = totalTasksPerDay
+                _todayCompletedTasks.value = todayCompleted
+                _weeklyPunctualityRate.value = rate
             }
         }
     }

@@ -37,11 +37,14 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -49,11 +52,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
+import com.silverlink.app.ui.components.UnifiedTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -76,9 +82,13 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.data.local.ConversationEntity
+import com.silverlink.app.data.local.MemoryRecordEntity
+import com.silverlink.app.data.local.UserProfileMemoryEntity
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.data.remote.model.Message
+import com.silverlink.app.feature.chat.RagConfig
+import com.silverlink.app.feature.chat.RagDebugSnapshot
 import com.silverlink.app.ui.theme.CalmContainer
 import com.silverlink.app.ui.theme.CalmOnSecondary
 import com.silverlink.app.ui.theme.WarmContainer
@@ -112,14 +122,21 @@ fun ChatScreen(
     val ttsState by viewModel.ttsState.collectAsState()
     val conversations by viewModel.conversations.collectAsState()
     val currentConversationId by viewModel.currentConversationId.collectAsState()
+    val memoryRecords by viewModel.memoryRecords.collectAsState()
+    val profileMemories by viewModel.profileMemories.collectAsState()
+    val ragConfig by viewModel.ragConfig.collectAsState()
+    val ragDebugEnabled by viewModel.ragDebugEnabled.collectAsState()
+    val ragDebugSnapshot by viewModel.ragDebugSnapshot.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
     
     // 会话列表底部弹窗状态
     var showConversationSheet by remember { mutableStateOf(false) }
+    var showMemoryCenterSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
+    var memoryInputText by remember { mutableStateOf("") }
 
     // 录音权限状态
     var hasAudioPermission by remember {
@@ -247,56 +264,58 @@ fun ChatScreen(
     }
 
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopAppBar(
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = assistantName,
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    // 情绪指示器 - 始终显示
-                    Spacer(modifier = Modifier.width(12.dp))
-                    EmotionBadge(emotion = currentEmotion)
-                }
+        UnifiedTopBar(
+            title = assistantName,
+            icon = Icons.Default.Face,
+            titleSuffix = {
+                EmotionBadge(emotion = currentEmotion)
             },
-            actions = {
-                // TTS 播放状态指示
-                if (ttsState is TtsState.Speaking) {
-                    Text(
-                        text = "🔊",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                }
-                // 找药按钮 - 拍照识别药品
-                IconButton(onClick = { 
-                    if (hasCameraPermission) {
-                        showPillCameraScreen = true
-                    } else {
-                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            rightContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (ttsState is TtsState.Speaking) {
+                        Text(
+                            text = "🔊",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
                     }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.CameraAlt,
-                        contentDescription = "找药",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                // 新对话按钮
-                IconButton(onClick = { viewModel.createNewConversation() }) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = "新对话",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                // 历史会话按钮
-                IconButton(onClick = { showConversationSheet = true }) {
-                    Icon(
-                        imageVector = Icons.Filled.History,
-                        contentDescription = "历史会话",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    IconButton(onClick = { 
+                        if (hasCameraPermission) {
+                            showPillCameraScreen = true
+                        } else {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.CameraAlt,
+                            contentDescription = "找药",
+                            tint = Color.Gray
+                        )
+                    }
+                    IconButton(onClick = { viewModel.createNewConversation() }) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "新对话",
+                            tint = Color.Gray
+                        )
+                    }
+                    IconButton(onClick = { showConversationSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = "历史会话",
+                            tint = Color.Gray
+                        )
+                    }
+                    IconButton(onClick = {
+                        viewModel.refreshMemoryCenter()
+                        showMemoryCenterSheet = true
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.Psychology,
+                            contentDescription = "记忆中心",
+                            tint = Color.Gray
+                        )
+                    }
                 }
             }
         )
@@ -376,6 +395,258 @@ fun ChatScreen(
                     }
                 }
             )
+        }
+    }
+
+    if (showMemoryCenterSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showMemoryCenterSheet = false },
+            sheetState = sheetState
+        ) {
+            MemoryCenterSheet(
+                memoryRecords = memoryRecords,
+                profileMemories = profileMemories,
+                ragConfig = ragConfig,
+                ragDebugEnabled = ragDebugEnabled,
+                ragDebugSnapshot = ragDebugSnapshot,
+                memoryInputText = memoryInputText,
+                onMemoryInputChanged = { memoryInputText = it },
+                onAddMemory = {
+                    viewModel.addMemoryFromUi(memoryInputText)
+                    memoryInputText = ""
+                },
+                onDeleteMemory = { viewModel.deleteLongTermMemory(it) },
+                onDeleteProfile = { viewModel.deleteStructuredProfileMemory(it) },
+                onClearAll = { viewModel.clearAllLongTermMemories() },
+                onRagConfigChanged = { viewModel.updateRagConfig(it) },
+                onRagDebugEnabledChanged = { viewModel.setRagDebugEnabled(it) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MemoryCenterSheet(
+    memoryRecords: List<MemoryRecordEntity>,
+    profileMemories: List<UserProfileMemoryEntity>,
+    ragConfig: RagConfig,
+    ragDebugEnabled: Boolean,
+    ragDebugSnapshot: RagDebugSnapshot?,
+    memoryInputText: String,
+    onMemoryInputChanged: (String) -> Unit,
+    onAddMemory: () -> Unit,
+    onDeleteMemory: (Long) -> Unit,
+    onDeleteProfile: (String) -> Unit,
+    onClearAll: () -> Unit,
+    onRagConfigChanged: (RagConfig) -> Unit,
+    onRagDebugEnabledChanged: (Boolean) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("记忆中心", style = MaterialTheme.typography.titleLarge)
+                TextButton(onClick = onClearAll) {
+                    Text("清空")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = memoryInputText,
+                onValueChange = onMemoryInputChanged,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("新增一条长期记忆，例如：我孙子叫小明") },
+                maxLines = 2
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = onAddMemory,
+                    enabled = memoryInputText.isNotBlank()
+                ) {
+                    Text("添加记忆")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text("RAG 策略", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("TopK: ${ragConfig.topK}")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        onRagConfigChanged(ragConfig.copy(topK = (ragConfig.topK - 1).coerceAtLeast(1)))
+                    }) { Text("-1") }
+                    TextButton(onClick = {
+                        onRagConfigChanged(ragConfig.copy(topK = (ragConfig.topK + 1).coerceAtMost(8)))
+                    }) { Text("+1") }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("启用语义相似")
+                Switch(
+                    checked = ragConfig.enableSemanticSimilarity,
+                    onCheckedChange = { enabled ->
+                        onRagConfigChanged(ragConfig.copy(enableSemanticSimilarity = enabled))
+                    }
+                )
+            }
+
+            Text("重要性权重: ${"%.2f".format(ragConfig.weightImportance)}")
+            Slider(
+                value = ragConfig.weightImportance,
+                onValueChange = { onRagConfigChanged(ragConfig.copy(weightImportance = it)) },
+                valueRange = 0.05f..0.9f
+            )
+
+            Text("关键词重叠权重: ${"%.2f".format(ragConfig.weightTokenOverlap)}")
+            Slider(
+                value = ragConfig.weightTokenOverlap,
+                onValueChange = { onRagConfigChanged(ragConfig.copy(weightTokenOverlap = it)) },
+                valueRange = 0.05f..0.9f
+            )
+
+            Text("语义权重: ${"%.2f".format(ragConfig.weightSemantic)}")
+            Slider(
+                value = ragConfig.weightSemantic,
+                onValueChange = { onRagConfigChanged(ragConfig.copy(weightSemantic = it)) },
+                valueRange = 0f..0.6f,
+                enabled = ragConfig.enableSemanticSimilarity
+            )
+
+            Text("时效权重: ${"%.2f".format(ragConfig.weightRecency)}")
+            Slider(
+                value = ragConfig.weightRecency,
+                onValueChange = { onRagConfigChanged(ragConfig.copy(weightRecency = it)) },
+                valueRange = 0f..0.6f
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("调试模式")
+                Switch(checked = ragDebugEnabled, onCheckedChange = onRagDebugEnabledChanged)
+            }
+
+            if (ragDebugEnabled) {
+                val snapshot = ragDebugSnapshot
+                if (snapshot == null || snapshot.selected.isEmpty()) {
+                    Text("暂无命中调试数据，请先发起一轮对话。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text(
+                        text = "最近Query: ${snapshot.query}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    snapshot.selected.forEach { hit ->
+                        Text(
+                            text = "#${hit.memoryId} score=${"%.3f".format(hit.finalScore)} 重要性=${"%.2f".format(hit.partImportance)} 重叠=${"%.2f".format(hit.partOverlap)} 语义=${"%.2f".format(hit.partSemantic)} 时效=${"%.2f".format(hit.partRecency)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = hit.content,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text("结构化画像", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            if (profileMemories.isEmpty()) {
+                Text("暂无结构化画像", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        if (profileMemories.isNotEmpty()) {
+            items(profileMemories, key = { it.key }) { profile ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${profile.key}: ${profile.value}",
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    IconButton(onClick = { onDeleteProfile(profile.key) }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "删除画像")
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text("长期记忆", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            if (memoryRecords.isEmpty()) {
+                Text("暂无长期记忆", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        if (memoryRecords.isNotEmpty()) {
+            items(memoryRecords, key = { it.id }) { memory ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = memory.content,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    IconButton(onClick = { onDeleteMemory(memory.id) }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "删除记忆")
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

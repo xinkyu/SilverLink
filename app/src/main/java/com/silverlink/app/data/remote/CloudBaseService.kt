@@ -27,9 +27,16 @@ import java.util.concurrent.TimeUnit
  * 4. 将云函数访问地址填入 CLOUD_BASE_URL
  */
 object CloudBaseService {
-    
-    // 直接硬编码测试，排除本地配置文件的干扰
-    private const val CLOUD_BASE_URL: String = "https://silverlink-9gdqj1ne4d834dab-1396514174.ap-shanghai.app.tcloudbase.com/"
+
+    // 统一从 BuildConfig 读取，避免不同代码路径使用不同环境地址。
+    private val CLOUD_BASE_URL: String = run {
+        val configured = BuildConfig.CLOUDBASE_URL.trim()
+        if (configured.isNotBlank()) {
+            if (configured.endsWith("/")) configured else "$configured/"
+        } else {
+            "https://silverlink-3ghlz8es381befbf-1408550226.ap-shanghai.app.tcloudbase.com/"
+        }
+    }
     
     private val json = Json {
         ignoreUnknownKeys = true
@@ -92,6 +99,11 @@ object CloudBaseService {
             } else {
                 Result.failure(Exception(response.message ?: "创建配对码失败"))
             }
+        } catch (e: retrofit2.HttpException) {
+            val url = e.response()?.raw()?.request?.url
+            val errorBody = e.response()?.errorBody()?.string()
+            Log.e("CloudBase", "创建配对码异常: HTTP ${e.code()}, url=$url, body=${errorBody ?: ""}", e)
+            Result.failure(Exception("HTTP ${e.code()}: ${errorBody ?: e.message()}"))
         } catch (e: Exception) {
             Log.e("CloudBase", "创建配对码异常: ${e.message}", e)
             Result.failure(e)
@@ -118,6 +130,11 @@ object CloudBaseService {
                 Log.d("CloudBase", "配对码验证失败: ${response.message}")
                 Result.success(null)
             }
+        } catch (e: retrofit2.HttpException) {
+            val url = e.response()?.raw()?.request?.url
+            val errorBody = e.response()?.errorBody()?.string()
+            Log.e("CloudBase", "验证配对码异常: HTTP ${e.code()}, url=$url, body=${errorBody ?: ""}", e)
+            Result.failure(Exception("HTTP ${e.code()}: ${errorBody ?: e.message()}"))
         } catch (e: Exception) {
             Log.e("CloudBase", "验证配对码异常: ${e.message}", e)
             Result.failure(e)
@@ -137,6 +154,11 @@ object CloudBaseService {
             } else {
                 Result.success(null)
             }
+        } catch (e: retrofit2.HttpException) {
+            val url = e.response()?.raw()?.request?.url
+            val errorBody = e.response()?.errorBody()?.string()
+            Log.e("CloudBase", "获取已配对长辈异常: HTTP ${e.code()}, url=$url, body=${errorBody ?: ""}", e)
+            Result.failure(Exception("HTTP ${e.code()}: ${errorBody ?: e.message()}"))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -865,7 +887,7 @@ object CloudBaseService {
         try {
             Log.d("CloudBase", "查询位置(OkHttp): elderDeviceId=$elderDeviceId")
             // 直接拼装 URL，绕过 Retrofit，确保万无一失
-            val baseUrl = "https://silverlink-9gdqj1ne4d834dab-1396514174.ap-shanghai.app.tcloudbase.com/location-query"
+            val baseUrl = "${CLOUD_BASE_URL}location-query"
             val url = "$baseUrl?elderDeviceId=$elderDeviceId&familyDeviceId=${familyDeviceId ?: ""}"
             
             val request = okhttp3.Request.Builder()

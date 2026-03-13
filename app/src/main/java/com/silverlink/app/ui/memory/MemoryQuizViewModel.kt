@@ -28,7 +28,7 @@ class MemoryQuizViewModel(application: Application) : AndroidViewModel(applicati
     private val ttsService = TextToSpeechService()
     private val audioPlayerHelper = AudioPlayerHelper(application)
     private val audioRecorder = AudioRecorder(application)
-    private val speechService = SpeechRecognitionService()
+    private val speechService = SpeechRecognitionService(application)
     private val userPreferences = UserPreferences.getInstance(application)
     
     // UI 状态

@@ -57,8 +57,7 @@ class SyncRepository(private val context: Context) {
         if (cloudResult.isSuccess) {
             Result.success(code)
         } else {
-            // 云端失败时仍返回本地配对码，支持本地配对
-            Result.success(code)
+            Result.failure(cloudResult.exceptionOrNull() ?: Exception("云端创建配对码失败"))
         }
     }
     
@@ -389,10 +388,48 @@ class SyncRepository(private val context: Context) {
                 }
             }
             
+            // 处理本地多余药品的删除功能（同步删除逻辑）
+            // 注意：考虑到当前设计下可能允许断网添加，我们暂不做强制双向删除，但可以在 ViewModel 处添加主动删除请求。
+
             Result.success(syncedCount)
         } catch (e: Exception) {
             android.util.Log.e("SyncRepository", "同步药品失败: ${e.message}")
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * 删除长辈的药品（家人端调用）
+     */
+    suspend fun deleteMedicationForPairedElder(
+        name: String,
+        dosage: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val elderDeviceId = cloudBase.getPairedElderDeviceId(currentDeviceId).getOrNull()
+            ?: return@withContext Result.failure(Exception("未找到已配对的长辈"))
+
+        val meds = cloudBase.getMedicationList(elderDeviceId).getOrNull() ?: emptyList()
+        val target = meds.find { it.name == name && it.dosage == dosage }
+        if (target != null) {
+            cloudBase.deleteMedication(elderDeviceId, target.id_)
+        } else {
+            Result.success(Unit)
+        }
+    }
+
+    /**
+     * 老人端自己删除云端药品
+     */
+    suspend fun deleteMedicationForSelf(
+        name: String,
+        dosage: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val meds = cloudBase.getMedicationList(currentDeviceId).getOrNull() ?: emptyList()
+        val target = meds.find { it.name == name && it.dosage == dosage }
+        if (target != null) {
+            cloudBase.deleteMedication(currentDeviceId, target.id_)
+        } else {
+            Result.success(Unit)
         }
     }
     

@@ -22,6 +22,8 @@ import androidx.core.app.NotificationCompat
 import com.silverlink.app.R
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.UserPreferences.FallDetectionSensitivity
+import com.silverlink.shared.detection.FallDetectionDLClassifier
+import com.silverlink.shared.detection.AccelFeatures as SharedAccelFeatures
 import kotlinx.coroutines.*
 import kotlin.math.sqrt
 import kotlin.math.abs
@@ -120,8 +122,10 @@ class FallDetectionService : Service(), SensorEventListener {
     private val accelHistory = mutableListOf<Float>()
     private val historySize = 10
     
-    // ========== ML 分类器和缓冲区 ==========
-    private lateinit var mlClassifier: FallDetectionMLClassifier
+    // ========== 深度学习分类器和缓冲区 ==========
+    private var dlClassifier: FallDetectionDLClassifier? = null
+    private var useDLClassifier = false  // 是否成功加载了 DL 模型
+    private lateinit var fallbackClassifier: FallDetectionMLClassifier  // 降级后备
     private val accelBuffer = AccelerometerBuffer()
     
     // ML 检测状态
@@ -188,9 +192,21 @@ class FallDetectionService : Service(), SensorEventListener {
             sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
             Log.d(TAG, "Accelerometer registered for fall detection with GAME delay")
             
-            // 初始化 ML 分类器
-            mlClassifier = FallDetectionMLClassifier(applicationContext)
-            Log.d(TAG, "ML Classifier initialized")
+            // 初始化分类器：优先使用 DL 模型，失败则降级到规则分类器
+            fallbackClassifier = FallDetectionMLClassifier(applicationContext)
+            try {
+                val modelBytes = assets.open("fall_detection_model.onnx").use { it.readBytes() }
+                dlClassifier = FallDetectionDLClassifier(
+                    modelBytes = modelBytes,
+                    logger = FallDetectionDLClassifier.Logger { tag, msg -> Log.d(tag, msg) }
+                )
+                useDLClassifier = true
+                Log.i(TAG, "✅ DL Classifier loaded successfully (ONNX model)")
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️ DL model load failed, falling back to rule-based classifier: ${e.message}")
+                e.printStackTrace() // 打印完整堆栈以排查为啥依然加载失败
+                useDLClassifier = false
+            }
             
         } catch (e: Exception) {
             Log.e(TAG, "Error in FallDetectionService.onCreate", e)
@@ -319,54 +335,72 @@ class FallDetectionService : Service(), SensorEventListener {
         }
         
         // ★ 备用检测：剧烈撞击直接触发（绕过 ML）
-        // 如果加速度超过 40 m/s²（约4G），直接进入确认
-        if (magnitude > 40.0f && mlDetectionState == MLDetectionState.MONITORING) {
+        // 提高到 50 m/s²（约5G），只有非常猛烈的撞击才直接触发
+        if (magnitude > 50.0f && mlDetectionState == MLDetectionState.MONITORING) {
             Log.i(TAG, "STRONG IMPACT detected! mag=$magnitude -> entering confirmation")
             mlDetectionState = MLDetectionState.CONFIRMING
             mlConfirmationStartTime = currentTime
             return
         }
         
-        // ========== ML 双重验证检测流程 ==========
+        // ========== 深度学习/ML 双重验证检测流程 ==========
         when (mlDetectionState) {
             MLDetectionState.MONITORING -> {
                 // 调试：打印缓冲区状态
                 if (logCounter == 0) {
-                    Log.d(TAG, "Buffer: isFull=${accelBuffer.isFull()}")
+                    Log.d(TAG, "Buffer: isFull=${accelBuffer.isFull()} useDL=$useDLClassifier")
                 }
                 
                 // 只有缓冲区足够时才进行检测
                 if (!accelBuffer.isFull()) return
                 
-                // 获取特征
+                // 获取特征（用于预筛选和降级分类）
                 val features = accelBuffer.getFeatures()
                 if (features == null) {
                     Log.d(TAG, "Features is null")
                     return
                 }
                 
-                // 调试：打印特征
-                Log.d(TAG, "Features: max=${String.format("%.1f", features.magMax)}, " +
-                        "range=${String.format("%.1f", features.magRange)}, " +
-                        "freeFall=${features.freeFallCount}")
-                
-                // 快速预筛选
-                if (!mlClassifier.quickPrescreen(features)) {
-                    Log.d(TAG, "Prescreen failed: max=${features.magMax}, range=${features.magRange}")
-                    return
-                }
-                
-                // ML 分类
-                val result = mlClassifier.classify(features)
-                
-                Log.d(TAG, "ML Result: prob=${String.format("%.2f", result.fallProbability)}, " +
-                        "conf=${String.format("%.2f", result.confidence)}, patterns=${result.detectedPatterns}")
-                
-                // 超过阈值，进入确认阶段
-                if (result.fallProbability >= FallDetectionMLClassifier.FALL_PROBABILITY_THRESHOLD) {
-                    Log.i(TAG, "ML detected possible fall (prob=${result.fallProbability}), entering confirmation...")
-                    mlDetectionState = MLDetectionState.CONFIRMING
-                    mlConfirmationStartTime = currentTime
+                if (useDLClassifier && dlClassifier != null) {
+                    // ===== 深度学习路径 =====
+                    // 快速预筛选（基于统计特征，减少不必要的推理调用）
+                    val sharedFeatures = SharedAccelFeatures(
+                        magMean = features.magMean, magMax = features.magMax,
+                        magMin = features.magMin, magStd = features.magStd,
+                        magRange = features.magRange, xMean = features.xMean,
+                        yMean = features.yMean, zMean = features.zMean,
+                        xStd = features.xStd, yStd = features.yStd,
+                        zStd = features.zStd, magChangeRate = features.magChangeRate,
+                        freeFallCount = features.freeFallCount, impactCount = features.impactCount,
+                        recentMagnitudes = features.recentMagnitudes, sampleCount = features.sampleCount
+                    )
+                    if (!dlClassifier!!.quickPrescreen(sharedFeatures)) return
+                    
+                    // 获取原始序列数据并执行 DL 推理
+                    val rawSequence = accelBuffer.getRawSequence()
+                    val result = dlClassifier!!.classify(rawSequence)
+                    
+                    Log.d(TAG, "DL Result: prob=${String.format("%.4f", result.fallProbability)}, " +
+                            "patterns=${result.detectedPatterns}")
+                    
+                    if (result.fallProbability >= FallDetectionDLClassifier.FALL_PROBABILITY_THRESHOLD) {
+                        Log.i(TAG, "DL detected possible fall (prob=${result.fallProbability}), entering confirmation...")
+                        mlDetectionState = MLDetectionState.CONFIRMING
+                        mlConfirmationStartTime = currentTime
+                    }
+                } else {
+                    // ===== 降级路径：规则分类器 =====
+                    if (!fallbackClassifier.quickPrescreen(features)) return
+                    
+                    val result = fallbackClassifier.classify(features)
+                    
+                    Log.d(TAG, "Fallback ML Result: prob=${String.format("%.2f", result.fallProbability)}")
+                    
+                    if (result.fallProbability >= FallDetectionMLClassifier.FALL_PROBABILITY_THRESHOLD) {
+                        Log.i(TAG, "Fallback ML detected possible fall (prob=${result.fallProbability}), entering confirmation...")
+                        mlDetectionState = MLDetectionState.CONFIRMING
+                        mlConfirmationStartTime = currentTime
+                    }
                 }
             }
             
@@ -637,6 +671,9 @@ class FallDetectionService : Service(), SensorEventListener {
         serviceScope.cancel()
         
         stopAlarm()
+        
+        // 释放 DL 分类器资源
+        dlClassifier?.close()
         
         // 释放 WakeLock
         wakeLock?.let {

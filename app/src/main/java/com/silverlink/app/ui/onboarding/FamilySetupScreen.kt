@@ -1,6 +1,7 @@
 package com.silverlink.app.ui.onboarding
 
 import android.graphics.Bitmap
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -237,6 +238,12 @@ fun FamilySetupScreen(
                                         majorDiseaseDetails = majorDiseaseDetails
                                     )
                                     currentStep = 4
+                                }.onFailure { e ->
+                                    Toast.makeText(
+                                        context,
+                                        "配对码同步失败：${e.message ?: "请检查网络或云函数配置"}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                                 isLoading = false
                             }
@@ -273,6 +280,12 @@ fun FamilySetupScreen(
                                         majorDiseaseDetails = majorDiseaseDetails
                                     )
                                     currentStep = 4
+                                }.onFailure { e ->
+                                    Toast.makeText(
+                                        context,
+                                        "配对码同步失败：${e.message ?: "请检查网络或云函数配置"}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                                 isLoading = false
                             }

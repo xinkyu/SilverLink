@@ -1,5 +1,6 @@
 package com.silverlink.app.feature.chat
 
+import android.content.Context
 import android.util.Base64
 import android.util.Log
 import com.silverlink.app.data.model.Emotion
@@ -9,12 +10,13 @@ import com.silverlink.app.data.remote.model.AsrContentItem
 import com.silverlink.app.data.remote.model.AsrInput
 import com.silverlink.app.data.remote.model.AsrMessage
 import com.silverlink.app.data.remote.model.QwenAsrRequest
+import com.silverlink.app.feature.emotion.EmotionRecognitionService
 import java.io.File
 
 /**
- * 语音识别服务 - 调用 Qwen-Audio API 进行语音转文字和情感分析
+ * 语音识别服务 - 调用 Qwen-Audio API 进行语音转文字，使用本地 ONNX 模型进行情感分析
  */
-class SpeechRecognitionService {
+class SpeechRecognitionService(private val context: Context) {
 
     companion object {
         private const val TAG = "SpeechRecognitionService"
@@ -35,22 +37,22 @@ class SpeechRecognitionService {
             // 读取文件并转换为 Base64
             val audioBytes = file.readBytes()
             val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
-            
+
             Log.d(TAG, "Audio file size: ${audioBytes.size} bytes")
 
-            // 步骤1: 语音转文字
+            // 步骤1: 语音转文字 (仍使用 Qwen-Audio API)
             val textResult = transcribeAudio(base64Audio)
             if (textResult.isFailure) {
                 return Result.failure(textResult.exceptionOrNull() ?: Exception("语音识别失败"))
             }
             val text = textResult.getOrThrow()
-            
-            // 步骤2: 分析情绪
-            val emotion = analyzeEmotion(base64Audio, text)
-            
+
+            // 步骤2: 使用本地 ONNX 模型分析情绪
+            val emotion = analyzeEmotion(audioFilePath, text)
+
             Log.d(TAG, "Recognition result: text='$text', emotion=${emotion.name}")
             Result.success(SpeechResult(text = text, emotion = emotion))
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Speech recognition failed", e)
             Result.failure(Exception("语音识别失败: ${e.message}"))
@@ -78,7 +80,7 @@ class SpeechRecognitionService {
 
         val response = RetrofitClient.asrApi.transcribe(request)
         val text = response.output?.choices?.firstOrNull()?.message?.content?.firstOrNull()?.text
-        
+
         return if (text.isNullOrBlank()) {
             Result.failure(Exception("未能识别语音内容"))
         } else {
@@ -87,44 +89,21 @@ class SpeechRecognitionService {
     }
 
     /**
-     * 分析语音情绪
-     * 使用 Qwen-Audio 分析语音中的情感
+     * 使用 MemoCMT 跨模态模型分析情绪（同时利用文本和音频）
      */
-    private suspend fun analyzeEmotion(base64Audio: String, transcribedText: String): Emotion {
+    private suspend fun analyzeEmotion(audioFilePath: String, transcribedText: String): Emotion {
         return try {
-            val request = QwenAsrRequest(
-                model = "qwen2-audio-instruct",
-                input = AsrInput(
-                    messages = listOf(
-                        AsrMessage(
-                            role = "user",
-                            content = listOf(
-                                AsrContentItem.audio(base64Audio, "m4a"),
-                                AsrContentItem.text("""
-                                    请分析这段语音中说话人的情绪状态。
-                                    只回答以下情绪之一: HAPPY, SAD, ANGRY, ANXIOUS, NEUTRAL
-                                    不要解释，只输出一个情绪词。
-                                """.trimIndent())
-                            )
-                        )
-                    )
-                )
-            )
-
-            val response = RetrofitClient.asrApi.transcribe(request)
-            val emotionLabel = response.output?.choices?.firstOrNull()?.message?.content?.firstOrNull()?.text
-            
-            if (!emotionLabel.isNullOrBlank()) {
-                Log.d(TAG, "Emotion analysis result: $emotionLabel")
-                Emotion.fromLabel(emotionLabel)
-            } else {
-                // 无法分析时，根据文本内容做简单判断
+            val emotionService = EmotionRecognitionService.getInstance(context)
+            // 优先使用跨模态分析（文本+音频融合），准确率更高
+            emotionService.analyzeCrossModal(transcribedText, audioFilePath)
+        } catch (e: Throwable) {
+            Log.e(TAG, "MemoCMT cross-modal analysis failed, trying speech-only", e)
+            try {
+                EmotionRecognitionService.getInstance(context).analyzeSpeechEmotion(audioFilePath)
+            } catch (e2: Throwable) {
+                Log.e(TAG, "Speech-only analysis also failed, using keyword guess", e2)
                 guessEmotionFromText(transcribedText)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Emotion analysis failed, using text-based guess", e)
-            // 情感分析失败时，根据文本内容做简单判断
-            guessEmotionFromText(transcribedText)
         }
     }
 
@@ -135,25 +114,25 @@ class SpeechRecognitionService {
         val lowerText = text.lowercase()
         return when {
             // 负面情绪关键词
-            lowerText.contains("疼") || lowerText.contains("痛") || 
+            lowerText.contains("疼") || lowerText.contains("痛") ||
             lowerText.contains("难受") || lowerText.contains("不舒服") ||
             lowerText.contains("唉") || lowerText.contains("哎") ||
             lowerText.contains("累") || lowerText.contains("烦") -> Emotion.SAD
-            
+
             // 焦虑关键词
             lowerText.contains("担心") || lowerText.contains("害怕") ||
             lowerText.contains("紧张") || lowerText.contains("焦虑") ||
             lowerText.contains("着急") -> Emotion.ANXIOUS
-            
+
             // 愤怒关键词
             lowerText.contains("生气") || lowerText.contains("气死") ||
             lowerText.contains("讨厌") || lowerText.contains("烦死") -> Emotion.ANGRY
-            
+
             // 积极情绪关键词
             lowerText.contains("开心") || lowerText.contains("高兴") ||
             lowerText.contains("太好了") || lowerText.contains("真棒") ||
             lowerText.contains("哈哈") -> Emotion.HAPPY
-            
+
             else -> Emotion.NEUTRAL
         }
     }

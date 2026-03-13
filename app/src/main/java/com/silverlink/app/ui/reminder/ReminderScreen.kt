@@ -7,6 +7,7 @@ import android.widget.NumberPicker
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,8 +27,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -48,6 +51,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
+import com.silverlink.app.ui.components.UnifiedTopBar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -72,6 +76,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.data.local.entity.Medication
 import com.silverlink.app.feature.reminder.RecognizedMedication
 import com.silverlink.app.ui.theme.SuccessGreen
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,6 +93,10 @@ fun ReminderScreen(
     val recognitionState by viewModel.recognitionState.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
     val takenTimes by viewModel.takenTimes.collectAsState()
+    
+    val todayTotalTasks by viewModel.todayTotalTasks.collectAsState()
+    val todayCompletedTasks by viewModel.todayCompletedTasks.collectAsState()
+    val weeklyPunctualityRate by viewModel.weeklyPunctualityRate.collectAsState()
     
     var showAddDialog by remember { mutableStateOf(false) }
     var editingMedication by remember { mutableStateOf<Medication?>(null) }
@@ -130,90 +142,138 @@ fun ReminderScreen(
     }
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (medications.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "还没有添加药品哦", 
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "点刷新按钮同步，或点右下角添加",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
+        Column(modifier = Modifier.fillMaxSize()) {
+            UnifiedTopBar(
+                title = "吃药提醒",
+                icon = Icons.Default.Notifications
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    IconButton(
+                        onClick = { viewModel.refresh() },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f), shape = CircleShape)
+                    ) {
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = "刷新同步", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+
+                    IconButton(
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFFFFF3E0), shape = CircleShape)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "添加", tint = Color(0xFFFF8A00))
+                    }
                 }
             }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+
+            // Big Orange Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                    .background(Color(0xFFFF8A00), shape = RoundedCornerShape(20.dp))
+                    .clickable { 
+                        if (hasCameraPermission) {
+                            launchCamera()
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    }
+                    .padding(16.dp),
+                contentAlignment = Alignment.CenterStart
             ) {
-                items(medications) { med ->
-                    MedicationItem(
-                        medication = med,
-                        takenTimes = takenTimes[med.id].orEmpty(),
-                        onToggleTime = { time -> viewModel.markMedicationTimeTaken(med, time) },
-                        onEdit = { editingMedication = med },
-                        onDelete = { viewModel.deleteMedication(med) }
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(Color.White.copy(alpha = 0.2f), shape = RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("智能识别药瓶", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("对准药瓶，自动识别并添加提醒", fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f))
+                    }
+                    Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.White)
+                }
+            }
+
+            // Stats Cards Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Card 1
+                Box(modifier = Modifier.weight(1f).background(Color.White, RoundedCornerShape(16.dp)).padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "$todayTotalTasks", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF6B00))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "今日任务", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+                // Card 2
+                Box(modifier = Modifier.weight(1f).background(Color.White, RoundedCornerShape(16.dp)).padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "$todayCompletedTasks", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00C853))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "已完成", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+                // Card 3
+                Box(modifier = Modifier.weight(1f).background(Color.White, RoundedCornerShape(16.dp)).padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "$weeklyPunctualityRate%", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2962FF))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "本周准时率", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+            }
+
+            if (medications.isEmpty()) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "还没有添加药品哦", 
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(medications) { med ->
+                        MedicationItem(
+                            medication = med,
+                            takenTimes = takenTimes[med.id].orEmpty(),
+                            onToggleTime = { time -> viewModel.markMedicationTimeTaken(med, time) },
+                            onEdit = { editingMedication = med },
+                            onDelete = { viewModel.deleteMedication(med) }
+                        )
+                    }
                 }
             }
         }
 
-        // FAB 区域 - 三个按钮
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            // 刷新按钮
-            SmallFloatingActionButton(
-                onClick = { viewModel.refresh() },
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-            ) {
-                if (isRefreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                } else {
-                    Icon(Icons.Default.Refresh, contentDescription = "刷新同步")
-                }
-            }
-            
-            // 拍照识别按钮
-            SmallFloatingActionButton(
-                onClick = {
-                    if (hasCameraPermission) {
-                        launchCamera()
-                    } else {
-                        permissionLauncher.launch(Manifest.permission.CAMERA)
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            ) {
-                Icon(Icons.Default.CameraAlt, contentDescription = "拍照识别")
-            }
-            
-            // 手动添加按钮
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                modifier = Modifier.size(72.dp),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = MaterialTheme.shapes.extraLarge
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "添加药品", modifier = Modifier.size(36.dp))
-            }
-        }
+
 
         // Add Dialog
         if (showAddDialog) {
@@ -477,17 +537,12 @@ fun MedicationItem(
     onDelete: () -> Unit
 ) {
     Card(
-        shape = MaterialTheme.shapes.medium,
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (medication.isTakenToday) 
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
-            else 
-                MaterialTheme.colorScheme.surface
+            containerColor = Color.White
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (medication.isTakenToday) 0.dp else 4.dp
-        ),
-        modifier = Modifier.fillMaxWidth()
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
     ) {
         Column(
             modifier = Modifier
@@ -498,75 +553,102 @@ fun MedicationItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Colored Indicator Line
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(32.dp)
+                        .background(
+                            color = if (medication.isTakenToday) SuccessGreen else Color(0xFFFF8A00),
+                            shape = RoundedCornerShape(2.dp)
+                        )
+                )
+                
+                Spacer(modifier = Modifier.width(12.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = medication.name,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (medication.isTakenToday) 
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) 
-                        else 
-                            MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF1E293B)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = medication.dosage,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray
                     )
                 }
                 
-                // 编辑按钮
-                IconButton(onClick = onEdit) {
-                    Icon(
-                        Icons.Default.Edit, 
-                        contentDescription = "编辑",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                
-                // 删除按钮
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Default.Delete, 
-                        contentDescription = "删除", 
-                        tint = MaterialTheme.colorScheme.error
-                    )
+                // 行动按钮组合
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F5F9))
+                            .clickable { onEdit() }
+                    ) {
+                        Icon(
+                            Icons.Default.Edit, 
+                            contentDescription = "编辑",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFEE2E2))
+                            .clickable { onDelete() }
+                    ) {
+                        Icon(
+                            Icons.Default.Delete, 
+                            contentDescription = "删除", 
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
             
-            // 时间列表显示
-            Spacer(modifier = Modifier.height(12.dp))
+            // 服药时间列表改进UI
+            Spacer(modifier = Modifier.height(16.dp))
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 medication.getTimeList().forEach { time ->
                     val isTaken = takenTimes.contains(time)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                    val bgColor = if (isTaken) SuccessGreen.copy(alpha = 0.15f) else Color(0xFFF8FAFC)
+                    val contentColor = if (isTaken) SuccessGreen else Color(0xFF64748B)
+
+                    Surface(
+                        onClick = { if (!isTaken) onToggleTime(time) },
+                        color = bgColor,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.clickable { if (!isTaken) onToggleTime(time) }
                     ) {
-                        Surface(
-                            color = if (isTaken) SuccessGreen.copy(alpha = 0.2f) else MaterialTheme.colorScheme.secondaryContainer,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = time,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (isTaken) SuccessGreen else MaterialTheme.colorScheme.onSecondaryContainer,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                        IconButton(
-                            onClick = { if (!isTaken) onToggleTime(time) },
-                            modifier = Modifier.size(32.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
                             Icon(
-                                imageVector = if (isTaken) Icons.Default.CheckCircle else Icons.Outlined.CheckCircle,
-                                contentDescription = if (isTaken) "已服药" else "标记已服药",
-                                tint = if (isTaken) SuccessGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                modifier = Modifier.size(22.dp)
+                                imageVector = if (isTaken) Icons.Default.CheckCircle else Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = time,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = contentColor,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }

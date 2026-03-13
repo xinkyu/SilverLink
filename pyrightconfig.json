@@ -1,0 +1,12 @@
+{
+    "pythonVersion": "3.11",
+    "pythonPlatform": "Windows",
+    "venvPath": "",
+    "pythonPath": "C:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "extraPaths": [
+        "C:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages"
+    ],
+    "typeCheckingMode": "off",
+    "reportMissingImports": false,
+    "reportMissingModuleSource": false
+}

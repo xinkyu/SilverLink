@@ -1,1 +1,12 @@
-{}
+{
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "python.defaultInterpreterPath": "C:/Users/HP/AppData/Local/Programs/Python/Python311/python.exe",
+    "python.analysis.extraPaths": [
+        "C:/Users/HP/AppData/Local/Programs/Python/Python311/Lib/site-packages"
+    ],
+    "python.analysis.typeCheckingMode": "off",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingImports": "none",
+        "reportMissingModuleSource": "none"
+    }
+}

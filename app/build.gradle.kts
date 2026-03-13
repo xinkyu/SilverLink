@@ -62,9 +62,15 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    androidResources {
+        noCompress += listOf("onnx")
+    }
 }
 
 dependencies {
+    // Project modules
+    implementation(project(":shared"))
+    implementation(project(":oppo-sdk-bridge"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -98,7 +104,7 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     
     // kotlinx-serialization for JSON
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    implementation(libs.kotlinx.serialization.json)
     
     // CameraX for real-time camera preview
     implementation("androidx.camera:camera-core:1.3.1")
@@ -111,6 +117,9 @@ dependencies {
     
     // Google Play Services Location
     implementation("com.google.android.gms:play-services-location:21.0.1")
+
+    // ONNX Runtime for on-device emotion recognition
+    implementation(libs.onnxruntime.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
