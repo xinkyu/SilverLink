@@ -81,4 +81,17 @@ interface ChatDao {
      */
     @Query("DELETE FROM chat_messages WHERE conversationId = :conversationId")
     suspend fun deleteMessagesForConversation(conversationId: Long)
+
+    /**
+     * 增量获取用户消息（用于后台记忆提炼）
+     */
+    @Query(
+        """
+        SELECT * FROM chat_messages
+        WHERE role = 'user' AND id > :afterId
+        ORDER BY id ASC
+        LIMIT :limit
+        """
+    )
+    suspend fun getUserMessagesAfterId(afterId: Long, limit: Int): List<ChatMessageEntity>
 }

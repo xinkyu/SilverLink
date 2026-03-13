@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.ChatMessageEntity
 import com.silverlink.app.data.local.ConversationEntity
+import com.silverlink.app.data.local.MemoryRecordEntity
+import com.silverlink.app.data.local.UserProfileMemoryEntity
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.model.Emotion
 import com.silverlink.app.data.remote.RetrofitClient
@@ -15,16 +17,37 @@ import com.silverlink.app.data.remote.model.Message
 import com.silverlink.app.data.remote.model.QwenRequest
 import com.silverlink.app.feature.chat.AudioPlayerHelper
 import com.silverlink.app.feature.chat.AudioRecorder
+import com.silverlink.app.feature.chat.HybridMemoryRagService
+import com.silverlink.app.feature.chat.MemoryMaintenanceService
+import com.silverlink.app.feature.chat.MemoryRetrievalService
+import com.silverlink.app.feature.chat.RagConfig
+import com.silverlink.app.feature.chat.RagDebugSnapshot
 import com.silverlink.app.feature.chat.SpeechRecognitionService
 import com.silverlink.app.feature.chat.TextToSpeechService
 import com.silverlink.app.feature.emotion.EmotionRecognitionService
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import org.json.JSONArray
+import org.json.JSONObject
 
 private const val TAG = "ChatViewModel"
+private const val SHORT_TERM_WINDOW_SIZE = 12
+private const val MAX_MEMORY_CONTENT_LENGTH = 140
+private const val SYSTEM_PROMPT_CHAR_BUDGET = 1800
+private const val MEMORY_EXTRACTION_IDLE_DELAY_MS = 45_000L
+private const val MEMORY_EXTRACTION_PERIODIC_MS = 20 * 60 * 1000L
+private const val MEMORY_EXTRACTION_BATCH_SIZE = 30
+private const val LLM_MEMORY_CURSOR_KEY = "llm_memory_cursor_id"
+private const val LLM_MEMORY_LAST_RUN_KEY = "llm_memory_last_run_at"
+private const val MEMORY_LOG_PREFIX = "[LLM-Memory]"
 
 sealed class VoiceState {
     object Idle : VoiceState()
@@ -56,6 +79,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _ttsState = MutableStateFlow<TtsState>(TtsState.Idle)
     val ttsState: StateFlow<TtsState> = _ttsState.asStateFlow()
+
+    private val _memoryRecords = MutableStateFlow<List<MemoryRecordEntity>>(emptyList())
+    val memoryRecords: StateFlow<List<MemoryRecordEntity>> = _memoryRecords.asStateFlow()
+
+    private val _profileMemories = MutableStateFlow<List<UserProfileMemoryEntity>>(emptyList())
+    val profileMemories: StateFlow<List<UserProfileMemoryEntity>> = _profileMemories.asStateFlow()
+
+    private val _ragConfig = MutableStateFlow(RagConfig())
+    val ragConfig: StateFlow<RagConfig> = _ragConfig.asStateFlow()
+
+    private val _ragDebugEnabled = MutableStateFlow(false)
+    val ragDebugEnabled: StateFlow<Boolean> = _ragDebugEnabled.asStateFlow()
+
+    private val _ragDebugSnapshot = MutableStateFlow<RagDebugSnapshot?>(null)
+    val ragDebugSnapshot: StateFlow<RagDebugSnapshot?> = _ragDebugSnapshot.asStateFlow()
 
     // 语音命令意图状态 - 用于触发导航和执行操作
     enum class SafetyFeature { FALL_DETECTION, PROACTIVE_INTERACTION, LOCATION_SHARING }
@@ -110,10 +148,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var currentAudioFile: String? = null
     
     // 数据库访问
-    private val chatDao = AppDatabase.getInstance(application).chatDao()
-    private val historyDao = AppDatabase.getInstance(application).historyDao()
+    private val appDatabase = AppDatabase.getInstance(application)
+    private val chatDao = appDatabase.chatDao()
+    private val historyDao = appDatabase.historyDao()
+    private val memoryDao = appDatabase.memoryDao()
+    private val hybridRagService by lazy {
+        HybridMemoryRagService(memoryDao, ::extractKeywords)
+    }
+    private val memoryRetrievalService: MemoryRetrievalService by lazy {
+        hybridRagService
+    }
+    private val memoryMaintenanceService = MemoryMaintenanceService(memoryDao)
     private val userPrefs = UserPreferences.getInstance(application)
     private val syncRepository = com.silverlink.app.data.repository.SyncRepository.getInstance(application)
+    private val memoryExtractionMutex = Mutex()
+    private var idleMemoryExtractionJob: Job? = null
+    private var periodicMemoryExtractionJob: Job? = null
 
     private fun getElderName(): String = userPrefs.userConfig.value.elderName.trim()
     private fun getElderProfile(): String = userPrefs.userConfig.value.elderProfile.trim()
@@ -160,6 +210,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             Log.d(TAG, "No cloned voice set, will use default system voice")
         }
+
+        startPeriodicMemoryExtraction()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        idleMemoryExtractionJob?.cancel()
+        periodicMemoryExtractionJob?.cancel()
+        audioPlayer.release()
     }
 
     private fun loadConversations() {
@@ -286,31 +345,316 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * 根据当前情绪生成动态 System Prompt
-     */
-    private fun buildSystemPrompt(): Message {
-        val emotionHint = _currentEmotion.value.promptHint
-        val elderName = getElderName()
-        val elderProfile = getElderProfile()
+    private fun extractKeywords(text: String): List<String> {
+        val normalized = text
+            .lowercase()
+            .replace(Regex("[\\n\\r\\t，。！？、；：,.!?;:]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
-        val dialect = userPrefs.userConfig.value.dialect
+        if (normalized.isBlank()) return emptyList()
+
+        val stopWords = setOf("我们", "你们", "这个", "那个", "然后", "就是", "已经", "还是", "因为", "所以", "今天", "现在")
+        val tokenTerms = normalized
+            .split(" ")
+            .map { it.trim() }
+            .filter { it.length >= 2 && it !in stopWords }
+
+        val compact = normalized.replace(" ", "")
+        val ngramTerms = mutableSetOf<String>()
+        for (n in 2..3) {
+            if (compact.length >= n) {
+                for (i in 0..compact.length - n) {
+                    val gram = compact.substring(i, i + n)
+                    if (gram.any { it.isLetterOrDigit() || it.code in 0x4E00..0x9FA5 }) {
+                        ngramTerms.add(gram)
+                    }
+                }
+            }
+        }
+
+        val domainTerms = listOf(
+            "高血压", "糖尿病", "冠心病", "心脏病", "头晕", "吃药", "药", "儿子", "女儿", "孙子", "孙女", "老伴", "外孙",
+            "名字", "称呼", "住在", "喜欢"
+        ).filter { compact.contains(it) }
+
+        return (domainTerms + tokenTerms + ngramTerms)
+            .distinct()
+            .filter { it.length >= 2 && it !in stopWords }
+            .take(12)
+    }
+
+    private fun estimateImportance(content: String, emotion: Emotion): Float {
+        var score = 0.35f
+        if (content.contains("高血压") || content.contains("糖尿病") || content.contains("心脏") || content.contains("头晕")) {
+            score += 0.35f
+        }
+        if (content.contains("儿子") || content.contains("女儿") || content.contains("孙子") || content.contains("老伴")) {
+            score += 0.2f
+        }
+        if (emotion == Emotion.SAD || emotion == Emotion.ANXIOUS) {
+            score += 0.15f
+        }
+        return score.coerceIn(0.1f, 1.0f)
+    }
+
+    private fun scheduleIdleMemoryExtraction() {
+        idleMemoryExtractionJob?.cancel()
+        Log.d(TAG, "$MEMORY_LOG_PREFIX schedule idle extraction in ${MEMORY_EXTRACTION_IDLE_DELAY_MS}ms")
+        idleMemoryExtractionJob = viewModelScope.launch {
+            delay(MEMORY_EXTRACTION_IDLE_DELAY_MS)
+            runLlmMemoryExtraction("idle")
+        }
+    }
+
+    private fun startPeriodicMemoryExtraction() {
+        periodicMemoryExtractionJob?.cancel()
+        Log.d(TAG, "$MEMORY_LOG_PREFIX start periodic extraction, interval=${MEMORY_EXTRACTION_PERIODIC_MS}ms")
+        periodicMemoryExtractionJob = viewModelScope.launch {
+            while (isActive) {
+                delay(MEMORY_EXTRACTION_PERIODIC_MS)
+                runLlmMemoryExtraction("periodic")
+            }
+        }
+    }
+
+    private suspend fun runLlmMemoryExtraction(trigger: String) {
+        memoryExtractionMutex.withLock {
+            runCatching {
+                val cursor = memoryDao.getUserProfileMemory(LLM_MEMORY_CURSOR_KEY)?.value?.toLongOrNull() ?: 0L
+                val messages = chatDao.getUserMessagesAfterId(cursor, MEMORY_EXTRACTION_BATCH_SIZE)
+                Log.d(TAG, "$MEMORY_LOG_PREFIX trigger=$trigger cursor=$cursor fetched=${messages.size}")
+                if (messages.isEmpty()) {
+                    Log.d(TAG, "$MEMORY_LOG_PREFIX no new user messages, skip")
+                    return
+                }
+
+                val latestMessageId = messages.maxOf { it.id }
+                val latestConversationId = messages.lastOrNull()?.conversationId ?: (_currentConversationId.value ?: 0L)
+                val firstMessageId = messages.minOf { it.id }
+                Log.d(
+                    TAG,
+                    "$MEMORY_LOG_PREFIX processing messageRange=[$firstMessageId,$latestMessageId], latestConversationId=$latestConversationId"
+                )
+                val transcript = messages.joinToString("\n") { "[id=${it.id}] ${it.content}" }
+
+                val prompt = """
+                    你是养老对话的记忆提炼器。请从下面用户消息中提炼“长期有价值记忆”，输出严格JSON：
+                    {
+                      "memory_facts": [{"text":"...","importance":0.0}],
+                      "profile_updates": [{"key":"preferred_name|age|health_conditions|family_relations|living_location|preferences","value":"...","confidence":0.0}]
+                    }
+                    规则：
+                    1) 仅提炼稳定、可复用信息，忽略临时寒暄。
+                    2) memory_facts 每条 text 4-60字，importance 范围 0.1-1.0。
+                    3) profile_updates 仅在有明确依据时输出。
+                    4) 只返回JSON，不要代码块和解释。
+
+                    用户消息：
+                    $transcript
+                """.trimIndent()
+
+                val request = QwenRequest(
+                    input = Input(
+                        messages = listOf(
+                            Message("system", "你是严格JSON输出助手。"),
+                            Message("user", prompt)
+                        )
+                    )
+                )
+
+                val response = RetrofitClient.api.chat(request)
+                val raw = response.output.choices?.firstOrNull()?.message?.content ?: response.output.text ?: "{}"
+                val payload = extractJsonObject(raw)
+                val obj = JSONObject(payload)
+
+                val memoryFacts = obj.optJSONArray("memory_facts") ?: JSONArray()
+                var savedFacts = 0
+                for (i in 0 until memoryFacts.length()) {
+                    val item = memoryFacts.optJSONObject(i) ?: continue
+                    val text = item.optString("text", "").trim().take(MAX_MEMORY_CONTENT_LENGTH)
+                    if (text.length < 4) continue
+                    val importance = item.optDouble("importance", 0.6).toFloat().coerceIn(0.1f, 1.0f)
+                    val keywords = extractKeywords(text)
+                    memoryMaintenanceService.upsertMemoryRecord(
+                        conversationId = latestConversationId,
+                        content = text,
+                        keywordsText = keywords.joinToString(","),
+                        importance = importance
+                    )
+                    savedFacts++
+                }
+
+                val profileUpdates = obj.optJSONArray("profile_updates") ?: JSONArray()
+                var savedProfiles = 0
+                for (i in 0 until profileUpdates.length()) {
+                    val item = profileUpdates.optJSONObject(i) ?: continue
+                    val key = item.optString("key", "").trim()
+                    val value = item.optString("value", "").trim()
+                    if (key.isBlank() || value.isBlank()) continue
+                    val confidence = item.optDouble("confidence", 0.7).toFloat().coerceIn(0.1f, 1.0f)
+                    memoryMaintenanceService.mergeProfileMemory(key, value, confidence)
+                    savedProfiles++
+                }
+
+                Log.d(
+                    TAG,
+                    "$MEMORY_LOG_PREFIX extracted memoryFacts=${memoryFacts.length()} savedFacts=$savedFacts, profileUpdates=${profileUpdates.length()} savedProfiles=$savedProfiles"
+                )
+
+                memoryDao.upsertUserProfileMemory(
+                    UserProfileMemoryEntity(
+                        key = LLM_MEMORY_CURSOR_KEY,
+                        value = latestMessageId.toString(),
+                        confidence = 1.0f,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+                memoryDao.upsertUserProfileMemory(
+                    UserProfileMemoryEntity(
+                        key = LLM_MEMORY_LAST_RUN_KEY,
+                        value = "${System.currentTimeMillis()}|$trigger",
+                        confidence = 1.0f,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+
+                Log.d(TAG, "$MEMORY_LOG_PREFIX done trigger=$trigger newCursor=$latestMessageId")
+
+                refreshMemoryCenter()
+            }.onFailure {
+                Log.w(TAG, "LLM memory extraction failed (trigger=$trigger)", it)
+            }
+        }
+    }
+
+    private fun extractJsonObject(raw: String): String {
+        val cleaned = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        val start = cleaned.indexOf('{')
+        val end = cleaned.lastIndexOf('}')
+        return if (start >= 0 && end > start) cleaned.substring(start, end + 1) else "{}"
+    }
+
+    private fun extractMemoryFacts(content: String): List<String> {
+        val text = content.trim()
+        if (text.length < 6) return emptyList()
+
+        val facts = mutableListOf<String>()
+
+        Regex("我叫([\\u4E00-\\u9FA5A-Za-z]{1,12})").find(text)?.groupValues?.getOrNull(1)?.let {
+            facts.add("偏好称呼是$it")
+        }
+        Regex("我今年([0-9]{2,3})岁").find(text)?.groupValues?.getOrNull(1)?.let {
+            facts.add("年龄约${it}岁")
+        }
+
+        val diseaseHits = listOf("高血压", "糖尿病", "冠心病", "心脏病", "失眠", "关节炎", "脑梗", "哮喘")
+            .filter { text.contains(it) }
+        if (diseaseHits.isNotEmpty()) {
+            facts.add("健康状况：${diseaseHits.distinct().joinToString("、")}")
+        }
+
+        val relationHits = listOf("儿子", "女儿", "孙子", "孙女", "老伴", "外孙", "外孙女")
+            .filter { text.contains(it) }
+        if (relationHits.isNotEmpty()) {
+            facts.add("家庭关系提及：${relationHits.distinct().joinToString("、")}")
+        }
+
+        val habitPattern = Regex("(每天|经常|通常|总是)([^。！？]{2,20})")
+        habitPattern.findAll(text).forEach { m ->
+            val habit = (m.groupValues.getOrNull(1).orEmpty() + m.groupValues.getOrNull(2).orEmpty()).trim()
+            if (habit.length in 4..20) {
+                facts.add("生活习惯：$habit")
+            }
+        }
+
+        // 如果没有抽取到结构化事实，且语句明显包含健康或个人重要状态，再保留短摘要
+        if (facts.isEmpty()) {
+            // 移除了过于宽泛的 "我", "我的", "家里" 避免每条包含“我”的日常对话都被存入记忆
+            val personalSignals = listOf("身体", "吃药", "睡", "头晕", "血压", "不舒服", "疼", "去医院")
+            if (personalSignals.any { text.contains(it) }) {
+                facts.add(text.take(MAX_MEMORY_CONTENT_LENGTH))
+            }
+        }
+
+        return facts
+            .map { it.trim().replace(Regex("\\s+"), " ") }
+            .filter { it.length >= 4 }
+            .distinct()
+            .take(3)
+    }
+
+    // 旧的本地规则提炼流程已废弃，改由后台 LLM 提炼任务处理。
+
+    private suspend fun buildCoreProfileMemoryLines(): List<String> {
+        val lines = mutableListOf<String>()
+        val elderName = getElderName()
+        if (elderName.isNotBlank()) {
+            lines.add("偏好称呼：$elderName")
+        }
+
+        val elderProfile = getElderProfile()
+        if (elderProfile.isNotBlank()) {
+            lines.add("基础画像：$elderProfile")
+        }
+
         val hasMajorDisease = userPrefs.userConfig.value.hasMajorDisease
         val majorDiseaseDetails = userPrefs.userConfig.value.majorDiseaseDetails
+        if (hasMajorDisease && majorDiseaseDetails.isNotBlank()) {
+            lines.add("健康重点：$majorDiseaseDetails")
+        }
+
+        memoryDao.listUserProfileMemories().forEach { profile ->
+            val keyLabel = when (profile.key) {
+                "preferred_name" -> "偏好称呼"
+                "age" -> "年龄"
+                "health_conditions" -> "健康状况"
+                "family_relations" -> "家庭关系"
+                "living_location" -> "居住地"
+                "preferences" -> "偏好"
+                else -> profile.key
+            }
+            lines.add("$keyLabel：${profile.value}")
+        }
+
+        return lines.distinct().take(8)
+    }
+
+    private fun clipText(text: String, maxLength: Int): String {
+        return if (text.length <= maxLength) text else text.take(maxLength) + "…"
+    }
+
+    /**
+     * 根据当前情绪生成动态 System Prompt，并注入核心画像和长期记忆。
+     */
+    private suspend fun buildSystemPrompt(userInput: String): Message {
+        val emotionHint = _currentEmotion.value.promptHint
+        val elderName = getElderName()
+
+        val dialect = userPrefs.userConfig.value.dialect
+        val coreProfileLines = buildCoreProfileMemoryLines()
+        val ragContext = memoryRetrievalService.buildGroundedContext(
+            query = userInput,
+            limit = _ragConfig.value.topK,
+            maxChars = 560
+        )
+        if (_ragDebugEnabled.value) {
+            _ragDebugSnapshot.value = memoryRetrievalService.getLastDebugSnapshot()
+        }
         
         val nameHint = if (elderName.isNotBlank()) {
             "用户称呼为“$elderName”，回复时请优先使用该称呼，避免使用“爷爷奶奶”等泛称。"
         } else {
             "请避免使用“爷爷奶奶”等泛称，改用“您”进行称呼。"
         }
-        val profileHint = if (elderProfile.isNotBlank()) {
-            "【长辈信息】$elderProfile。请据此进行更有针对性的回应。"
+        val profileHint = if (coreProfileLines.isNotEmpty()) {
+            "【核心记忆】${clipText(coreProfileLines.joinToString("；"), 380)}"
         } else {
             ""
         }
-        
-        val healthHint = if (hasMajorDisease && majorDiseaseDetails.isNotBlank()) {
-            "【健康状况重要提示】长辈患有：$majorDiseaseDetails。请在对话中格外注意，若长辈提到身体不适或相关症状，请立即建议就医或联系家人。请给予更多的关怀和耐心。"
+
+        val longTermMemoryHint = if (ragContext.isNotBlank()) {
+            "【长期记忆RAG上下文】\n${clipText(ragContext, 560)}"
         } else {
             ""
         }
@@ -323,13 +667,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val fullPrompt = buildString {
             append(getBaseSystemPrompt())
+            append("\n\n【记忆使用规则】若“长期记忆RAG上下文”中存在与当前问题直接相关的信息，请优先基于该信息作答，并给出简洁明确回答。")
             append("\n\n【称呼提示】$nameHint")
             if (profileHint.isNotBlank()) append("\n$profileHint")
-            if (healthHint.isNotBlank()) append("\n$healthHint")
+            if (longTermMemoryHint.isNotBlank()) append("\n$longTermMemoryHint")
             if (dialectHint.isNotBlank()) append("\n$dialectHint")
             if (emotionHint.isNotBlank()) append("\n【用户情绪提示】$emotionHint")
         }
-        return Message(role = "system", content = fullPrompt)
+        return Message(role = "system", content = clipText(fullPrompt, SYSTEM_PROMPT_CHAR_BUDGET))
     }
 
     /**
@@ -852,14 +1197,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             // 保存用户消息到数据库（此时 _currentEmotion 已更新）
             saveMessageToDb(userMessage, _currentEmotion.value)
+            scheduleIdleMemoryExtraction()
 
             _isLoading.value = true
             try {
                 // 使用动态 System Prompt（根据情绪调整）
                 val apiMessages = mutableListOf<Message>()
-                apiMessages.add(buildSystemPrompt())
-                // Add last few messages for context
-                apiMessages.addAll(currentHistory.takeLast(10)) 
+                apiMessages.add(buildSystemPrompt(content))
+                // 短期记忆窗口：保留最近 N 条消息。
+                apiMessages.addAll(currentHistory.takeLast(SHORT_TERM_WINDOW_SIZE))
                 apiMessages.add(userMessage)
 
                 val request = QwenRequest(
@@ -891,6 +1237,74 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    fun refreshMemoryCenter() {
+        viewModelScope.launch {
+            _memoryRecords.value = memoryDao.listAllMemories()
+            _profileMemories.value = memoryDao.listUserProfileMemories()
+            if (_ragDebugEnabled.value) {
+                _ragDebugSnapshot.value = memoryRetrievalService.getLastDebugSnapshot()
+            }
+        }
+    }
+
+    fun updateRagConfig(config: RagConfig) {
+        val normalized = config.normalized()
+        _ragConfig.value = normalized
+        memoryRetrievalService.updateConfig(normalized)
+        if (_ragDebugEnabled.value) {
+            _ragDebugSnapshot.value = memoryRetrievalService.getLastDebugSnapshot()
+        }
+    }
+
+    fun setRagDebugEnabled(enabled: Boolean) {
+        _ragDebugEnabled.value = enabled
+        memoryRetrievalService.setDebugEnabled(enabled)
+        if (!enabled) {
+            _ragDebugSnapshot.value = null
+        } else {
+            _ragDebugSnapshot.value = memoryRetrievalService.getLastDebugSnapshot()
+        }
+    }
+
+    fun addMemoryFromUi(content: String, importance: Float = 0.7f) {
+        val conversationId = _currentConversationId.value ?: return
+        val normalized = content.trim().take(MAX_MEMORY_CONTENT_LENGTH)
+        if (normalized.isBlank()) return
+
+        viewModelScope.launch {
+            val keywords = extractKeywords(normalized)
+            memoryMaintenanceService.upsertMemoryRecord(
+                conversationId = conversationId,
+                content = normalized,
+                keywordsText = keywords.joinToString(","),
+                importance = importance.coerceIn(0.1f, 1.0f)
+            )
+            refreshMemoryCenter()
+        }
+    }
+
+    fun deleteLongTermMemory(id: Long) {
+        viewModelScope.launch {
+            memoryDao.deleteMemoryById(id)
+            refreshMemoryCenter()
+        }
+    }
+
+    fun deleteStructuredProfileMemory(key: String) {
+        viewModelScope.launch {
+            memoryDao.deleteUserProfileMemory(key)
+            refreshMemoryCenter()
+        }
+    }
+
+    fun clearAllLongTermMemories() {
+        viewModelScope.launch {
+            memoryDao.clearAllMemories()
+            memoryDao.clearUserProfileMemories()
+            refreshMemoryCenter()
         }
     }
 
@@ -989,8 +1403,4 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return "${prefix}抱歉，我没能认出这个药。你可以把药瓶正面对着我再试一次吗？"
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        audioPlayer.release()
-    }
 }

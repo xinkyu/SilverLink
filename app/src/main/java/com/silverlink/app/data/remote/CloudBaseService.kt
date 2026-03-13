@@ -27,11 +27,7 @@ import java.util.concurrent.TimeUnit
  * 4. 将云函数访问地址填入 CLOUD_BASE_URL
  */
 object CloudBaseService {
-    
-<<<<<<< HEAD
-    // 读取 BuildConfig 中的配置，避免硬编码旧链接
-    private val CLOUD_BASE_URL: String = BuildConfig.CLOUDBASE_URL
-=======
+
     // 统一从 BuildConfig 读取，避免不同代码路径使用不同环境地址。
     private val CLOUD_BASE_URL: String = run {
         val configured = BuildConfig.CLOUDBASE_URL.trim()
@@ -41,7 +37,6 @@ object CloudBaseService {
             "https://silverlink-3ghlz8es381befbf-1408550226.ap-shanghai.app.tcloudbase.com/"
         }
     }
->>>>>>> 003514247a14426cc1e4dcff00258506e7bbd9dc
     
     private val json = Json {
         ignoreUnknownKeys = true
@@ -891,11 +886,7 @@ object CloudBaseService {
     ): Result<LocationQueryResult> = withContext(Dispatchers.IO) {
         try {
             Log.d("CloudBase", "查询位置(OkHttp): elderDeviceId=$elderDeviceId")
-<<<<<<< HEAD
-            // 拼装 URL，复用上面定义的 CLOUD_BASE_URL
-=======
             // 直接拼装 URL，绕过 Retrofit，确保万无一失
->>>>>>> 003514247a14426cc1e4dcff00258506e7bbd9dc
             val baseUrl = "${CLOUD_BASE_URL}location-query"
             val url = "$baseUrl?elderDeviceId=$elderDeviceId&familyDeviceId=${familyDeviceId ?: ""}"
             
