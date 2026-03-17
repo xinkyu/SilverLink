@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.Dialect
 import com.silverlink.app.data.local.UserPreferences
+import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.feature.emotion.EmotionRecognitionService
 import com.silverlink.app.feature.memory.MemorySyncService
 import com.silverlink.app.feature.reminder.DailyResetWorker
@@ -37,6 +38,18 @@ class SilverLinkApp : Application() {
 
         // 安排记忆照片后台同步
         MemorySyncService.schedule(this)
+
+        val userPreferences = UserPreferences.getInstance(this)
+        CoroutineScope(Dispatchers.IO).launch {
+            if (userPreferences.isOppoHealthSdkConsentGranted()) {
+                val result = OppoHealthSdkManager.initializeIfConsented(this@SilverLinkApp, userPreferences)
+                if (result.isSuccess) {
+                    Log.d("SilverLinkApp", "OPPO health SDK initialized")
+                } else {
+                    Log.w("SilverLinkApp", "OPPO health SDK init failed", result.exceptionOrNull())
+                }
+            }
+        }
 
         // 后台初始化 ONNX 情绪识别模型
         CoroutineScope(Dispatchers.IO).launch {

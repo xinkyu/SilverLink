@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+
+<html lang="ja"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col bg-white dark:bg-slate-900 overflow-x-hidden max-w-md mx-auto shadow-2xl">
+<!-- Header -->
+<div class="flex items-center bg-white dark:bg-slate-900 p-4 pb-2 justify-between sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
+<div class="text-slate-900 dark:text-slate-100 flex size-12 shrink-0 items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined text-2xl">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Medication Record</h2>
+<div class="flex w-12 items-center justify-end">
+<button class="flex size-12 cursor-pointer items-center justify-center rounded-xl bg-transparent text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined text-2xl">calendar_today</span>
+</button>
+</div>
+</div>
+<!-- Tabs -->
+<div class="pb-3 bg-white dark:bg-slate-900">
+<div class="flex border-b border-slate-200 dark:border-slate-800 px-4 justify-between">
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 flex-1" href="#">
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">日</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 flex-1" href="#">
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">月</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-primary text-primary pb-[13px] pt-4 flex-1" href="#">
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">年</p>
+</a>
+</div>
+</div>
+<!-- Main Content Scroll Area -->
+<div class="flex-1 overflow-y-auto">
+<h2 class="text-slate-900 dark:text-slate-100 text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">2023 Adherence Summary</h2>
+<!-- Annual Review Cards -->
+<div class="px-4 grid grid-cols-2 gap-3 mb-6">
+<div class="bg-primary/10 dark:bg-primary/20 p-4 rounded-xl border border-primary/20">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1 uppercase tracking-wider">Perfect Days</p>
+<p class="text-primary text-2xl font-bold">312</p>
+<p class="text-slate-400 text-[10px] mt-1">out of 365 days</p>
+</div>
+<div class="bg-primary/10 dark:bg-primary/20 p-4 rounded-xl border border-primary/20">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1 uppercase tracking-wider">Avg Adherence</p>
+<p class="text-primary text-2xl font-bold">88%</p>
+<p class="text-slate-400 text-[10px] mt-1">+4% from 2022</p>
+</div>
+</div>
+<!-- Annual Progress Visualization (Monthly Rings) -->
+<div class="px-4 pb-6">
+<div class="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-100 dark:border-slate-800">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold mb-4">Monthly Consistency</p>
+<div class="grid grid-cols-4 gap-4">
+<!-- Month Rings (Simulated) -->
+<div class="flex flex-col items-center gap-1">
+<div class="relative size-12 flex items-center justify-center">
+<svg class="size-full" viewbox="0 0 36 36">
+<path class="text-slate-200 dark:text-slate-700 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="90, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute text-[10px] font-bold">90%</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium">Jan</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="relative size-12 flex items-center justify-center">
+<svg class="size-full" viewbox="0 0 36 36">
+<path class="text-slate-200 dark:text-slate-700 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="75, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute text-[10px] font-bold">75%</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium">Feb</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="relative size-12 flex items-center justify-center">
+<svg class="size-full" viewbox="0 0 36 36">
+<path class="text-slate-200 dark:text-slate-700 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="100, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute text-[10px] font-bold">100%</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium">Mar</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="relative size-12 flex items-center justify-center">
+<svg class="size-full" viewbox="0 0 36 36">
+<path class="text-slate-200 dark:text-slate-700 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="85, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute text-[10px] font-bold">85%</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium">Apr</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="relative size-12 flex items-center justify-center">
+<svg class="size-full" viewbox="0 0 36 36">
+<path class="text-slate-200 dark:text-slate-700 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="92, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute text-[10px] font-bold">92%</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium">May</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="relative size-12 flex items-center justify-center">
+<svg class="size-full" viewbox="0 0 36 36">
+<path class="text-slate-200 dark:text-slate-700 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="88, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute text-[10px] font-bold">88%</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium">Jun</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="relative size-12 flex items-center justify-center">
+<svg class="size-full" viewbox="0 0 36 36">
+<path class="text-slate-200 dark:text-slate-700 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="94, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute text-[10px] font-bold">94%</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium">Jul</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="relative size-12 flex items-center justify-center">
+<svg class="size-full" viewbox="0 0 36 36">
+<path class="text-slate-200 dark:text-slate-700 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary/40 stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="0, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<span class="absolute text-[10px] font-bold">--</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium text-slate-400">Aug</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Heatmap View Section -->
+<div class="px-4 pb-6">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold mb-3">Medication Heatmap</p>
+<div class="flex flex-col gap-1">
+<div class="flex gap-1 justify-end mb-2">
+<span class="text-[9px] text-slate-400">Less</span>
+<div class="size-2.5 rounded-sm bg-slate-100 dark:bg-slate-800"></div>
+<div class="size-2.5 rounded-sm bg-primary/20"></div>
+<div class="size-2.5 rounded-sm bg-primary/40"></div>
+<div class="size-2.5 rounded-sm bg-primary/70"></div>
+<div class="size-2.5 rounded-sm bg-primary"></div>
+<span class="text-[9px] text-slate-400">More</span>
+</div>
+<div class="grid grid-cols-[auto_1fr] gap-2">
+<div class="flex flex-col justify-between py-1 text-[9px] text-slate-400">
+<span>Mon</span>
+<span>Wed</span>
+<span>Fri</span>
+</div>
+<!-- Simplified Heatmap Grid (30 weeks approx) -->
+<div class="grid grid-flow-col grid-rows-7 gap-1 overflow-x-auto pb-2">
+<!-- Week 1 -->
+<div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary/40"></div>
+<div class="size-3 rounded-sm bg-primary/70"></div>
+<div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary"></div>
+<!-- Week 2-10 clones for visualization -->
+<div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/20"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/70"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/40"></div><div class="size-3 rounded-sm bg-primary/70"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/20"></div><div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary/20"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/40"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/70"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/40"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary/20"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/70"></div>
+<div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/20"></div><div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary/40"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/70"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div>
+<div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary"></div><div class="size-3 rounded-sm bg-primary/70"></div><div class="size-3 rounded-sm bg-primary/40"></div><div class="size-3 rounded-sm bg-primary"></div>
+<!-- ... and so on ... -->
+</div>
+</div>
+</div>
+</div>
+<!-- Annual Review Details -->
+<div class="px-4 pb-20">
+<div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 shadow-sm">
+<h3 class="text-slate-900 dark:text-slate-100 font-bold mb-4">Annual Review</h3>
+<div class="space-y-4">
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600">
+<span class="material-symbols-outlined">medication</span>
+</div>
+<div class="flex-1">
+<p class="text-xs text-slate-500 font-medium">Most Frequently Taken</p>
+<p class="text-slate-900 dark:text-slate-100 font-bold">Lisinopril 10mg</p>
+</div>
+<div class="text-right">
+<p class="text-sm font-bold text-slate-700 dark:text-slate-300">362 times</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center text-green-600">
+<span class="material-symbols-outlined">verified</span>
+</div>
+<div class="flex-1">
+<p class="text-xs text-slate-500 font-medium">Longest Perfect Streak</p>
+<p class="text-slate-900 dark:text-slate-100 font-bold">48 Days</p>
+</div>
+<div class="text-right">
+<p class="text-sm font-bold text-slate-700 dark:text-slate-300">Mar - May</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600">
+<span class="material-symbols-outlined">notification_important</span>
+</div>
+<div class="flex-1">
+<p class="text-xs text-slate-500 font-medium">Missed Doses</p>
+<p class="text-slate-900 dark:text-slate-100 font-bold">42 Total</p>
+</div>
+<div class="text-right">
+<p class="text-sm font-bold text-slate-700 dark:text-slate-300">-12% vs last yr</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation -->
+<div class="fixed bottom-0 w-full max-w-md bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 px-4 pb-3 pt-2">
+<div class="flex gap-2">
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-500 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<p class="text-xs font-medium leading-normal tracking-[0.015em]">Home</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-500 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined">pill</span>
+<p class="text-xs font-medium leading-normal tracking-[0.015em]">Meds</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bar_chart</span>
+<p class="text-xs font-medium leading-normal tracking-[0.015em]">Trends</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-500 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<p class="text-xs font-medium leading-normal tracking-[0.015em]">Profile</p>
+</a>
+</div>
+</div>
+</div>
+</body></html>

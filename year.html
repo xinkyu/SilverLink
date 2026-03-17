@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>情绪分析 - 年度视图</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header -->
+<header class="sticky top-0 z-10 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center p-4 justify-between max-w-xl mx-auto w-full">
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h2 class="text-lg font-bold leading-tight tracking-tight flex-1 text-center">情绪分析</h2>
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined">calendar_today</span>
+</button>
+</div>
+<!-- Time Tab Switcher -->
+<div class="max-w-xl mx-auto w-full">
+<div class="flex px-4 justify-between">
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 pb-3 pt-2 flex-1 hover:text-primary transition-colors" href="#">
+<span class="text-sm font-bold">日</span>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 pb-3 pt-2 flex-1 hover:text-primary transition-colors" href="#">
+<span class="text-sm font-bold">周</span>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 pb-3 pt-2 flex-1 hover:text-primary transition-colors" href="#">
+<span class="text-sm font-bold">月</span>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-primary text-primary pb-3 pt-2 flex-1" href="#">
+<span class="text-sm font-bold">年</span>
+</a>
+</div>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto max-w-xl mx-auto w-full pb-24">
+<!-- Summary Cards -->
+<div class="grid grid-cols-2 gap-4 p-4">
+<div class="flex flex-col gap-2 rounded-xl p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+<p class="text-slate-500 text-xs font-medium uppercase tracking-wider">2023 情绪摘要</p>
+<p class="text-2xl font-bold leading-tight">312 天快乐</p>
+<div class="flex items-center gap-1 text-emerald-600 text-sm font-semibold">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span>+12%</span>
+</div>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+<p class="text-slate-500 text-xs font-medium uppercase tracking-wider">正向情绪率</p>
+<p class="text-2xl font-bold leading-tight">85%</p>
+<div class="flex items-center gap-1 text-emerald-600 text-sm font-semibold">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span>+5%</span>
+</div>
+</div>
+</div>
+<!-- Monthly Mood Heatmap -->
+<section class="p-4">
+<h3 class="text-lg font-bold mb-4">月度情绪热力图</h3>
+<div class="grid grid-cols-4 sm:grid-cols-6 gap-4 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<!-- Monthly Mini Rings -->
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(45deg);"></div>
+<span class="text-[10px] font-bold">75%</span>
+</div>
+<span class="text-xs text-slate-500">1月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(120deg);"></div>
+<span class="text-[10px] font-bold">60%</span>
+</div>
+<span class="text-xs text-slate-500">2月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(200deg);"></div>
+<span class="text-[10px] font-bold">88%</span>
+</div>
+<span class="text-xs text-slate-500">3月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(180deg);"></div>
+<span class="text-[10px] font-bold">82%</span>
+</div>
+<span class="text-xs text-slate-500">4月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-emerald-500/20">
+<div class="absolute inset-0 rounded-full border-4 border-emerald-500"></div>
+<span class="text-[10px] font-bold text-emerald-600">95%</span>
+</div>
+<span class="text-xs font-bold text-emerald-600">5月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(150deg);"></div>
+<span class="text-[10px] font-bold">78%</span>
+</div>
+<span class="text-xs text-slate-500">6月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(90deg);"></div>
+<span class="text-[10px] font-bold">70%</span>
+</div>
+<span class="text-xs text-slate-500">7月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(160deg);"></div>
+<span class="text-[10px] font-bold">80%</span>
+</div>
+<span class="text-xs text-slate-500">8月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(210deg);"></div>
+<span class="text-[10px] font-bold">85%</span>
+</div>
+<span class="text-xs text-slate-500">9月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(240deg);"></div>
+<span class="text-[10px] font-bold">90%</span>
+</div>
+<span class="text-xs text-slate-500">10月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(140deg);"></div>
+<span class="text-[10px] font-bold">74%</span>
+</div>
+<span class="text-xs text-slate-500">11月</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="relative size-12 flex items-center justify-center rounded-full border-4 border-primary/20">
+<div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent" style="transform: rotate(180deg);"></div>
+<span class="text-[10px] font-bold">81%</span>
+</div>
+<span class="text-xs text-slate-500">12月</span>
+</div>
+</div>
+</section>
+<!-- Mood Distribution -->
+<section class="p-4">
+<h3 class="text-lg font-bold mb-4">全年情绪分布</h3>
+<div class="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex flex-col gap-6">
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium">开心 Happy</span>
+<span class="text-slate-500">65%</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[65%] rounded-full"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium">平静 Calm</span>
+<span class="text-slate-500">20%</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500 w-[20%] rounded-full"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium">焦虑 Anxious</span>
+<span class="text-slate-500">10%</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-amber-500 w-[10%] rounded-full"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium">伤心 Sad</span>
+<span class="text-slate-500">5%</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-slate-400 w-[5%] rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Annual Highlights -->
+<section class="p-4">
+<h3 class="text-lg font-bold mb-4">年度亮点回顾</h3>
+<div class="grid grid-cols-1 gap-4">
+<div class="flex items-center gap-4 p-4 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
+<span class="material-symbols-outlined">star</span>
+</div>
+<div>
+<p class="text-sm text-primary font-semibold">最快乐的月份</p>
+<p class="text-lg font-bold">五月 May</p>
+<p class="text-xs text-slate-500">正向情绪率高达 95%</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white">
+<span class="material-symbols-outlined">bolt</span>
+</div>
+<div>
+<p class="text-sm text-emerald-600 font-semibold">最高频的情绪诱因</p>
+<p class="text-lg font-bold">社交互动 Socializing</p>
+<p class="text-xs text-slate-500">超过 40% 的好心情由此产生</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-20">
+<div class="flex max-w-xl mx-auto gap-2 px-4 pb-3 pt-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-500 hover:text-primary" href="#">
+<span class="material-symbols-outlined">home</span>
+<p class="text-[10px] font-medium">首页</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-500 hover:text-primary" href="#">
+<span class="material-symbols-outlined">add_circle</span>
+<p class="text-[10px] font-medium">记录</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">pie_chart</span>
+<p class="text-[10px] font-medium">分析</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-500 hover:text-primary" href="#">
+<span class="material-symbols-outlined">settings</span>
+<p class="text-[10px] font-medium">设置</p>
+</a>
+</div>
+</nav>
+</body></html>

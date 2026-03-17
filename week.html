@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>情绪分析 - 周视图</title>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Top Navigation -->
+<header class="sticky top-0 z-10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center p-4 justify-between max-w-md mx-auto w-full">
+<div class="text-slate-900 dark:text-slate-100 flex size-10 items-center justify-start cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-tight flex-1 text-center">情绪分析</h2>
+<div class="flex size-10 items-center justify-end">
+<button class="flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-900 dark:text-slate-100">share</span>
+</button>
+</div>
+</div>
+<!-- Time Tab Switcher -->
+<div class="flex border-b border-slate-200 dark:border-slate-800 px-4 justify-between max-w-md mx-auto w-full">
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-2 flex-1 text-sm font-medium" href="#">日</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-primary text-primary pb-3 pt-2 flex-1 text-sm font-bold" href="#">周</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-2 flex-1 text-sm font-medium" href="#">月</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-2 flex-1 text-sm font-medium" href="#">年</a>
+</div>
+</header>
+<main class="flex-1 max-w-md mx-auto w-full p-4 space-y-4 pb-24">
+<!-- Weekly Mood Summary Card -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden relative">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16"></div>
+<div class="relative z-0">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">本周情绪概览</p>
+<div class="flex items-center gap-2 mb-2">
+<span class="text-3xl">😊</span>
+<h3 class="text-xl font-bold">平均情绪：非常开心</h3>
+</div>
+<div class="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span class="text-sm">较上周提升 15%</span>
+</div>
+</div>
+</div>
+<!-- Streak & Trend Layout -->
+<div class="grid grid-cols-2 gap-4">
+<!-- Streak Card -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium">连续记录</p>
+<p class="text-2xl font-bold">12 天</p>
+<div class="mt-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+                            当前最佳
+                        </span>
+</div>
+</div>
+</div>
+<!-- Quick Action or Stat -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium">波动性</p>
+<p class="text-2xl font-bold">极低</p>
+<p class="text-xs text-slate-400 mt-1">情绪状态非常平稳</p>
+</div>
+</div>
+<!-- Weekly Mood Trend Chart -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-center mb-6">
+<h4 class="font-bold text-sm">情绪趋势图</h4>
+<span class="text-[10px] text-slate-400">周一 - 周日</span>
+</div>
+<div class="h-32 flex items-end justify-between gap-2 px-1">
+<!-- Simple bar representation for chart -->
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-full bg-primary/20 dark:bg-primary/10 rounded-t-sm h-[60%] relative">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-sm h-full opacity-60"></div>
+</div>
+<span class="text-[10px] text-slate-400">一</span>
+</div>
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-full bg-primary/20 dark:bg-primary/10 rounded-t-sm h-[75%] relative">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-sm h-full opacity-60"></div>
+</div>
+<span class="text-[10px] text-slate-400">二</span>
+</div>
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-full bg-primary/20 dark:bg-primary/10 rounded-t-sm h-[40%] relative">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-sm h-full opacity-60"></div>
+</div>
+<span class="text-[10px] text-slate-400">三</span>
+</div>
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-full bg-primary/20 dark:bg-primary/10 rounded-t-sm h-[85%] relative">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-sm h-full opacity-80"></div>
+</div>
+<span class="text-[10px] text-slate-400">四</span>
+</div>
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-full bg-primary/20 dark:bg-primary/10 rounded-t-sm h-[95%] relative">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-sm h-full opacity-100"></div>
+</div>
+<span class="text-[10px] text-slate-400">五</span>
+</div>
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-full bg-primary/20 dark:bg-primary/10 rounded-t-sm h-[80%] relative">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-sm h-full opacity-70"></div>
+</div>
+<span class="text-[10px] text-slate-400">六</span>
+</div>
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-full bg-primary/20 dark:bg-primary/10 rounded-t-sm h-[70%] relative">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-sm h-full opacity-60"></div>
+</div>
+<span class="text-[10px] text-slate-400">日</span>
+</div>
+</div>
+</div>
+<!-- Mood Insights Box -->
+<div class="bg-primary/10 dark:bg-primary/20 rounded-xl p-4 flex gap-4 border border-primary/20">
+<div class="flex-shrink-0 size-10 bg-primary/20 dark:bg-primary/30 rounded-full flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">lightbulb</span>
+</div>
+<div>
+<h5 class="text-sm font-bold text-primary mb-1">情绪发现</h5>
+<p class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                    我们注意到您在完成<b>运动训练</b>后的情绪评价显著提高。继续保持活跃有助于缓解周中的工作压力。
+                </p>
+</div>
+</div>
+<!-- Daily Logs List -->
+<div class="space-y-3">
+<h4 class="font-bold text-sm px-1">本周日志</h4>
+<!-- Entry 1 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center text-lg">
+                        🔥
+                    </div>
+<div>
+<p class="text-sm font-bold">周五 - 充满动力</p>
+<p class="text-[10px] text-slate-400">下午 2:30 · 锻炼后记录</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-300">chevron_right</span>
+</div>
+<!-- Entry 2 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-lg">
+                        😌
+                    </div>
+<div>
+<p class="text-sm font-bold">周四 - 平静从容</p>
+<p class="text-[10px] text-slate-400">晚上 9:15 · 冥想后记录</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-300">chevron_right</span>
+</div>
+<!-- Entry 3 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-lg">
+                        😫
+                    </div>
+<div>
+<p class="text-sm font-bold">周三 - 压力山大</p>
+<p class="text-[10px] text-slate-400">下午 5:45 · 工作会议后记录</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-300">chevron_right</span>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 pb-6 pt-2 z-20">
+<div class="flex gap-2 max-w-md mx-auto">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<p class="text-[10px] font-medium leading-none">概览</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-[1]">bar_chart</span>
+<p class="text-[10px] font-bold leading-none">情绪分析</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">book_4</span>
+<p class="text-[10px] font-medium leading-none">日记</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">person</span>
+<p class="text-[10px] font-medium leading-none">个人中心</p>
+</a>
+</div>
+</nav>
+</body></html>

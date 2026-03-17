@@ -422,6 +422,7 @@ class UserPreferences(context: Context) {
         
         // 位置共享相关
         private const val KEY_LOCATION_SHARING_ENABLED = "location_sharing_enabled"
+        private const val KEY_OPPO_HEALTH_SDK_CONSENT = "oppo_health_sdk_consent"
 
         // 字体大小相关
         private const val KEY_FONT_SCALE = "font_scale"
@@ -510,6 +511,16 @@ class UserPreferences(context: Context) {
      */
     fun setLocationSharingEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_LOCATION_SHARING_ENABLED, enabled).apply()
+    }
+
+    // ==================== OPPO健康SDK 合规同意 ====================
+
+    fun isOppoHealthSdkConsentGranted(): Boolean {
+        return prefs.getBoolean(KEY_OPPO_HEALTH_SDK_CONSENT, false)
+    }
+
+    fun setOppoHealthSdkConsentGranted(granted: Boolean) {
+        prefs.edit().putBoolean(KEY_OPPO_HEALTH_SDK_CONSENT, granted).apply()
     }
 
     // ==================== 字体大小设置 ====================

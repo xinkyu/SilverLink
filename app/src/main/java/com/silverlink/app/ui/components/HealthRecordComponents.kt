@@ -82,7 +82,8 @@ data class MoodTimePoint(
     val time: String,       // "08:30"
     val mood: String,       // "HAPPY" | "NEUTRAL" | "SAD" etc.
     val note: String = "",  // 对话摘要
-    val timestamp: Long = 0
+    val timestamp: Long = 0,
+    val date: String = ""
 )
 
 /**
@@ -495,6 +496,7 @@ private fun minutesOfDay(point: MoodTimePoint): Int {
 // ==================== D. 时间轴分布图 ====================
 
 enum class ChartType(val label: String) {
+    HEALTH("健康数据"),
     MOOD("情绪"),
     MEDICATION("用药记录"),
     COGNITIVE("认知评估")

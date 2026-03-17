@@ -25,5 +25,6 @@ dependencies {
     implementation(project(":shared"))
     implementation(libs.kotlinx.serialization.json)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("com.heytap.health:sdk:2.1.7")
     testImplementation(libs.junit)
 }

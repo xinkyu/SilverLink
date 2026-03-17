@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex h-auto min-h-screen w-full flex-col bg-white dark:bg-background-dark mx-auto max-w-md shadow-lg overflow-x-hidden">
+<!-- Header -->
+<div class="flex items-center bg-white dark:bg-background-dark p-4 pb-2 justify-between sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
+<div class="text-slate-900 dark:text-slate-100 flex size-10 shrink-0 items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center">用药记录</h2>
+<div class="flex w-10 items-center justify-end">
+<button class="flex items-center justify-center rounded-xl h-10 w-10 bg-transparent text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined">calendar_month</span>
+</button>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="pb-3 bg-white dark:bg-background-dark">
+<div class="flex border-b border-slate-100 dark:border-slate-800 px-4 gap-8">
+<a class="flex flex-1 flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-4" href="#">
+<p class="text-sm font-bold">日</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center border-b-2 border-primary text-primary pb-3 pt-4" href="#">
+<p class="text-sm font-bold">周</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-4" href="#">
+<p class="text-sm font-bold">月</p>
+</a>
+</div>
+</div>
+<!-- Weekly Summary Card -->
+<div class="flex flex-col gap-4 px-4 py-6">
+<div class="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-xl border border-slate-100 dark:border-slate-800">
+<p class="text-slate-600 dark:text-slate-400 text-sm font-medium">本周服药依从性</p>
+<div class="flex items-baseline gap-2 mt-1">
+<p class="text-slate-900 dark:text-white text-4xl font-bold tracking-tight">85%</p>
+<p class="text-emerald-600 dark:text-emerald-400 text-sm font-semibold flex items-center">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+                        5%
+                    </p>
+</div>
+<!-- Bar Chart: Taken vs Missed -->
+<div class="grid grid-cols-7 gap-2 mt-8 items-end h-32">
+<!-- Mon -->
+<div class="flex flex-col items-center gap-2 h-full">
+<div class="w-full flex flex-col justify-end gap-0.5 h-full">
+<div class="bg-primary/20 rounded-t-sm w-full" style="height: 10%;"></div> <!-- Missed -->
+<div class="bg-primary rounded-sm w-full" style="height: 70%;"></div> <!-- Taken -->
+</div>
+<p class="text-slate-400 dark:text-slate-500 text-[10px] font-bold">周一</p>
+</div>
+<!-- Tue -->
+<div class="flex flex-col items-center gap-2 h-full">
+<div class="w-full flex flex-col justify-end gap-0.5 h-full">
+<div class="bg-primary rounded-sm w-full" style="height: 90%;"></div>
+</div>
+<p class="text-slate-400 dark:text-slate-500 text-[10px] font-bold">周二</p>
+</div>
+<!-- Wed -->
+<div class="flex flex-col items-center gap-2 h-full">
+<div class="w-full flex flex-col justify-end gap-0.5 h-full">
+<div class="bg-primary/20 rounded-t-sm w-full" style="height: 20%;"></div>
+<div class="bg-primary rounded-sm w-full" style="height: 60%;"></div>
+</div>
+<p class="text-slate-400 dark:text-slate-500 text-[10px] font-bold">周三</p>
+</div>
+<!-- Thu -->
+<div class="flex flex-col items-center gap-2 h-full">
+<div class="w-full flex flex-col justify-end gap-0.5 h-full">
+<div class="bg-primary rounded-sm w-full" style="height: 100%;"></div>
+</div>
+<p class="text-slate-400 dark:text-slate-500 text-[10px] font-bold">周四</p>
+</div>
+<!-- Fri -->
+<div class="flex flex-col items-center gap-2 h-full">
+<div class="w-full flex flex-col justify-end gap-0.5 h-full">
+<div class="bg-primary/20 rounded-t-sm w-full" style="height: 15%;"></div>
+<div class="bg-primary rounded-sm w-full" style="height: 80%;"></div>
+</div>
+<p class="text-slate-400 dark:text-slate-500 text-[10px] font-bold">周五</p>
+</div>
+<!-- Sat -->
+<div class="flex flex-col items-center gap-2 h-full">
+<div class="w-full flex flex-col justify-end gap-0.5 h-full">
+<div class="bg-primary rounded-sm w-full" style="height: 85%;"></div>
+</div>
+<p class="text-slate-400 dark:text-slate-500 text-[10px] font-bold">周六</p>
+</div>
+<!-- Sun -->
+<div class="flex flex-col items-center gap-2 h-full">
+<div class="w-full flex flex-col justify-end gap-0.5 h-full">
+<div class="bg-slate-200 dark:bg-slate-800 rounded-sm w-full h-1"></div>
+</div>
+<p class="text-slate-900 dark:text-white text-[10px] font-bold">今日</p>
+</div>
+</div>
+<div class="flex justify-center gap-4 mt-4">
+<div class="flex items-center gap-1.5">
+<div class="size-2 rounded-full bg-primary"></div>
+<span class="text-[10px] text-slate-500">已按时服用</span>
+</div>
+<div class="flex items-center gap-1.5">
+<div class="size-2 rounded-full bg-primary/20"></div>
+<span class="text-[10px] text-slate-500">漏服/推迟</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Weekly Insights Section -->
+<div class="px-4 pb-4">
+<h3 class="text-slate-900 dark:text-white text-lg font-bold leading-tight mb-3">每周洞察</h3>
+<div class="bg-primary/5 dark:bg-primary/10 rounded-xl p-4 border border-primary/10 flex gap-3">
+<span class="material-symbols-outlined text-primary">lightbulb</span>
+<div>
+<p class="text-slate-900 dark:text-white text-sm font-semibold">表现出色！</p>
+<p class="text-slate-600 dark:text-slate-400 text-sm mt-1 leading-relaxed">相比上周，您在早晨的服药准时率提高了12%。继续保持，这将有助于药效的稳定性。</p>
+</div>
+</div>
+</div>
+<!-- Today's Detailed Schedule -->
+<div class="px-4 pb-24">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-slate-900 dark:text-white text-lg font-bold">今日计划</h3>
+<span class="text-xs text-slate-500">10月27日 星期日</span>
+</div>
+<div class="space-y-3">
+<!-- Medication Item 1 -->
+<div class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl">
+<div class="flex items-center gap-4">
+<div class="size-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
+<span class="material-symbols-outlined">pill</span>
+</div>
+<div>
+<p class="text-slate-900 dark:text-white font-bold text-sm">阿司匹林</p>
+<p class="text-slate-500 text-xs mt-0.5">08:00 AM • 1片</p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+<span class="material-symbols-outlined text-xl">check_circle</span>
+<span class="text-xs font-bold">已服</span>
+</div>
+</div>
+<!-- Medication Item 2 -->
+<div class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl">
+<div class="flex items-center gap-4">
+<div class="size-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600">
+<span class="material-symbols-outlined">medication</span>
+</div>
+<div>
+<p class="text-slate-900 dark:text-white font-bold text-sm">二甲双胍</p>
+<p class="text-slate-500 text-xs mt-0.5">12:30 PM • 2片</p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-xl">schedule</span>
+<span class="text-xs font-bold">等待</span>
+</div>
+</div>
+<!-- Medication Item 3 -->
+<div class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl">
+<div class="flex items-center gap-4">
+<div class="size-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600">
+<span class="material-symbols-outlined">vaccines</span>
+</div>
+<div>
+<p class="text-slate-900 dark:text-white font-bold text-sm">维生素 D3</p>
+<p class="text-slate-500 text-xs mt-0.5">06:00 PM • 1粒</p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-xl">schedule</span>
+<span class="text-xs font-bold">等待</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation Bar -->
+<div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white dark:bg-background-dark border-t border-slate-100 dark:border-slate-800 px-4 pb-6 pt-2">
+<div class="flex gap-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">home</span>
+<p class="text-[10px] font-medium leading-normal">首页</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">history</span>
+<p class="text-[10px] font-medium leading-normal">记录</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+<p class="text-[10px] font-medium leading-normal">分析</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">settings</span>
+<p class="text-[10px] font-medium leading-normal">设置</p>
+</a>
+</div>
+</div>
+</div>
+</body></html>

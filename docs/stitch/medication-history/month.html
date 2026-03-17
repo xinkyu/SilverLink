@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+
+<html lang="ja"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                        "success": "#28a745",
+                        "warning": "#ffc107",
+                        "danger": "#dc3545",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col bg-white dark:bg-background-dark overflow-x-hidden max-w-md mx-auto shadow-xl">
+<!-- Header -->
+<div class="flex items-center bg-white dark:bg-background-dark p-4 pb-2 justify-between sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
+<div class="text-slate-900 dark:text-slate-100 flex size-12 shrink-0 items-center">
+<span class="material-symbols-outlined cursor-pointer">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">お薬記録</h2>
+<div class="flex w-12 items-center justify-end">
+<button class="flex items-center justify-center rounded-xl h-12 w-12 bg-transparent text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined">calendar_add_on</span>
+</button>
+</div>
+</div>
+<!-- Tabs -->
+<div class="bg-white dark:bg-background-dark">
+<div class="flex border-b border-slate-100 dark:border-slate-800 px-4 justify-between">
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 flex-1" href="#">
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">日</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 flex-1" href="#">
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">週</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-primary text-primary pb-[13px] pt-4 flex-1" href="#">
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">月</p>
+</a>
+</div>
+</div>
+<!-- Calendar Month Selector -->
+<div class="flex flex-col p-4 bg-white dark:bg-background-dark">
+<div class="flex items-center justify-between mb-4">
+<button class="text-slate-900 dark:text-slate-100 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<p class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight flex-1 text-center">2023年10月</p>
+<button class="text-slate-900 dark:text-slate-100 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+<!-- Calendar Grid -->
+<div class="grid grid-cols-7 gap-y-2">
+<p class="text-slate-400 text-[13px] font-bold leading-normal tracking-[0.015em] flex h-10 w-full items-center justify-center">S</p>
+<p class="text-slate-400 text-[13px] font-bold leading-normal tracking-[0.015em] flex h-10 w-full items-center justify-center">M</p>
+<p class="text-slate-400 text-[13px] font-bold leading-normal tracking-[0.015em] flex h-10 w-full items-center justify-center">T</p>
+<p class="text-slate-400 text-[13px] font-bold leading-normal tracking-[0.015em] flex h-10 w-full items-center justify-center">W</p>
+<p class="text-slate-400 text-[13px] font-bold leading-normal tracking-[0.015em] flex h-10 w-full items-center justify-center">T</p>
+<p class="text-slate-400 text-[13px] font-bold leading-normal tracking-[0.015em] flex h-10 w-full items-center justify-center">F</p>
+<p class="text-slate-400 text-[13px] font-bold leading-normal tracking-[0.015em] flex h-10 w-full items-center justify-center">S</p>
+<!-- Day cells with compliance indicators -->
+<button class="flex flex-col items-center justify-center h-14 col-start-1">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">1</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">2</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">3</span>
+<div class="size-1.5 rounded-full bg-warning mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">4</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14 relative">
+<div class="size-8 absolute bg-primary rounded-full -z-10"></div>
+<span class="text-white text-sm font-bold">5</span>
+<div class="size-1.5 rounded-full bg-white mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">6</span>
+<div class="size-1.5 rounded-full bg-danger mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">7</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">8</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">9</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">10</span>
+<div class="size-1.5 rounded-full bg-warning mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">11</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">12</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14">
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">13</span>
+<div class="size-1.5 rounded-full bg-success mt-1"></div>
+</button>
+<button class="flex flex-col items-center justify-center h-14 text-slate-300">
+<span class="text-sm font-medium">14</span>
+</button>
+<button class="flex flex-col items-center justify-center h-14 text-slate-300">
+<span class="text-sm font-medium">15</span>
+</button>
+<button class="flex flex-col items-center justify-center h-14 text-slate-300">
+<span class="text-sm font-medium">16</span>
+</button>
+<!-- Simplified for brevity, normally goes up to 30/31 -->
+</div>
+<!-- Legend -->
+<div class="flex items-center justify-center gap-4 mt-6 text-[11px] font-medium text-slate-500">
+<div class="flex items-center gap-1">
+<div class="size-2 rounded-full bg-success"></div>
+<span>全て服用</span>
+</div>
+<div class="flex items-center gap-1">
+<div class="size-2 rounded-full bg-warning"></div>
+<span>一部服用</span>
+</div>
+<div class="flex items-center gap-1">
+<div class="size-2 rounded-full bg-danger"></div>
+<span>未服用</span>
+</div>
+</div>
+</div>
+<!-- Monthly Statistics Card -->
+<div class="px-4 py-6 bg-background-light dark:bg-slate-900 flex-1">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] mb-4">今月の統計</h3>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white dark:bg-background-dark p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">服用達成率</p>
+<div class="flex items-end gap-1">
+<span class="text-2xl font-bold text-primary">85</span>
+<span class="text-sm font-bold text-slate-400 mb-1">%</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+<div class="bg-primary h-full w-[85%] rounded-full"></div>
+</div>
+</div>
+<div class="bg-white dark:bg-background-dark p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">継続日数</p>
+<div class="flex items-end gap-1">
+<span class="text-2xl font-bold text-success">12</span>
+<span class="text-sm font-bold text-slate-400 mb-1">日</span>
+</div>
+<p class="text-[10px] text-slate-400 mt-3 flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px]">trending_up</span> 自己最高記録
+                    </p>
+</div>
+<div class="col-span-2 bg-white dark:bg-background-dark p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="flex items-center justify-between mb-4">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium">最も安定しているお薬</p>
+<span class="material-symbols-outlined text-primary">check_circle</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">pill</span>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100">アムロジピン 5mg</p>
+<p class="text-[11px] text-slate-500">達成率: 98% (朝食後)</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation -->
+<div class="flex gap-2 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-background-dark px-4 pb-3 pt-2 sticky bottom-0">
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">home</span>
+</div>
+<p class="text-xs font-medium leading-normal">ホーム</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-primary" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">pill</span>
+</div>
+<p class="text-xs font-medium leading-normal">記録</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">pie_chart</span>
+</div>
+<p class="text-xs font-medium leading-normal">レポート</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">settings</span>
+</div>
+<p class="text-xs font-medium leading-normal">設定</p>
+</a>
+</div>
+</div>
+</body></html>

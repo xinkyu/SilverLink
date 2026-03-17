@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                        "mood-happy": "#4ade80",
+                        "mood-neutral": "#fbbf24",
+                        "mood-sad": "#60a5fa",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .fill-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-white dark:bg-background-dark shadow-xl overflow-x-hidden">
+<!-- Header -->
+<header class="flex items-center bg-white dark:bg-background-dark p-4 justify-between sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
+<button class="text-slate-900 dark:text-slate-100 flex size-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight flex-1 text-center">情绪分析</h1>
+<div class="flex w-10 items-center justify-end">
+<button class="text-slate-900 dark:text-slate-100 flex size-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined">calendar_month</span>
+</button>
+</div>
+</header>
+<!-- Time Tab Switcher -->
+<nav class="bg-white dark:bg-background-dark">
+<div class="flex border-b border-slate-100 dark:border-slate-800 px-4 justify-between">
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 flex-1 hover:text-primary transition-colors" href="#">
+<p class="text-sm font-bold">日</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 flex-1 hover:text-primary transition-colors" href="#">
+<p class="text-sm font-bold">周</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-primary text-primary pb-[13px] pt-4 flex-1" href="#">
+<p class="text-sm font-bold">月</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 flex-1 hover:text-primary transition-colors" href="#">
+<p class="text-sm font-bold">年</p>
+</a>
+</div>
+</nav>
+<main class="flex-1 overflow-y-auto pb-24">
+<!-- Calendar View -->
+<section class="p-4">
+<div class="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4">
+<div class="flex items-center mb-4 justify-between">
+<button class="text-slate-900 dark:text-slate-100 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<p class="text-slate-900 dark:text-slate-100 text-base font-bold">2023年10月</p>
+<button class="text-slate-900 dark:text-slate-100 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+<div class="grid grid-cols-7 gap-y-2">
+<!-- Days of week -->
+<div class="text-slate-400 text-[11px] font-bold text-center">日</div>
+<div class="text-slate-400 text-[11px] font-bold text-center">一</div>
+<div class="text-slate-400 text-[11px] font-bold text-center">二</div>
+<div class="text-slate-400 text-[11px] font-bold text-center">三</div>
+<div class="text-slate-400 text-[11px] font-bold text-center">四</div>
+<div class="text-slate-400 text-[11px] font-bold text-center">五</div>
+<div class="text-slate-400 text-[11px] font-bold text-center">六</div>
+<!-- Calendar Days with Mood Dots -->
+<div class="h-10 flex flex-col items-center justify-center relative col-start-1">
+<span class="text-xs font-medium">1</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">2</span>
+<div class="size-1.5 rounded-full bg-mood-neutral mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">3</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">4</span>
+<div class="size-1.5 rounded-full bg-mood-sad mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative bg-primary/10 rounded-lg">
+<span class="text-xs font-bold text-primary">5</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">6</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">7</span>
+<div class="size-1.5 rounded-full bg-mood-neutral mt-0.5"></div>
+</div>
+<!-- ... More days omitted for brevity, adding a few more for visual ... -->
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">8</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">9</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">10</span>
+<div class="size-1.5 rounded-full bg-mood-neutral mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">11</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">12</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">13</span>
+<div class="size-1.5 rounded-full bg-mood-sad mt-0.5"></div>
+</div>
+<div class="h-10 flex flex-col items-center justify-center relative">
+<span class="text-xs font-medium">14</span>
+<div class="size-1.5 rounded-full bg-mood-happy mt-0.5"></div>
+</div>
+<!-- Empty states for remainder -->
+<div class="h-10 flex items-center justify-center text-slate-300 dark:text-slate-700 text-xs">15</div>
+<div class="h-10 flex items-center justify-center text-slate-300 dark:text-slate-700 text-xs">...</div>
+<div class="h-10 flex items-center justify-center text-slate-300 dark:text-slate-700 text-xs">31</div>
+</div>
+</div>
+</section>
+<!-- Dominant Mood Section -->
+<section class="px-4 mb-6">
+<div class="bg-mood-happy/10 border border-mood-happy/20 rounded-xl p-5 flex items-center justify-between">
+<div>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">本月整体情绪</p>
+<h3 class="text-2xl font-bold text-slate-900 dark:text-slate-100">情绪极佳：Happy</h3>
+<p class="text-mood-happy text-sm font-medium mt-1">比上个月提升了 12%</p>
+</div>
+<div class="bg-mood-happy size-16 rounded-full flex items-center justify-center text-3xl shadow-lg shadow-mood-happy/30">
+                        😊
+                    </div>
+</div>
+</section>
+<!-- Statistics Cards -->
+<section class="px-4 mb-6 grid grid-cols-2 gap-4">
+<div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">开心占比</p>
+<div class="flex items-end gap-1">
+<span class="text-2xl font-bold text-slate-900 dark:text-slate-100">75%</span>
+<span class="text-mood-happy material-symbols-outlined text-sm mb-1">trending_up</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+<div class="bg-mood-happy h-full rounded-full" style="width: 75%"></div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">稳定天数</p>
+<div class="flex items-end gap-1">
+<span class="text-2xl font-bold text-slate-900 dark:text-slate-100">22 天</span>
+<span class="text-slate-400 text-xs mb-1">/31天</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 71%"></div>
+</div>
+</div>
+</section>
+<!-- Mood Correlations -->
+<section class="px-4">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold mb-3">情绪关联因素</h3>
+<div class="space-y-3">
+<div class="flex items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+<div class="size-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400">
+<span class="material-symbols-outlined fill-icon">bedtime</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100">充足睡眠</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">睡眠 &gt; 7h 时，开心概率提升 40%</p>
+</div>
+<span class="material-symbols-outlined text-mood-happy">check_circle</span>
+</div>
+<div class="flex items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+<div class="size-10 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400">
+<span class="material-symbols-outlined">directions_run</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100">运动步数</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">达到 8k 步时，负面情绪明显减少</p>
+</div>
+<span class="material-symbols-outlined text-mood-happy">check_circle</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<footer class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 dark:bg-background-dark/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-800 pb-safe">
+<div class="flex gap-2 px-4 pb-3 pt-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined text-[24px]">home</span>
+<p class="text-[10px] font-medium">首页</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined text-[24px] fill-icon">bar_chart</span>
+<p class="text-[10px] font-medium">分析</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined text-[24px]">edit_note</span>
+<p class="text-[10px] font-medium">记录</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+<p class="text-[10px] font-medium">设置</p>
+</a>
+</div>
+</footer>
+</div>
+</body></html>

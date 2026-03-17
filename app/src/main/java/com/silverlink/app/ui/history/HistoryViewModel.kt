@@ -1,11 +1,15 @@
 package com.silverlink.app.ui.history
 
+import android.app.Activity
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.silverlink.app.data.local.AppDatabase
+import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.entity.MedicationLogEntity
 import com.silverlink.app.data.local.entity.MoodLogEntity
+import com.silverlink.app.feature.health.OppoHealthDashboardData
+import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.data.remote.CognitiveReportData
 import com.silverlink.app.data.remote.MedicationData
 import com.silverlink.app.data.remote.MedicationLogData
@@ -68,6 +72,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val historyDao = AppDatabase.getInstance(application).historyDao()
     private val medicationDao = AppDatabase.getInstance(application).medicationDao()
     private val syncRepository = SyncRepository.getInstance(application)
+    private val userPreferences = UserPreferences.getInstance(application)
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private val timeFormat = SimpleDateFormat("HH:mm", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("Asia/Shanghai")
@@ -113,6 +118,14 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     // 用药统计（周/月/年）
     private val _medicationSummary = MutableStateFlow<MedicationSummary?>(null)
     val medicationSummary: StateFlow<MedicationSummary?> = _medicationSummary.asStateFlow()
+
+    // 当前范围内的用药日志（供周/月/年视图使用）
+    private val _rangeMedicationLogs = MutableStateFlow<List<MedicationLogData>>(emptyList())
+    val rangeMedicationLogs: StateFlow<List<MedicationLogData>> = _rangeMedicationLogs.asStateFlow()
+
+    // 当前范围内的药品清单（已按名称+剂量合并）
+    private val _rangeMedications = MutableStateFlow<List<MedicationData>>(emptyList())
+    val rangeMedications: StateFlow<List<MedicationData>> = _rangeMedications.asStateFlow()
     
     // 当前情绪
     private val _currentMood = MutableStateFlow<String?>(null)
@@ -145,9 +158,82 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     // 认知报告加载状态
     private val _isCognitiveLoading = MutableStateFlow(false)
     val isCognitiveLoading: StateFlow<Boolean> = _isCognitiveLoading.asStateFlow()
+
+    private val _showHealthPrivacyDialog = MutableStateFlow(false)
+    val showHealthPrivacyDialog: StateFlow<Boolean> = _showHealthPrivacyDialog.asStateFlow()
+
+    private val _isHealthLoading = MutableStateFlow(false)
+    val isHealthLoading: StateFlow<Boolean> = _isHealthLoading.asStateFlow()
+
+    private val _healthDashboardData = MutableStateFlow<OppoHealthDashboardData?>(null)
+    val healthDashboardData: StateFlow<OppoHealthDashboardData?> = _healthDashboardData.asStateFlow()
+
+    private val _healthError = MutableStateFlow<String?>(null)
+    val healthError: StateFlow<String?> = _healthError.asStateFlow()
+
+    private val _healthAuthorized = MutableStateFlow(false)
+    val healthAuthorized: StateFlow<Boolean> = _healthAuthorized.asStateFlow()
     
     init {
+        if (!userPreferences.isOppoHealthSdkConsentGranted()) {
+            _showHealthPrivacyDialog.value = true
+        } else {
+            loadHealthData()
+        }
         loadData()
+    }
+
+    fun acceptHealthPrivacy() {
+        userPreferences.setOppoHealthSdkConsentGranted(true)
+        _showHealthPrivacyDialog.value = false
+        loadHealthData()
+    }
+
+    fun dismissHealthPrivacy() {
+        _showHealthPrivacyDialog.value = false
+    }
+
+    fun requestHealthAuthorization(activity: Activity) {
+        viewModelScope.launch {
+            _isHealthLoading.value = true
+            _healthError.value = null
+            val result = OppoHealthSdkManager.requestAuthorization(activity)
+            _isHealthLoading.value = false
+            if (result.isSuccess) {
+                _healthAuthorized.value = true
+                loadHealthData()
+            } else {
+                val code = OppoHealthSdkManager.getErrorCode(result.exceptionOrNull())
+                _healthError.value = if (code == OppoHealthSdkManager.ERROR_HEALTH_APP_NOT_INSTALLED) {
+                    "未安装HeyTap Health，已尝试拉起下载"
+                } else {
+                    "绑定失败，请稍后重试"
+                }
+            }
+        }
+    }
+
+    fun loadHealthData() {
+        if (!userPreferences.isOppoHealthSdkConsentGranted()) return
+
+        viewModelScope.launch {
+            _isHealthLoading.value = true
+            _healthError.value = null
+            val today = dateFormat.format(Date())
+            val result = OppoHealthSdkManager.pullDashboardData(getApplication(), today)
+            _isHealthLoading.value = false
+            if (result.isSuccess) {
+                _healthDashboardData.value = result.getOrNull()
+                _healthAuthorized.value = true
+            } else {
+                val code = OppoHealthSdkManager.getErrorCode(result.exceptionOrNull())
+                _healthError.value = if (code == OppoHealthSdkManager.ERROR_HEALTH_APP_NOT_INSTALLED) {
+                    "检测到未安装HeyTap Health，请先安装后再绑定"
+                } else {
+                    "暂未获取到健康数据，请先完成绑定授权"
+                }
+            }
+        }
     }
     
     fun setTimeRange(range: TimeRange) {
@@ -170,10 +256,35 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         _selectedMoodPoint.value = point
     }
     
+    fun markMedicationAsTaken(name: String, dosage: String, time: String) {
+        viewModelScope.launch {
+            val todayStr = dateFormat.format(Date())
+            syncRepository.syncMedicationTaken(
+                medicationId = 0,
+                medicationName = name,
+                dosage = dosage,
+                scheduledTime = time,
+                status = "taken"
+            )
+            val historyDao = AppDatabase.getInstance(getApplication()).historyDao()
+            val localLog = com.silverlink.app.data.local.entity.MedicationLogEntity(
+                medicationId = 0,
+                medicationName = name,
+                dosage = dosage,
+                scheduledTime = time,
+                status = "taken",
+                date = todayStr
+            )
+            historyDao.insertMedicationLog(localLog)
+            refresh()
+        }
+    }
+
     fun refresh() {
         // 强制刷新：清除缓存
         invalidateCache()
         loadData(forceRefresh = true)
+        loadHealthData()
     }
     
     /**
@@ -386,7 +497,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 time = time,
                 mood = log.mood,
                 note = log.note,
-                timestamp = timestamp ?: 0L
+                timestamp = timestamp ?: 0L,
+                date = log.date
             )
         }.sortedBy { it.timestamp }
 
@@ -431,6 +543,9 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         } else {
             medLogs.filter { it.date >= startDate && it.date <= endDate }
         }
+
+        _rangeMedicationLogs.value = filteredLogs
+        _rangeMedications.value = mergedMedications
 
         val logsByMedication = filteredLogs.groupBy { it.medicationName }
 

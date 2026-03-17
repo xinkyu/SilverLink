@@ -76,6 +76,7 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
     var showMedicationAdd by remember { mutableStateOf(false) }
     var showEmergencyContacts by remember { mutableStateOf(false) }
     var moodAnalysisPeriod by remember { mutableStateOf<String?>(null) }
+    var showMedicationHistory by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -240,7 +241,23 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                         }
                     }
                 }
-                3 -> HistoryScreen()
+                3 -> {
+                    if (moodAnalysisPeriod != null) {
+                        com.silverlink.app.ui.history.MoodAnalysisScreen(
+                            initialPeriod = moodAnalysisPeriod,
+                            onNavigateBack = { moodAnalysisPeriod = null }
+                        )
+                    } else if (showMedicationHistory) {
+                        com.silverlink.app.ui.history.MedicationHistoryScreen(
+                            onNavigateBack = { showMedicationHistory = false }
+                        )
+                    } else {
+                        HistoryScreen(
+                            onNavigateToMedicationHistory = { showMedicationHistory = true },
+                            onNavigateToMoodAnalysis = { moodAnalysisPeriod = "day" }
+                        )
+                    }
+                }
                 4 -> {
                     // 安全守护 Tab
                     if (showEmergencyContacts) {
