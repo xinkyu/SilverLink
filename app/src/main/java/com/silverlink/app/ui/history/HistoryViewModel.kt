@@ -265,15 +265,16 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         _selectedMoodPoint.value = point
     }
     
-    fun markMedicationAsTaken(name: String, dosage: String, time: String) {
+    fun markMedicationAsTaken(name: String, dosage: String, time: String, date: String? = null) {
         viewModelScope.launch {
-            val todayStr = dateFormat.format(Date())
+            val dateStr = date ?: dateFormat.format(Date())
             syncRepository.syncMedicationTaken(
                 medicationId = 0,
                 medicationName = name,
                 dosage = dosage,
                 scheduledTime = time,
-                status = "taken"
+                status = "taken",
+                date = dateStr
             )
             val historyDao = AppDatabase.getInstance(getApplication()).historyDao()
             val localLog = com.silverlink.app.data.local.entity.MedicationLogEntity(
@@ -282,7 +283,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 dosage = dosage,
                 scheduledTime = time,
                 status = "taken",
-                date = todayStr
+                date = dateStr
             )
             historyDao.insertMedicationLog(localLog)
             refresh()

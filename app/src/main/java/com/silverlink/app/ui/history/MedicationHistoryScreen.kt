@@ -287,7 +287,8 @@ private fun DailyView(
                 description = "剂量: ${status.dosage}",
                 confirmText = if (isTaken) "今日 $time 已确认" else "",
                 onMarkTaken = {
-                    viewModel.markMedicationAsTaken(status.name, status.dosage, time)
+                    val dateStr = formatDate(selectedDate)
+                    viewModel.markMedicationAsTaken(status.name, status.dosage, time, dateStr)
                 }
             )
         }
@@ -362,14 +363,14 @@ fun WeeklyView(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .width(12.dp),
-                                verticalArrangement = Arrangement.Bottom
+                                verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom)
                             ) {
                                 if (row.missed > 0f) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .weight(row.missed)
-                                            .background(Color(0xFF007BFF).copy(alpha = 0.2f), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                            .background(Color(0xFFEF4444), RoundedCornerShape(4.dp))
                                     )
                                 }
                                 if (row.taken > 0f) {
@@ -377,15 +378,7 @@ fun WeeklyView(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .weight(row.taken)
-                                            .background(
-                                                Color(0xFF007BFF),
-                                                RoundedCornerShape(
-                                                    topStart = if (row.missed == 0f) 4.dp else 0.dp,
-                                                    topEnd = if (row.missed == 0f) 4.dp else 0.dp,
-                                                    bottomStart = 4.dp,
-                                                    bottomEnd = 4.dp
-                                                )
-                                            )
+                                            .background(Color(0xFF007BFF), RoundedCornerShape(4.dp))
                                     )
                                 }
                                 if (row.isToday) {
@@ -415,7 +408,7 @@ fun WeeklyView(
                 ) {
                     LegendDot(Color(0xFF007BFF), "已按时服用")
                     Spacer(modifier = Modifier.width(16.dp))
-                    LegendDot(Color(0xFF007BFF).copy(alpha = 0.2f), "漏服/推迟")
+                    LegendDot(Color(0xFFEF4444), "漏服/推迟")
                 }
             }
         }
@@ -601,9 +594,9 @@ fun MonthlyView(
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("本月统计", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F1923))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
                 Card(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
@@ -615,7 +608,7 @@ fun MonthlyView(
                             Text("$adherence", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007BFF))
                             Text("%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(bottom = 4.dp))
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.weight(1f))
                         LinearProgressIndicator(
                             progress = { (adherence / 100f).coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
@@ -626,7 +619,7 @@ fun MonthlyView(
                 }
 
                 Card(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
@@ -638,7 +631,7 @@ fun MonthlyView(
                             Text("$streakDays", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                             Text("天", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(bottom = 4.dp, start = 2.dp))
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.weight(1f))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.TrendingUp, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(2.dp))
@@ -692,7 +685,6 @@ fun YearlyView(
     val yearReview = remember(rangeMedicationLogs, rangeMedications, statsByDate) {
         yearlyReview(rangeMedicationLogs, rangeMedications, statsByDate)
     }
-    val heatMapRows = listOf("一", "二", "三", "四", "五", "六", "日")
     val heatMap = remember(statsByDate, yearDates) { buildHeatMapByWeek(statsByDate, yearDates) }
 
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -705,7 +697,7 @@ fun YearlyView(
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
         ) {
@@ -752,30 +744,21 @@ fun YearlyView(
                     Text("多", fontSize = 10.sp, color = Color(0xFF94A3B8))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Row {
-                    Column(
-                        modifier = Modifier.padding(top = 2.dp, end = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        heatMapRows.forEach { d ->
-                            Text(d, fontSize = 9.sp, color = Color(0xFF94A3B8))
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .horizontalScroll(rememberScrollState())
-                            .padding(bottom = 2.dp)
-                    ) {
-                        heatMap.forEach { week ->
-                            Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(end = 3.dp)) {
-                                week.forEach { level ->
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(heatColor(level))
-                                    )
-                                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(bottom = 2.dp)
+                ) {
+                    heatMap.forEach { week ->
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(end = 3.dp)) {
+                            week.forEach { level ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(heatColor(level))
+                                )
                             }
                         }
                     }
@@ -1258,7 +1241,8 @@ private fun MonthRing(month: MonthRate) {
                 progress = { month.progress },
                 modifier = Modifier.size(44.dp),
                 color = if (month.progress == 0f) Color(0xFFBFDBFE) else Color(0xFF007BFF),
-                strokeWidth = 4.dp
+                strokeWidth = 4.dp,
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
             )
             Text(if (month.progress == 0f) "--" else "${(month.progress * 100).toInt()}%", fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
@@ -1378,11 +1362,14 @@ fun MedicationTimelineItem(
                     onClick = onMarkTaken,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff))
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF007bff),
+                        contentColor = Color.White
+                    )
                 ) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = "Mark", modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.CheckCircle, contentDescription = "Mark", modifier = Modifier.size(20.dp), tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("标记为已服用", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("标记为已服用", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }

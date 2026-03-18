@@ -132,7 +132,8 @@ class SyncRepository(private val context: Context) {
         medicationName: String,
         dosage: String,
         scheduledTime: String,
-        status: String = "taken"
+        status: String = "taken",
+        date: String? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             cloudBase.addMedicationLog(
@@ -141,7 +142,8 @@ class SyncRepository(private val context: Context) {
                 medicationName = medicationName,
                 dosage = dosage,
                 scheduledTime = scheduledTime,
-                status = status
+                status = status,
+                date = date
             )
             Result.success(Unit)
         } catch (e: Exception) {

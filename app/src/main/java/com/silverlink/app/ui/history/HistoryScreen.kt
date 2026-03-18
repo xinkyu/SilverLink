@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
@@ -30,10 +31,12 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector.Builder
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.silverlink.app.R
 import com.silverlink.app.ui.theme.WarmPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -118,7 +121,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFFEF9C3),
             iconColor = Color(0xFFCA8A04),
-            icon = HealthHistoryIcons.MoodAnalysis,
+            icon = ImageVector.vectorResource(id = R.drawable.ic_sentiment_satisfied),
             onClick = onNavigateToMoodAnalysis
         ),
         DashboardMetricCardState(
@@ -128,7 +131,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFDBEAFE),
             iconColor = Color(0xFF2563EB),
-            icon = HealthHistoryIcons.MedicationRecord,
+            icon = ImageVector.vectorResource(id = R.drawable.ic_prescriptions),
             onClick = onNavigateToMedicationHistory
         ),
         DashboardMetricCardState(
@@ -138,7 +141,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFF3E8FF),
             iconColor = Color(0xFF9333EA),
-            icon = Icons.Default.Star,
+            icon = HealthHistoryIcons.CognitiveAssessment,
             onClick = {
                 selectedMetricDetail = MetricDetailDialogState(
                     title = "认知评估",
@@ -156,7 +159,7 @@ fun HistoryScreen(
             unit = if (heartRate > 0) " bpm" else "",
             iconBgColor = Color(0xFFFEE2E2),
             iconColor = Color(0xFFDC2626),
-            icon = Icons.Default.Favorite,
+            icon = ImageVector.vectorResource(id = R.drawable.ic_pulse_alert),
             onClick = onNavigateToHeartRateDetail
         ),
         DashboardMetricCardState(
@@ -166,7 +169,7 @@ fun HistoryScreen(
             unit = if (steps > 0) " 步" else "",
             iconBgColor = Color(0xFFD1FAE5),
             iconColor = Color(0xFF059669),
-            icon = Icons.Default.DirectionsRun,
+            icon = HealthHistoryIcons.Activity,
             onClick = onNavigateToActivityDetail
         ),
         DashboardMetricCardState(
@@ -176,7 +179,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFFFEDD5),
             iconColor = Color(0xFFEA580C),
-            icon = Icons.Default.Warning,
+            icon = ImageVector.vectorResource(id = R.drawable.ic_stress_management),
             onClick = onNavigateToStressDetail
         ),
         DashboardMetricCardState(
@@ -186,7 +189,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFCFFAFE),
             iconColor = Color(0xFF0891B2),
-            icon = Icons.Default.Add,
+            icon = HealthHistoryIcons.BloodOxygen,
             onClick = onNavigateToBloodOxygenDetail
         ),
         DashboardMetricCardState(
@@ -196,7 +199,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFE0E7FF),
             iconColor = Color(0xFF4F46E5),
-            icon = Icons.Default.Info,
+            icon = HealthHistoryIcons.Sleep,
             onClick = onNavigateToSleepDetail
         ),
         DashboardMetricCardState(
@@ -206,7 +209,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFFFE4E6), // rose-100
             iconColor = Color(0xFFE11D48), // rose-600
-            icon = Icons.Default.Favorite,
+            icon = ImageVector.vectorResource(id = R.drawable.ic_blood_pressure),
             onClick = onNavigateToBloodPressureDetail
         ),
         DashboardMetricCardState(
@@ -216,7 +219,7 @@ fun HistoryScreen(
             unit = if (weightKg > 0f) "kg" else "",
             iconBgColor = Color(0xFFCCFBF1), // teal-100
             iconColor = Color(0xFF0D9488),   // teal-600
-            icon = Icons.Default.Info,
+            icon = HealthHistoryIcons.Weight,
             onClick = onNavigateToWeightDetail
         )
     )
@@ -720,6 +723,145 @@ private data class MetricDetailDialogState(
 )
 
 private object HealthHistoryIcons {
+    val CognitiveAssessment: ImageVector
+        get() = Icons.Default.Psychology
+
+    val HeartRate: ImageVector by lazy {
+        Builder(
+            name = "HeartRate",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.9f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(4f, 12f)
+                horizontalLineTo(7f)
+                lineTo(9.2f, 8f)
+                lineTo(11.7f, 15.8f)
+                lineTo(14.1f, 10.2f)
+                horizontalLineTo(20f)
+            }
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(12f, 3.5f)
+                curveTo(7.86f, 3.5f, 4.5f, 6.86f, 4.5f, 11f)
+                reflectiveCurveTo(7.86f, 18.5f, 12f, 18.5f)
+                reflectiveCurveTo(19.5f, 15.14f, 19.5f, 11f)
+            }
+        }.build()
+    }
+
+    val Activity: ImageVector
+        get() = Icons.Default.DirectionsRun
+
+    val Stress: ImageVector by lazy {
+        Builder(
+            name = "Stress",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(12f, 3.5f)
+                curveTo(7.86f, 3.5f, 4.5f, 6.86f, 4.5f, 11f)
+                curveTo(4.5f, 14.72f, 7.21f, 17.8f, 10.75f, 18.38f)
+                verticalLineTo(20.5f)
+                horizontalLineTo(13.25f)
+                verticalLineTo(18.38f)
+                curveTo(16.79f, 17.8f, 19.5f, 14.72f, 19.5f, 11f)
+                curveTo(19.5f, 6.86f, 16.14f, 3.5f, 12f, 3.5f)
+                close()
+            }
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(9.3f, 13.8f)
+                lineTo(11.1f, 10.4f)
+                lineTo(12.7f, 13.1f)
+                lineTo(14.7f, 9.5f)
+            }
+        }.build()
+    }
+
+    val BloodOxygen: ImageVector
+        get() = Icons.Default.Air
+
+    val Sleep: ImageVector
+        get() = Icons.Default.Bedtime
+
+    val BloodPressure: ImageVector by lazy {
+        Builder(
+            name = "BloodPressure",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(12f, 4.2f)
+                curveTo(14.8f, 7.1f, 16.4f, 9.4f, 16.4f, 11.7f)
+                curveTo(16.4f, 14.13f, 14.43f, 16.1f, 12f, 16.1f)
+                reflectiveCurveTo(7.6f, 14.13f, 7.6f, 11.7f)
+                curveTo(7.6f, 9.4f, 9.2f, 7.1f, 12f, 4.2f)
+                close()
+            }
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(5f, 19f)
+                horizontalLineTo(19f)
+                moveTo(12f, 19f)
+                verticalLineTo(21f)
+                moveTo(8.5f, 19f)
+                lineTo(10.2f, 17.3f)
+                moveTo(15.5f, 19f)
+                lineTo(13.8f, 17.3f)
+            }
+        }.build()
+    }
+
+    val Weight: ImageVector
+        get() = Icons.Default.MonitorWeight
+
     val MoodAnalysis: ImageVector by lazy {
         Builder(
             name = "MoodAnalysis",
@@ -840,18 +982,31 @@ private fun GridItemCard(
     onClick: () -> Unit = {}
 ) {
     Card(
-        modifier = modifier.clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
+        modifier = modifier
+            .clickable { onClick() }
+            .shadow(
+                elevation = 16.dp,
+                shape = RoundedCornerShape(28.dp),
+                spotColor = Color(0x14000000), // ~0.08 alpha for slightly visible soft shadow to match 0.05 web shadow which spreads differently
+                ambientColor = Color(0x08000000)
+            ),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F5F9))
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(iconBgColor),
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(iconBgColor)
+                    .shadow(
+                        elevation = 2.dp,
+                        shape = RoundedCornerShape(16.dp),
+                        spotColor = iconColor.copy(alpha = 0.2f),
+                        ambientColor = Color.Transparent
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))

@@ -168,11 +168,9 @@ private fun ActivityRangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRa
         TimeRange.MONTH to "月",
         TimeRange.YEAR to "年"
     )
-    Surface(shape = RoundedCornerShape(24.dp), color = Color(0xFFEFF3F8)) {
+    Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFFEFF3F8), modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(4.dp),
+            modifier = Modifier.padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             tabs.forEach { (range, label) ->
@@ -180,16 +178,17 @@ private fun ActivityRangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRa
                 Surface(
                     onClick = { onRangeSelected(range) },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = if (selected) Color.White else Color.Transparent,
                     shadowElevation = if (selected) 2.dp else 0.dp
                 ) {
                     Box(
-                        modifier = Modifier.padding(vertical = 10.dp),
+                        modifier = Modifier.padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = label,
+                            fontSize = 14.sp,
                             color = if (selected) Color(0xFF0F172A) else Color(0xFF64748B),
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                         )

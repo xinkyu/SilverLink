@@ -329,26 +329,27 @@ fun TimeRangeSelector(
         Spacer(modifier = Modifier.height(12.dp))
         
         // 日期选择
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { showDatePicker = true }
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = dateFormat.format(selectedDate),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium
-            )
-            Icon(
-                Icons.Default.ArrowDropDown,
-                contentDescription = "选择日期",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        if (selectedRange == TimeRange.DAY || selectedRange == TimeRange.WEEK) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { showDatePicker = true }
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = dateFormat.format(selectedDate),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = "选择日期",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
-    }
-    
+        
     // 日期选择器对话框
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
@@ -376,6 +377,7 @@ fun TimeRangeSelector(
             DatePicker(state = datePickerState)
         }
     }
+    }
 }
 
 // ==================== RangeTabs ====================
@@ -392,11 +394,9 @@ fun RangeTabs(
         TimeRange.MONTH to "月",
         TimeRange.YEAR to "年"
     )
-    Surface(shape = RoundedCornerShape(24.dp), color = Color(0xFFF1F5F9), modifier = modifier) {
+    Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFFF1F5F9), modifier = modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(4.dp),
+            modifier = Modifier.padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             tabs.forEach { (range, label) ->
@@ -404,16 +404,17 @@ fun RangeTabs(
                 Surface(
                     onClick = { onRangeSelected(range) },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = if (selected) Color.White else Color.Transparent,
                     shadowElevation = if (selected) 2.dp else 0.dp
                 ) {
                     Box(
-                        modifier = Modifier.padding(vertical = 10.dp),
+                        modifier = Modifier.padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = label,
+                            fontSize = 14.sp,
                             color = if (selected) Color(0xFF0F172A) else Color(0xFF64748B),
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                         )

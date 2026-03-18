@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -199,6 +200,13 @@ fun MoodAnalysisScreen(
                             showAllLogs = false
                             viewModel.setSelectedDate(it)
                             viewModel.setTimeRange(TimeRange.DAY)
+                        },
+                        onMonthChange = { delta ->
+                            val cal = Calendar.getInstance().apply {
+                                time = selectedDate
+                                add(Calendar.MONTH, delta)
+                            }
+                            viewModel.setSelectedDate(cal.time)
                         }
                     )
                     TimeRange.YEAR -> YearRangeContent(
@@ -206,11 +214,6 @@ fun MoodAnalysisScreen(
                         stats = stats
                     )
                 }
-
-                MoodDetailCardWithPadding(
-                    moodPoint = selectedPoint,
-                    onDismiss = { viewModel.selectMoodPoint(null) }
-                )
 
                 MoodLogSection(
                     title = when (selectedRange) {
@@ -222,6 +225,8 @@ fun MoodAnalysisScreen(
                     points = moodPoints,
                     expanded = showAllLogs,
                     onToggleExpanded = { showAllLogs = !showAllLogs },
+                    selectedPoint = selectedPoint,
+                    onDismissPoint = { viewModel.selectMoodPoint(null) },
                     onPointClick = viewModel::selectMoodPoint
                 )
             }
@@ -323,13 +328,15 @@ private fun MonthRangeContent(
     selectedDate: Date,
     stats: MoodStats,
     points: List<MoodTimePoint>,
-    onDayClick: (Date) -> Unit
+    onDayClick: (Date) -> Unit,
+    onMonthChange: (Int) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         MonthCalendarCard(
             selectedDate = selectedDate,
             dailySummaries = stats.dailySummaries,
-            onDayClick = onDayClick
+            onDayClick = onDayClick,
+            onMonthChange = onMonthChange
         )
 
         DominantMoodCard(stats)
@@ -424,17 +431,18 @@ private fun MetricCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(1.dp, model.borderColor, RoundedCornerShape(20.dp))
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(model.title, fontSize = 12.sp, color = Slate500)
             Text(model.value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Slate900)
             if (model.progress != null) {
                 LinearProgressIndicator(
                     progress = { model.progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(8.dp),
                     color = model.progressColor,
-                    trackColor = model.progressColor.copy(alpha = 0.16f)
+                    trackColor = model.progressColor.copy(alpha = 0.16f),
+                    strokeCap = StrokeCap.Round
                 )
             }
             Text(
@@ -653,8 +661,20 @@ private fun WeeklyTrendCard(dailySummaries: List<DailyMoodSummary>) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
-                dailySummaries.ifEmpty { placeholderWeekSummaries() }.take(7).forEach { summary ->
-                    val progress = (summary.averageScore / 5f).coerceIn(0.12f, 1f)
+                val fullWeek = listOf("一", "二", "三", "四", "五", "六", "日").map { dayLabel ->
+                    dailySummaries.find { it.shortLabel == dayLabel } ?: DailyMoodSummary(
+                        date = "",
+                        shortLabel = dayLabel,
+                        averageScore = 0f,
+                        dominantMood = null,
+                        recordCount = 0,
+                        dayOfMonth = 0,
+                        color = Color.Transparent
+                    )
+                }
+                fullWeek.forEach { summary ->
+                    val progress = if (summary.averageScore > 0f) (summary.averageScore / 5f).coerceIn(0.12f, 1f) else 0f
+                    val minHeight = if (summary.averageScore > 0f) 16.dp else 0.dp
                     Column(
                         modifier = Modifier.weight(1f),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -669,7 +689,7 @@ private fun WeeklyTrendCard(dailySummaries: List<DailyMoodSummary>) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height((92.dp * progress).coerceAtLeast(16.dp))
+                                    .height((92.dp * progress).coerceAtLeast(minHeight))
                                     .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                                     .background(summary.color.copy(alpha = 0.85f))
                             )
@@ -686,7 +706,8 @@ private fun WeeklyTrendCard(dailySummaries: List<DailyMoodSummary>) {
 private fun MonthCalendarCard(
     selectedDate: Date,
     dailySummaries: List<DailyMoodSummary>,
-    onDayClick: (Date) -> Unit
+    onDayClick: (Date) -> Unit,
+    onMonthChange: (Int) -> Unit
 ) {
     val calendar = remember(selectedDate) {
         Calendar.getInstance().apply {
@@ -718,14 +739,24 @@ private fun MonthCalendarCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null, tint = Slate500)
+                Icon(
+                    Icons.Default.KeyboardArrowLeft, 
+                    contentDescription = null, 
+                    tint = Slate500,
+                    modifier = Modifier.clickable { onMonthChange(-1) }.padding(4.dp)
+                )
                 Text(
                     text = SimpleDateFormat("yyyy年M月", Locale.CHINA).format(selectedDate),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Slate900
                 )
-                Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Slate500)
+                Icon(
+                    Icons.Default.KeyboardArrowRight, 
+                    contentDescription = null, 
+                    tint = Slate500,
+                    modifier = Modifier.clickable { onMonthChange(1) }.padding(4.dp)
+                )
             }
 
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -742,7 +773,9 @@ private fun MonthCalendarCard(
             }
 
             var dayCounter = 1
-            repeat(6) { row ->
+            val totalCells = startOffset + daysInMonth
+            val rows = (totalCells + 6) / 7
+            repeat(rows) { row ->
                 Row(modifier = Modifier.fillMaxWidth()) {
                     repeat(7) { column ->
                         val cellIndex = row * 7 + column
@@ -887,12 +920,17 @@ private fun CorrelationSection(points: List<MoodTimePoint>, stats: MoodStats) {
                     }
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFDCFCE7)),
+                            .background(Color(0xFF4ADE80)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("✓", fontSize = 11.sp, color = Color(0xFF16A34A), fontWeight = FontWeight.Bold)
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.padding(4.dp)
+                        )
                     }
                 }
             }
@@ -940,15 +978,32 @@ private fun YearlyRingGrid(monthlySummaries: List<MonthlyMoodSummary>) {
 @Composable
 private fun CircularMonthRing(summary: MonthlyMoodSummary) {
     val progress = (summary.averageScore / 5f).coerceIn(0f, 1f)
-    Box(contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(
-            progress = { progress },
-            modifier = Modifier.size(44.dp),
-            color = summary.color,
-            trackColor = summary.color.copy(alpha = 0.18f),
-            strokeWidth = 4.dp
-        )
-        Text("${(progress * 100).roundToInt()}%", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate900)
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(46.dp)) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidthTrack = 5.dp.toPx()
+            val strokeWidthProgress = 5.dp.toPx()
+            
+            // Track
+            drawCircle(
+                color = summary.color.copy(alpha = 0.18f),
+                radius = (size.minDimension - strokeWidthTrack) / 2f,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidthTrack)
+            )
+            // Progress
+            val sweep = 360f * progress
+            if (sweep > 0) {
+                drawArc(
+                    color = summary.color,
+                    startAngle = -90f,
+                    sweepAngle = sweep,
+                    useCenter = false,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidthProgress, cap = StrokeCap.Round),
+                    topLeft = androidx.compose.ui.geometry.Offset(strokeWidthTrack / 2f, strokeWidthTrack / 2f),
+                    size = androidx.compose.ui.geometry.Size(size.width - strokeWidthTrack, size.height - strokeWidthTrack)
+                )
+            }
+        }
+        Text("${(progress * 100).roundToInt()}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate900)
     }
 }
 
@@ -977,7 +1032,7 @@ private fun MoodDistributionSection(moodCounts: Map<String, Int>) {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                "${getMoodDisplayText(mood)} ${moodEnglishName(mood)}",
+                                getMoodDisplayText(mood),
                                 fontSize = 13.sp,
                                 color = Slate900
                             )
@@ -985,9 +1040,10 @@ private fun MoodDistributionSection(moodCounts: Map<String, Int>) {
                         }
                         LinearProgressIndicator(
                             progress = { progress },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(8.dp),
                             color = getMoodColor(mood),
-                            trackColor = getMoodColor(mood).copy(alpha = 0.16f)
+                            trackColor = getMoodColor(mood).copy(alpha = 0.16f),
+                            strokeCap = StrokeCap.Round
                         )
                     }
                 }
@@ -1017,7 +1073,7 @@ private fun AnnualHighlightsSection(stats: MoodStats) {
         HighlightCard(
             icon = "⚡",
             title = "最常出现的情绪",
-            value = "${getMoodDisplayText(dominant)} ${moodEnglishName(dominant)}",
+            value = getMoodDisplayText(dominant),
             description = "全年记录中占比约 ${stats.positiveRate.roundToInt()}%，整体趋势稳定向上",
             containerColor = Color(0xFFECFDF5),
             accentColor = Color(0xFF10B981)
@@ -1105,6 +1161,8 @@ private fun MoodLogSection(
     points: List<MoodTimePoint>,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
+    selectedPoint: MoodTimePoint? = null,
+    onDismissPoint: () -> Unit = {},
     onPointClick: (MoodTimePoint) -> Unit
 ) {
     val sorted = remember(points) { points.sortedByDescending { it.timestamp } }
@@ -1135,6 +1193,9 @@ private fun MoodLogSection(
 
         visiblePoints.forEach { point ->
             MoodLogItem(point = point, onClick = { onPointClick(point) })
+            if (point == selectedPoint) {
+                com.silverlink.app.ui.components.MoodDetailCard(moodPoint = point, onDismiss = onDismissPoint)
+            }
         }
     }
 }
@@ -1187,16 +1248,6 @@ private fun MoodLogItem(
     }
 }
 
-@Composable
-private fun MoodDetailCardWithPadding(
-    moodPoint: MoodTimePoint?,
-    onDismiss: () -> Unit
-) {
-    if (moodPoint == null) return
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        MoodDetailCard(moodPoint = moodPoint, onDismiss = onDismiss)
-    }
-}
 
 @Composable
 private fun EmptyMoodState(range: TimeRange, selectedDate: Date) {
