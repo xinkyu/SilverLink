@@ -3,6 +3,7 @@ package com.silverlink.app.ui.history
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,14 +31,19 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector.Builder
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.R
 import com.silverlink.app.ui.theme.WarmPrimary
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +75,9 @@ fun HistoryScreen(
     var showBoardEditor by rememberSaveable { mutableStateOf(false) }
     var showFullReport by rememberSaveable { mutableStateOf(false) }
     var selectedMetricDetail by remember { mutableStateOf<MetricDetailDialogState?>(null) }
+    var draggingMetricId by remember { mutableStateOf<String?>(null) }
+    var draggingOffsetY by remember { mutableStateOf(0f) }
+    val dragRowHeightPx = with(LocalDensity.current) { 56.dp.toPx() }
     val defaultVisibleMetricIds = remember {
         listOf("mood", "medication", "cognitive", "heartRate", "activity", "stress", "bloodOxygen", "sleep", "bloodPressure", "weight")
     }
@@ -584,9 +593,12 @@ fun HistoryScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .offset { IntOffset(0, if (draggingMetricId == id) draggingOffsetY.roundToInt() else 0) }
+                                        .zIndex(if (draggingMetricId == id) 1f else 0f)
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(Color(0xFFF8FAFC))
                                         .border(1.dp, Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                                        .heightIn(min = 56.dp)
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -605,7 +617,46 @@ fun HistoryScreen(
                                         color = Color(0xFF0F172A),
                                         modifier = Modifier.weight(1f)
                                     )
-                                    Icon(Icons.Default.Menu, contentDescription = "拖动", tint = Color(0xFF94A3B8))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .pointerInput(id, visibleMetricIds) {
+                                                detectDragGesturesAfterLongPress(
+                                                    onDragStart = {
+                                                        draggingMetricId = id
+                                                        draggingOffsetY = 0f
+                                                    },
+                                                    onDragCancel = {
+                                                        draggingMetricId = null
+                                                        draggingOffsetY = 0f
+                                                    },
+                                                    onDragEnd = {
+                                                        draggingMetricId = null
+                                                        draggingOffsetY = 0f
+                                                    },
+                                                    onDrag = { change, dragAmount ->
+                                                        if (draggingMetricId != id) return@detectDragGesturesAfterLongPress
+                                                        change.consume()
+                                                        draggingOffsetY += dragAmount.y
+                                                        val fromIndex = visibleMetricIds.indexOf(id)
+                                                        if (fromIndex == -1) return@detectDragGesturesAfterLongPress
+                                                        val step = (draggingOffsetY / dragRowHeightPx).toInt()
+                                                        if (step == 0) return@detectDragGesturesAfterLongPress
+                                                        val toIndex = (fromIndex + step).coerceIn(0, visibleMetricIds.lastIndex)
+                                                        if (toIndex != fromIndex) {
+                                                            val updated = visibleMetricIds.toMutableList()
+                                                            updated.removeAt(fromIndex)
+                                                            updated.add(toIndex, id)
+                                                            visibleMetricIds = updated
+                                                            draggingOffsetY -= step * dragRowHeightPx
+                                                        }
+                                                    }
+                                                )
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Menu, contentDescription = "拖动", tint = Color(0xFF94A3B8))
+                                    }
                                 }
                             }
                         }

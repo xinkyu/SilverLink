@@ -268,17 +268,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     fun markMedicationAsTaken(name: String, dosage: String, time: String, date: String? = null) {
         viewModelScope.launch {
             val dateStr = date ?: dateFormat.format(Date())
-            syncRepository.syncMedicationTaken(
-                medicationId = 0,
-                medicationName = name,
-                dosage = dosage,
-                scheduledTime = time,
-                status = "taken",
-                date = dateStr
-            )
-            val historyDao = AppDatabase.getInstance(getApplication()).historyDao()
+            val matchedMedication = medicationDao.getMedicationByNameAndDosage(name.trim(), dosage.trim())
+            val medicationId = matchedMedication?.id ?: 0
             val localLog = com.silverlink.app.data.local.entity.MedicationLogEntity(
-                medicationId = 0,
+                medicationId = medicationId,
                 medicationName = name,
                 dosage = dosage,
                 scheduledTime = time,
@@ -286,6 +279,16 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 date = dateStr
             )
             historyDao.insertMedicationLog(localLog)
+            updateMedicationStatusLocally(name, dosage, time)
+
+            syncRepository.syncMedicationTaken(
+                medicationId = medicationId,
+                medicationName = name,
+                dosage = dosage,
+                scheduledTime = time,
+                status = "taken",
+                date = dateStr
+            )
             refresh()
         }
     }
@@ -407,10 +410,14 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             syncRepository.getSelfMedicationLogs(date = null)
         }
         val medicationListResult = syncRepository.getSelfMedicationsList()
+        val localMedicationLogs = getLocalMedicationLogs(startDate, endDate, range)
 
         // 更新缓存
         val moodLogs = moodResult.getOrDefault(emptyList())
-        val medLogs = medicationResult.getOrDefault(emptyList())
+        val medLogs = mergeMedicationLogs(
+            remoteLogs = medicationResult.getOrDefault(emptyList()),
+            localLogs = localMedicationLogs
+        )
         val medications = medicationListResult.getOrDefault(emptyList())
         
         cachedMoodLogs = CachedData(moodLogs)
@@ -438,6 +445,50 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     /**
      * 获取认知评估报告
      */
+    private fun updateMedicationStatusLocally(name: String, dosage: String, time: String) {
+        _medicationStatuses.value = _medicationStatuses.value.map { status ->
+            if (status.name == name && status.dosage == dosage && status.times.contains(time)) {
+                status.copy(takenTimes = status.takenTimes + time)
+            } else {
+                status
+            }
+        }
+    }
+
+    private suspend fun getLocalMedicationLogs(
+        startDate: String,
+        endDate: String,
+        range: TimeRange
+    ): List<MedicationLogData> {
+        val localLogs = if (range == TimeRange.DAY) {
+            historyDao.getMedicationLogsByDate(startDate)
+        } else {
+            historyDao.getMedicationLogsByDateRange(startDate, endDate)
+        }
+
+        return localLogs.map { log ->
+            MedicationLogData(
+                id = "local-${log.id}",
+                medicationId = log.medicationId,
+                medicationName = log.medicationName,
+                dosage = log.dosage,
+                scheduledTime = log.scheduledTime,
+                status = log.status,
+                date = log.date,
+                createdAt = log.createdAt.toString()
+            )
+        }
+    }
+
+    private fun mergeMedicationLogs(
+        remoteLogs: List<MedicationLogData>,
+        localLogs: List<MedicationLogData>
+    ): List<MedicationLogData> {
+        return (remoteLogs + localLogs)
+            .distinctBy { "${it.date}|${it.medicationName}|${it.scheduledTime}|${it.status}" }
+            .sortedWith(compareByDescending<MedicationLogData> { it.date }.thenBy { it.scheduledTime })
+    }
+
     private suspend fun fetchCognitiveReport() {
         _isCognitiveLoading.value = true
         try {

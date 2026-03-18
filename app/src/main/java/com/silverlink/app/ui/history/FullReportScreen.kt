@@ -449,7 +449,10 @@ private fun SleepAnalysisSection(
     val minutes = sleepMinutes % 60
 
     ReportCard(title = "睡眠分析", accent = Color(0xFF6366F1), icon = Icons.Default.NightsStay) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             SummaryPill(
                 modifier = Modifier.weight(1f),
                 label = "昨夜时长",
@@ -504,7 +507,10 @@ private fun SpO2AndStressSection(
     bloodOxygen: Int,
     pressure: Int
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         CompactMetricCard(
             modifier = Modifier.weight(1f),
             title = "血氧饱和度",

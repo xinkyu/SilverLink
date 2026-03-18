@@ -1,5 +1,7 @@
 package com.silverlink.app.ui.history
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,6 +38,7 @@ fun MedicationHistoryScreen(
     onNavigateBack: () -> Unit,
     viewModel: HistoryViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val selectedRange by viewModel.selectedRange.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val medicationSummary by viewModel.medicationSummary.collectAsState()
@@ -66,8 +70,27 @@ fun MedicationHistoryScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showDatePicker = true }) {
-                        Icon(Icons.Default.DateRange, contentDescription = "日历", tint = Color(0xFF475569))
+                    IconButton(
+                        onClick = {
+                            val shareText = buildMedicationShareText(
+                                selectedRange = selectedRange,
+                                selectedDate = selectedDate,
+                                medicationSummary = medicationSummary,
+                                rangeMedicationLogs = rangeMedicationLogs,
+                                rangeMedications = rangeMedications
+                            )
+                            if (shareText.isBlank()) {
+                                Toast.makeText(context, "暂无可分享的用药记录", Toast.LENGTH_SHORT).show()
+                                return@IconButton
+                            }
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "分享用药记录"))
+                        }
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "分享", tint = Color(0xFF475569))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White.copy(alpha = 0.8f)),
@@ -113,7 +136,19 @@ fun MedicationHistoryScreen(
             when (selectedRange) {
                 TimeRange.DAY -> DailyView(selectedDate, currentDateText, viewModel, medicationStatuses, medicationSummary)
                 TimeRange.WEEK -> WeeklyView(selectedDate, medicationSummary, rangeMedicationLogs, rangeMedications)
-                TimeRange.MONTH -> MonthlyView(selectedDate, medicationSummary, rangeMedicationLogs, rangeMedications)
+                TimeRange.MONTH -> MonthlyView(
+                    selectedDate = selectedDate,
+                    medicationSummary = medicationSummary,
+                    rangeMedicationLogs = rangeMedicationLogs,
+                    rangeMedications = rangeMedications,
+                    onMonthChange = { delta ->
+                        val cal = Calendar.getInstance().apply {
+                            time = selectedDate
+                            add(Calendar.MONTH, delta)
+                        }
+                        viewModel.setSelectedDate(cal.time)
+                    }
+                )
                 TimeRange.YEAR -> YearlyView(selectedDate, rangeMedicationLogs, rangeMedications)
             }
         }
@@ -465,7 +500,8 @@ fun MonthlyView(
     selectedDate: Date,
     medicationSummary: MedicationSummary?,
     rangeMedicationLogs: List<MedicationLogData>,
-    rangeMedications: List<MedicationData>
+    rangeMedications: List<MedicationData>,
+    onMonthChange: (Int) -> Unit
 ) {
     val dayHeaders = listOf("日", "一", "二", "三", "四", "五", "六")
     val selectedDay = Calendar.getInstance().apply { time = selectedDate }.get(Calendar.DAY_OF_MONTH)
@@ -496,11 +532,11 @@ fun MonthlyView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { }) {
+                    IconButton(onClick = { onMonthChange(-1) }) {
                         Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "上月", tint = Color(0xFF0F1923))
                     }
                     Text(monthMeta.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F1923))
-                    IconButton(onClick = { }) {
+                    IconButton(onClick = { onMonthChange(1) }) {
                         Icon(Icons.Default.KeyboardArrowRight, contentDescription = "下月", tint = Color(0xFF0F1923))
                     }
                 }
@@ -1135,6 +1171,39 @@ private fun formatDate(date: Date): String {
 
 private fun parseDate(date: String): Date? {
     return runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date) }.getOrNull()
+}
+
+private fun buildMedicationShareText(
+    selectedRange: TimeRange,
+    selectedDate: Date,
+    medicationSummary: MedicationSummary?,
+    rangeMedicationLogs: List<MedicationLogData>,
+    rangeMedications: List<MedicationData>
+): String {
+    val total = medicationSummary?.totalCount ?: 0
+    val taken = medicationSummary?.takenCount ?: 0
+    if (total <= 0 && rangeMedicationLogs.isEmpty() && rangeMedications.isEmpty()) return ""
+
+    val rangeLabel = when (selectedRange) {
+        TimeRange.DAY -> SimpleDateFormat("yyyy年M月d日", Locale.CHINA).format(selectedDate)
+        TimeRange.WEEK -> "本周"
+        TimeRange.MONTH -> SimpleDateFormat("yyyy年M月", Locale.CHINA).format(selectedDate)
+        TimeRange.YEAR -> SimpleDateFormat("yyyy年", Locale.CHINA).format(selectedDate)
+    }
+    val adherence = calcPercentage(taken, total)
+    val uniqueTaken = rangeMedicationLogs
+        .asSequence()
+        .filter { it.status == "taken" }
+        .distinctBy { "${it.date}|${it.medicationName}|${it.scheduledTime}" }
+        .count()
+
+    return buildString {
+        append(rangeLabel).append(" 用药记录").append('\n')
+        append("服药达成率：").append(adherence).append("%").append('\n')
+        append("已完成：").append(taken).append('/').append(total).append('\n')
+        append("本段时间已服次数：").append(uniqueTaken).append('\n')
+        append("药品数量：").append(rangeMedications.size)
+    }
 }
 
 private fun formatDisplayDate(date: Date): String {
