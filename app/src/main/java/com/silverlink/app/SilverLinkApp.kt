@@ -7,6 +7,7 @@ import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.silverlink.app.BuildConfig
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.Dialect
 import com.silverlink.app.data.local.UserPreferences
@@ -15,6 +16,7 @@ import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.feature.emotion.EmotionRecognitionService
 import com.silverlink.app.feature.memory.MemorySyncService
 import com.silverlink.app.feature.reminder.DailyResetWorker
+import com.silverlink.sdk.health.HealthServiceBridgeFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,6 +33,8 @@ class SilverLinkApp : Application() {
         super.onCreate()
 
         HealthDebugLogger.logCurrentSigningSha1(this)
+        HealthServiceBridgeFactory.setForceMock(BuildConfig.FORCE_MOCK_HEALTH_DATA)
+        Log.i("SilverLinkApp", "Health mock mode=${BuildConfig.FORCE_MOCK_HEALTH_DATA}")
 
         // Initialize Room Database using Singleton
         database = AppDatabase.getInstance(this)

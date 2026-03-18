@@ -19,6 +19,7 @@ val releaseStoreFilePath = localProperties.getProperty("RELEASE_STORE_FILE", "")
 val releaseStorePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD", "").trim()
 val releaseKeyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS", "").trim()
 val releaseKeyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD", "").trim()
+val forceMockHealthData = localProperties.getProperty("FORCE_MOCK_HEALTH_DATA", "true").trim().toBoolean()
 val hasReleaseSigning = releaseStoreFilePath.isNotEmpty() &&
     releaseStorePassword.isNotEmpty() &&
     releaseKeyAlias.isNotEmpty() &&
@@ -43,6 +44,7 @@ android {
         // Build config fields for API keys (read from local.properties)
         buildConfigField("String", "QWEN_API_KEY", "\"${localProperties.getProperty("QWEN_API_KEY", "")}\"")
         buildConfigField("String", "CLOUDBASE_URL", "\"${localProperties.getProperty("CLOUDBASE_URL", "")}\"")
+        buildConfigField("boolean", "FORCE_MOCK_HEALTH_DATA", forceMockHealthData.toString())
     }
     
     buildFeatures {

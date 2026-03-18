@@ -23,6 +23,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector.Builder
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -112,7 +118,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFFEF9C3),
             iconColor = Color(0xFFCA8A04),
-            icon = Icons.Default.Face,
+            icon = HealthHistoryIcons.MoodAnalysis,
             onClick = onNavigateToMoodAnalysis
         ),
         DashboardMetricCardState(
@@ -122,7 +128,7 @@ fun HistoryScreen(
             unit = "",
             iconBgColor = Color(0xFFDBEAFE),
             iconColor = Color(0xFF2563EB),
-            icon = Icons.Default.Check,
+            icon = HealthHistoryIcons.MedicationRecord,
             onClick = onNavigateToMedicationHistory
         ),
         DashboardMetricCardState(
@@ -208,8 +214,8 @@ fun HistoryScreen(
             title = "体重",
             value = weightText,
             unit = if (weightKg > 0f) "kg" else "",
-            iconBgColor = Color(0xFFF1F5F9),
-            iconColor = Color(0xFF475569),
+            iconBgColor = Color(0xFFCCFBF1), // teal-100
+            iconColor = Color(0xFF0D9488),   // teal-600
             icon = Icons.Default.Info,
             onClick = onNavigateToWeightDetail
         )
@@ -713,6 +719,97 @@ private data class MetricDetailDialogState(
     val description: String
 )
 
+private object HealthHistoryIcons {
+    val MoodAnalysis: ImageVector by lazy {
+        Builder(
+            name = "MoodAnalysis",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = SolidColor(Color.Black),
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(12f, 3f)
+                curveTo(7.03f, 3f, 3f, 7.03f, 3f, 12f)
+                reflectiveCurveTo(7.03f, 21f, 12f, 21f)
+                reflectiveCurveTo(21f, 16.97f, 21f, 12f)
+                reflectiveCurveTo(16.97f, 3f, 12f, 3f)
+                close()
+            }
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.9f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(8.7f, 13.9f)
+                curveTo(9.6f, 15.25f, 10.77f, 15.9f, 12f, 15.9f)
+                reflectiveCurveTo(14.4f, 15.25f, 15.3f, 13.9f)
+            }
+        }.build()
+    }
+
+    val MedicationRecord: ImageVector by lazy {
+        Builder(
+            name = "MedicationRecord",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(14.5f, 3.5f)
+                horizontalLineTo(19.2f)
+                verticalLineTo(8.2f)
+                moveTo(19.2f, 3.5f)
+                lineTo(20.8f, 5.1f)
+                moveTo(19.2f, 3.5f)
+                lineTo(17.6f, 5.1f)
+                moveTo(20.2f, 7f)
+                curveTo(21.1f, 8.2f, 21.6f, 9.7f, 21.6f, 11.3f)
+                curveTo(21.6f, 14f, 20.15f, 16.48f, 17.8f, 17.82f)
+            }
+            path(
+                fill = SolidColor(Color.Black),
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(6.14f, 8.64f)
+                curveTo(4.08f, 10.7f, 4.08f, 14.05f, 6.14f, 16.11f)
+                lineTo(7.89f, 17.86f)
+                curveTo(9.95f, 19.92f, 13.3f, 19.92f, 15.36f, 17.86f)
+                lineTo(17.86f, 15.36f)
+                curveTo(19.92f, 13.3f, 19.92f, 9.95f, 17.86f, 7.89f)
+                lineTo(16.11f, 6.14f)
+                curveTo(14.05f, 4.08f, 10.7f, 4.08f, 8.64f, 6.14f)
+                close()
+            }
+            path(
+                fill = null,
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(8.15f, 16.1f)
+                lineTo(16.1f, 8.15f)
+            }
+        }.build()
+    }
+}
+
 private fun moodStressLabel(mood: String?): String {
     return when (mood?.uppercase()) {
         "HAPPY", "NEUTRAL" -> "较低"
@@ -746,25 +843,34 @@ private fun GridItemCard(
         modifier = modifier.clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F5F9))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(44.dp)
+                    .clip(CircleShape)
                     .background(iconBgColor),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(title, fontSize = 12.sp, color = Color(0xFF64748B))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F1923))
-                if (unit.isNotEmpty()) {
-                    Text(unit, fontSize = 14.sp, color = Color(0xFF64748B), modifier = Modifier.padding(bottom = 1.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            Column {
+                Text(title, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF94A3B8))
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                    if (unit.isNotEmpty()) {
+                        Text(
+                            unit,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF64748B),
+                            modifier = Modifier.padding(bottom = 1.dp, start = 4.dp)
+                        )
+                    }
                 }
             }
         }

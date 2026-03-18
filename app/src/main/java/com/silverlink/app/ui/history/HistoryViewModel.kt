@@ -218,15 +218,15 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun loadHealthData() {
+    fun loadHealthData(date: Date = _selectedDate.value) {
         if (!userPreferences.isOppoHealthSdkConsentGranted()) return
 
         viewModelScope.launch {
             Log.i(HealthDebugLogger.TAG_DATA, "HistoryViewModel.loadHealthData start")
             _isHealthLoading.value = true
             _healthError.value = null
-            val today = dateFormat.format(Date())
-            val result = OppoHealthSdkManager.pullDashboardData(getApplication(), today)
+            val selectedDate = dateFormat.format(date)
+            val result = OppoHealthSdkManager.pullDashboardData(getApplication(), selectedDate)
             _isHealthLoading.value = false
             if (result.isSuccess) {
                 Log.i(HealthDebugLogger.TAG_DATA, "HistoryViewModel.loadHealthData success")
@@ -254,6 +254,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         _selectedDate.value = date
         _selectedMoodPoint.value = null
         loadData()
+        loadHealthData(date)
     }
     
     fun setChartType(type: ChartType) {

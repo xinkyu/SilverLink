@@ -6,6 +6,15 @@ object HealthServiceBridgeFactory {
 
     @Volatile
     private var cached: HealthServiceBridge? = null
+    @Volatile
+    private var forceMock: Boolean = false
+
+    fun setForceMock(enabled: Boolean) {
+        synchronized(this) {
+            forceMock = enabled
+            cached = null
+        }
+    }
 
     fun get(context: Context): HealthServiceBridge {
         val existing = cached
@@ -14,7 +23,13 @@ object HealthServiceBridgeFactory {
         return synchronized(this) {
             cached ?: run {
                 val real = OppoHealthServiceBridge(context.applicationContext)
-                val bridge = if (real.isAvailable()) real else MockHealthServiceBridge()
+                val bridge = if (forceMock) {
+                    MockHealthServiceBridge()
+                } else if (real.isAvailable()) {
+                    real
+                } else {
+                    MockHealthServiceBridge()
+                }
                 cached = bridge
                 bridge
             }
