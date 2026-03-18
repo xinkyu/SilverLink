@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Fireplace
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Schedule
@@ -41,29 +40,32 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.silverlink.app.feature.health.HealthTrendPoint
 import com.silverlink.app.feature.health.OppoHealthDashboardData
+import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.ui.components.TimeRange
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,8 +73,25 @@ fun ActivityDetailScreen(
     onNavigateBack: () -> Unit,
     viewModel: HistoryViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val healthDashboardData by viewModel.healthDashboardData.collectAsState()
     var selectedRange by rememberSaveable { androidx.compose.runtime.mutableStateOf(TimeRange.DAY) }
+    val dayTrend = healthDashboardData?.activityDailySummary.orEmpty().sortedBy { it.timestamp }
+    val rangePoints by produceState(
+        initialValue = emptyList<HealthTrendPoint>(),
+        selectedRange,
+        healthDashboardData
+    ) {
+        value = when (selectedRange) {
+            TimeRange.DAY -> lastDays(dayTrend, 7)
+            else -> {
+                val window = currentTimeWindow(selectedRange)
+                OppoHealthSdkManager.getActivitySummary(context, window.start, window.end)
+                    .getOrDefault(emptyList())
+                    .sortedBy { it.timestamp }
+            }
+        }
+    }
 
     Scaffold(
         containerColor = Color(0xFFF5F7F8),
@@ -106,18 +125,35 @@ fun ActivityDetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                RangeTabs(
+                ActivityRangeTabs(
                     selectedRange = selectedRange,
                     onRangeSelected = { selectedRange = it }
                 )
             }
-            item { PlaceholderCard() }
+            item {
+                SourceCard(
+                    title = "数据来源",
+                    body = if (selectedRange == TimeRange.DAY) {
+                        "今日卡片展示真实步数、热量、距离和活动分钟，趋势区块展示最近 7 天真实日汇总。"
+                    } else {
+                        "周、月、年视图均直接读取 OPPO 健康活动汇总数据。"
+                    }
+                )
+            }
             item {
                 when (selectedRange) {
-                    TimeRange.DAY -> DaySection(healthDashboardData)
-                    TimeRange.WEEK -> WeekSection()
-                    TimeRange.MONTH -> MonthSection()
-                    TimeRange.YEAR -> YearSection()
+                    TimeRange.DAY -> ActivityDaySection(healthDashboardData, rangePoints)
+                    TimeRange.WEEK -> ActivityRangeSection(
+                        title = "本周活动",
+                        points = lastDays(rangePoints, 7),
+                        insight = "周视图按真实日步数生成柱图。"
+                    )
+                    TimeRange.MONTH -> ActivityRangeSection(
+                        title = "本月活动",
+                        points = lastDays(rangePoints, 30),
+                        insight = "月视图按最近 30 天真实日步数生成热力格。"
+                    )
+                    TimeRange.YEAR -> ActivityYearSection(points = rangePoints)
                 }
             }
         }
@@ -125,7 +161,7 @@ fun ActivityDetailScreen(
 }
 
 @Composable
-private fun RangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> Unit) {
+private fun ActivityRangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> Unit) {
     val tabs = listOf(
         TimeRange.DAY to "日",
         TimeRange.WEEK to "周",
@@ -165,7 +201,7 @@ private fun RangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> 
 }
 
 @Composable
-private fun PlaceholderCard() {
+private fun SourceCard(title: String, body: String) {
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))
@@ -183,30 +219,24 @@ private fun PlaceholderCard() {
                     .background(Color(0x1A22C55E), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF22C55E))
+                Icon(Icons.Default.DirectionsRun, contentDescription = null, tint = Color(0xFF22C55E))
             }
             Column {
-                Text("活动数据来源手表", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                Text(
-                    "当前页面按 Stitch 新稿展示，已支持步数、热量和时长，其他图表为占位示意。",
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    color = Color(0xFF475569)
-                )
+                Text(title, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                Text(body, fontSize = 13.sp, lineHeight = 18.sp, color = Color(0xFF475569))
             }
         }
     }
 }
 
 @Composable
-private fun DaySection(data: OppoHealthDashboardData?) {
+private fun ActivityDaySection(data: OppoHealthDashboardData?, recentPoints: List<HealthTrendPoint>) {
     val steps = data?.steps ?: 0
     val target = data?.stepGoal ?: 8000
     val progress = if (target > 0) (steps.toFloat() / target).coerceIn(0f, 1f) else 0f
-    
     val calories = data?.calories ?: 0
     val activeMinutes = data?.moveMinutes ?: 0
-    val distance = data?.distanceMeters ?: 0
+    val distanceKm = ((data?.distanceMeters ?: 0) / 1000f)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -242,123 +272,164 @@ private fun DaySection(data: OppoHealthDashboardData?) {
                 }
             }
         }
-        
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "热量消耗", calories.toString(), "kcal", Icons.Default.Fireplace, Color(0xFFF97316))
-            StatCard(Modifier.weight(1f), "活动时长", activeMinutes.toString(), "min", Icons.Default.Schedule, Color(0xFF007BFF))
-        }
 
-        SectionCard("今日分布") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TimeBlockBar("上午", "06:00 - 12:00", "${(steps * 0.3).toInt()} 步", 0.3f, Color(0xFF10B981))
-                TimeBlockBar("下午", "12:00 - 18:00", "${(steps * 0.5).toInt()} 步", 0.5f, Color(0xFF34D399))
-                TimeBlockBar("晚上", "18:00 - 24:00", "${(steps * 0.2).toInt()} 步", 0.2f, Color(0xFF6EE7B7))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(Modifier.weight(1f), "热量消耗", calories.toString(), "kcal", Icons.Default.Fireplace, Color(0xFFF97316))
+            MetricCard(Modifier.weight(1f), "活动时长", activeMinutes.toString(), "min", Icons.Default.Schedule, Color(0xFF007BFF))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(
+                Modifier.weight(1f),
+                "距离",
+                String.format(Locale.US, "%.2f", distanceKm),
+                "km",
+                Icons.Default.DirectionsRun,
+                Color(0xFF10B981)
+            )
+            MetricCard(
+                Modifier.weight(1f),
+                "达标率",
+                "${(progress * 100).toInt()}",
+                "%",
+                Icons.Default.CalendarToday,
+                Color(0xFF0EA5E9)
+            )
+        }
+        SectionCard("最近 7 天步数趋势") {
+            if (recentPoints.isEmpty()) {
+                EmptySectionText()
+            } else {
+                ActivityBarChart(points = recentPoints, useHighlight = true)
             }
         }
-        
-        InsightCard("达标提示", if (progress >= 1f) "今天已经完成活动目标，保持得很好！" else "距离今日目标还有 ${target - steps} 步，起来活动一下吧。", false)
+        InsightCard(
+            title = "达标提示",
+            body = if (steps <= 0) {
+                "今天还没有读取到活动数据。"
+            } else if (progress >= 1f) {
+                "今天已完成活动目标，所有卡片均来自真实数据。"
+            } else {
+                "距离今日目标还差 ${target - steps} 步。"
+            },
+            solid = false
+        )
     }
 }
 
 @Composable
-private fun WeekSection() {
+private fun ActivityRangeSection(title: String, points: List<HealthTrendPoint>, insight: String) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "日均步数", "6240", "步", Icons.Default.DirectionsRun, Color(0xFF10B981))
-            StatCard(Modifier.weight(1f), "总消耗", "1420", "kcal", Icons.Default.Fireplace, Color(0xFFF97316))
+            MetricCard(Modifier.weight(1f), "平均步数", averageTrend(points).toString(), "步", Icons.Default.DirectionsRun, Color(0xFF10B981))
+            MetricCard(Modifier.weight(1f), "总步数", totalTrend(points).toString(), "步", Icons.Default.Fireplace, Color(0xFFF97316))
         }
-        SectionCard("本周活动", "3月11日 - 3月17日") {
-            Text("活动最频繁: 周四", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-            Spacer(modifier = Modifier.height(16.dp))
-            WeeklyBars()
-        }
-        InsightCard("本周洞察", "每周活动总览已调整为 Stitch 风格柱子。您本周前三天活动量高于平时，周末有所下降。", true)
-    }
-}
-
-@Composable
-private fun MonthSection() {
-    val monthLabel = remember { SimpleDateFormat("yyyy年M月", Locale.CHINA).format(Date()) }
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "本月总步数", "184K", "步", Icons.Default.DirectionsRun, Color(0xFF10B981))
-            StatCard(Modifier.weight(1f), "达标天数", "18", "天", Icons.Default.CalendarToday, Color(0xFF007BFF))
-        }
-        SectionCard(monthLabel) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Legend("未达标", Color(0xFFE2E8F0))
-                Legend("已达标", Color(0xFF34D399))
-                Legend("超额", Color(0xFF10B981))
+        SectionCard(title, formatRangeLabel(points)) {
+            if (points.isEmpty()) {
+                EmptySectionText()
+            } else {
+                ActivityBarChart(points = points, useHighlight = false)
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                listOf("日", "一", "二", "三", "四", "五", "六").forEach {
-                    Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 11.sp, color = Color(0xFF94A3B8))
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            MonthGrid()
         }
-        InsightCard("月度分析", "当月达标率为 60%。月历热力图展现每天目标的完成度，颜色越深代表超过目标越多。", true)
+        if (points.size > 7) {
+            SectionCard("每日完成情况") {
+                ActivityMonthGrid(points = points)
+            }
+        }
+        InsightCard(
+            title = "趋势洞察",
+            body = if (points.isEmpty()) "当前时间范围没有真实活动汇总。" else insight,
+            solid = true
+        )
     }
 }
 
 @Composable
-private fun YearSection() {
+private fun ActivityYearSection(points: List<HealthTrendPoint>) {
+    val monthly = monthlyAverageValues(points)
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "日均步数", "7120", "步", Icons.Default.DirectionsRun, Color(0xFF10B981))
-            StatCard(Modifier.weight(1f), "年度最佳", "12K", "步", Icons.Default.Fireplace, Color(0xFFF97316))
+            MetricCard(Modifier.weight(1f), "日均步数", averageTrend(points).toString(), "步", Icons.Default.DirectionsRun, Color(0xFF10B981))
+            MetricCard(
+                Modifier.weight(1f),
+                "最佳月份",
+                monthLabelFromIndex(monthly.indices.maxByOrNull { monthly[it] } ?: 0),
+                "",
+                Icons.Default.CalendarToday,
+                Color(0xFF0EA5E9)
+            )
         }
-        SectionCard("月均活动量", "1月 - 12月") {
-            YearChart()
+        SectionCard("月均活动量", "最近 12 个月") {
+            if (points.isEmpty()) {
+                EmptySectionText()
+            } else {
+                ActivityYearChart(values = monthly)
+            }
         }
-        InsightCard("年度里程碑", "年视图统计出您的活动量高峰在夏季。数据真实接入后可直观反应长期的运动趋势与连续性。", false)
+        InsightCard(
+            title = "年度里程碑",
+            body = if (points.isEmpty()) {
+                "最近 12 个月没有可展示的真实活动汇总。"
+            } else {
+                "年度折线按真实月均步数生成，不再使用占位曲线。"
+            },
+            solid = false
+        )
     }
 }
 
 @Composable
-private fun WeeklyBars() {
-    val ranges = listOf(0.4f, 0.6f, 0.8f, 1.0f, 0.7f, 0.3f, 0.5f)
-    Row(modifier = Modifier.fillMaxWidth().height(210.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-        ranges.forEachIndexed { index, value ->
+private fun ActivityBarChart(points: List<HealthTrendPoint>, useHighlight: Boolean) {
+    val maxValue = maxTrend(points).coerceAtLeast(1)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(210.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        points.forEachIndexed { index, point ->
+            val value = point.value.toFloat() / maxValue.toFloat()
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                    Box(modifier = Modifier.fillMaxWidth().height(170.dp).background(Color(0xFFF1F5F9), RoundedCornerShape(999.dp)))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(170.dp)
+                            .background(Color(0xFFF1F5F9), RoundedCornerShape(999.dp))
+                    )
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(170.dp * value)
-                            .background(if (value >= 0.8f) Color(0xFF10B981) else Color(0xFF34D399), RoundedCornerShape(999.dp))
+                            .background(
+                                if (useHighlight && index == points.lastIndex) Color(0xFF10B981) else Color(0xFF34D399),
+                                RoundedCornerShape(999.dp)
+                            )
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(listOf("一", "二", "三", "四", "五", "六", "日")[index], fontSize = 11.sp, color = Color(0xFF94A3B8))
+                Text(
+                    text = SimpleDateFormat(if (points.size <= 7) "E" else "d", Locale.CHINA).format(Date(point.timestamp)),
+                    fontSize = 11.sp,
+                    color = Color(0xFF94A3B8)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun MonthGrid() {
-    val cells = remember {
-        buildList {
-            repeat(5) { add("" to Color.Transparent) }
-            for (day in 1..30) {
-                val color = when {
-                    day % 7 == 0 -> Color(0xFF10B981)
-                    day % 3 == 0 || day % 4 == 0 -> Color(0xFF34D399)
-                    else -> Color(0xFFF1F5F9)
-                }
-                add(day.toString() to color)
-            }
-            while (size % 7 != 0) add("" to Color.Transparent)
-        }
-    }
+private fun ActivityMonthGrid(points: List<HealthTrendPoint>) {
+    val target = 8000
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        cells.chunked(7).forEach { row ->
+        lastDays(points, 30).chunked(7).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (label, color) ->
+                row.forEach { point ->
+                    val color = when {
+                        point.value >= target -> Color(0xFF10B981)
+                        point.value >= target * 0.7 -> Color(0xFF34D399)
+                        else -> Color(0xFFF1F5F9)
+                    }
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -366,8 +437,15 @@ private fun MonthGrid() {
                             .background(color, RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(label, color = if (color == Color.Transparent || color == Color(0xFFF1F5F9)) Color(0xFF94A3B8) else Color.White, fontSize = 12.sp)
+                        Text(
+                            text = SimpleDateFormat("d", Locale.CHINA).format(Date(point.timestamp)),
+                            color = if (color == Color(0xFFF1F5F9)) Color(0xFF94A3B8) else Color.White,
+                            fontSize = 12.sp
+                        )
                     }
+                }
+                repeat((7 - row.size).coerceAtLeast(0)) {
+                    Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
                 }
             }
         }
@@ -375,13 +453,12 @@ private fun MonthGrid() {
 }
 
 @Composable
-private fun YearChart() {
-    val values = listOf(5000, 5200, 6800, 8100, 9200, 10500, 11000, 9800, 8500, 7200, 6000, 5100)
+private fun ActivityYearChart(values: List<Int>) {
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Canvas(modifier = Modifier.fillMaxWidth().height(180.dp)) {
                 val minValue = 0
-                val maxValue = 12000
+                val maxValue = (values.maxOrNull() ?: 0).coerceAtLeast(1)
                 val stepX = size.width / (values.size - 1).coerceAtLeast(1)
                 val linePath = Path()
                 val fillPath = Path()
@@ -397,6 +474,8 @@ private fun YearChart() {
                         linePath.lineTo(x, y)
                         fillPath.lineTo(x, y)
                     }
+                    drawCircle(Color.White, radius = 9f, center = Offset(x, y))
+                    drawCircle(Color(0xFF10B981), radius = 6f, center = Offset(x, y))
                 }
                 fillPath.lineTo(size.width, size.height)
                 fillPath.close()
@@ -414,7 +493,14 @@ private fun YearChart() {
 }
 
 @Composable
-private fun StatCard(modifier: Modifier, title: String, value: String, unit: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+private fun MetricCard(
+    modifier: Modifier,
+    title: String,
+    value: String,
+    unit: String,
+    icon: ImageVector,
+    color: Color
+) {
     Card(modifier = modifier, shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -424,8 +510,10 @@ private fun StatCard(modifier: Modifier, title: String, value: String, unit: Str
             Spacer(modifier = Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(unit, fontSize = 12.sp, color = Color(0xFF64748B), modifier = Modifier.padding(bottom = 4.dp))
+                if (unit.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(unit, fontSize = 12.sp, color = Color(0xFF64748B), modifier = Modifier.padding(bottom = 4.dp))
+                }
             }
         }
     }
@@ -447,20 +535,6 @@ private fun SectionCard(title: String, subtitle: String? = null, content: @Compo
 }
 
 @Composable
-private fun TimeBlockBar(title: String, range: String, steps: String, progress: Float, color: Color) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("$title ($range)", color = Color(0xFF475569), fontSize = 13.sp)
-            Text(steps, color = Color(0xFF0F172A), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        }
-        Canvas(modifier = Modifier.fillMaxWidth().height(10.dp)) {
-            drawRoundRect(Color(0xFFF1F5F9), cornerRadius = CornerRadius(size.height / 2, size.height / 2))
-            drawRoundRect(color, size = Size(size.width * progress, size.height), cornerRadius = CornerRadius(size.height / 2, size.height / 2))
-        }
-    }
-}
-
-@Composable
 private fun InsightCard(title: String, body: String, solid: Boolean) {
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -471,7 +545,9 @@ private fun InsightCard(title: String, body: String, solid: Boolean) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
-                modifier = Modifier.size(38.dp).background(if (solid) Color.White.copy(alpha = 0.18f) else Color(0x1A10B981), RoundedCornerShape(12.dp)),
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(if (solid) Color.White.copy(alpha = 0.18f) else Color(0x1A10B981), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.Lightbulb, contentDescription = null, tint = if (solid) Color.White else Color(0xFF10B981))
@@ -486,10 +562,14 @@ private fun InsightCard(title: String, body: String, solid: Boolean) {
 }
 
 @Composable
-private fun Legend(text: String, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(text, fontSize = 10.sp, color = Color(0xFF94A3B8))
-    }
+private fun EmptySectionText() {
+    Text("暂无真实数据", color = Color(0xFF94A3B8))
 }
+
+private fun formatRangeLabel(points: List<HealthTrendPoint>): String {
+    if (points.isEmpty()) return "暂无数据"
+    val format = SimpleDateFormat("M月d日", Locale.CHINA)
+    return "${format.format(Date(points.first().timestamp))} - ${format.format(Date(points.last().timestamp))}"
+}
+
+private fun monthLabelFromIndex(index: Int): String = "${index + 1}月"

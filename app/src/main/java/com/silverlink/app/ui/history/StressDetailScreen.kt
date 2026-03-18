@@ -1,10 +1,20 @@
 package com.silverlink.app.ui.history
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,29 +30,42 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.silverlink.app.feature.health.OppoHealthDashboardData
+import com.silverlink.app.feature.health.HealthTrendPoint
+import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.ui.components.TimeRange
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,8 +73,23 @@ fun StressDetailScreen(
     onNavigateBack: () -> Unit,
     viewModel: HistoryViewModel = viewModel()
 ) {
-    val healthDashboardData by viewModel.healthDashboardData.collectAsState()
+    val context = LocalContext.current
+    val dashboardData by viewModel.healthDashboardData.collectAsState()
     var selectedRange by rememberSaveable { mutableStateOf(TimeRange.DAY) }
+
+    val stressData by produceState(
+        initialValue = StressUiData.empty(dashboardData?.latestPressure ?: 0),
+        key1 = selectedRange,
+        key2 = dashboardData
+    ) {
+        value = loadStressUiData(
+            context = context,
+            selectedRange = selectedRange,
+            fallbackCurrent = dashboardData?.latestPressure ?: 0,
+            fallbackDayDetail = dashboardData?.pressureTimeline.orEmpty(),
+            fallbackRecentSummary = dashboardData?.pressureDailySummary.orEmpty()
+        )
+    }
 
     Scaffold(
         containerColor = Color(0xFFF5F7F8),
@@ -68,6 +106,7 @@ fun StressDetailScreen(
                         TimeRange.DAY, TimeRange.WEEK -> Icons.Default.MoreHoriz
                         TimeRange.MONTH -> Icons.Default.CalendarToday
                         TimeRange.YEAR -> Icons.Default.Settings
+                        else -> Icons.Default.MoreHoriz
                     }
                     IconButton(onClick = {}) {
                         Icon(actionIcon, contentDescription = null)
@@ -92,10 +131,10 @@ fun StressDetailScreen(
             }
             item {
                 when (selectedRange) {
-                    TimeRange.DAY -> DaySection()
-                    TimeRange.WEEK -> WeekSection()
-                    TimeRange.MONTH -> MonthSection()
-                    TimeRange.YEAR -> YearSection()
+                    TimeRange.DAY -> DaySection(stressData)
+                    TimeRange.WEEK -> WeekSection(stressData)
+                    TimeRange.MONTH -> MonthSection(stressData)
+                    TimeRange.YEAR -> YearSection(stressData)
                 }
             }
         }
@@ -143,16 +182,20 @@ private fun RangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> 
 }
 
 @Composable
-private fun DaySection() {
+private fun DaySection(data: StressUiData) {
+    val current = data.current
+    val progress = (current / 100f).coerceIn(0f, 1f)
+    val level = stressLevel(current)
+    val buckets = bucketIntraday(data.detail)
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Gauge Section
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
             Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("当前压力等级", color = Color(0xFF64748B), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 24.dp))
-                
+
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(192.dp)) {
                     CircularProgressIndicator(
-                        progress = { 0.75f },
+                        progress = { progress },
                         modifier = Modifier.fillMaxSize(),
                         color = Color(0xFF007bff),
                         strokeWidth = 12.dp,
@@ -160,69 +203,67 @@ private fun DaySection() {
                         strokeCap = StrokeCap.Round
                     )
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("75", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007bff))
+                        Text(if (current > 0) current.toString() else "--", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007bff))
                         Text("/ 100", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF64748B))
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
-                
-                Surface(color = Color(0xFFFFF7ED), shape = RoundedCornerShape(16.dp)) {
+
+                Surface(color = level.background, shape = RoundedCornerShape(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEA580C), modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = level.color, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("高压力", color = Color(0xFFEA580C), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(level.label, color = level.color, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("您的心率变异性低于 7 天平均值。\n花点时间深呼吸一下吧。", color = Color(0xFF64748B), fontSize = 14.sp, textAlign = TextAlign.Center)
+                Text(level.description, color = Color(0xFF64748B), fontSize = 14.sp, textAlign = TextAlign.Center)
             }
         }
 
-        // Daily Timeline
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                     Text("日间分布", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                    Text("查看趋势", color = Color(0xFF007bff), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("真实数据", color = Color(0xFF007bff), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
-                
+
                 Row(
                     modifier = Modifier.fillMaxWidth().height(128.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    val heights = listOf(0.4f, 0.6f, 0.95f, 0.8f, 0.5f, 0.3f)
-                    val times = listOf("8点", "10点", "12点", "14点", "16点", "18点")
-                    val opacities = listOf(0.2f, 0.4f, 1f, 0.7f, 0.5f, 0.3f)
-                    
-                    heights.forEachIndexed { index, h ->
+                    buckets.forEach { bucket ->
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                            Box(modifier = Modifier.fillMaxWidth(0.6f).fillMaxHeight(h).background(Color(0xFF007bff).copy(alpha = opacities[index]), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.6f)
+                                    .fillMaxSize(bucket.value / 100f)
+                                    .background(bucket.color.copy(alpha = bucket.alpha), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(times[index], fontSize = 10.sp, color = Color(0xFF94A3B8))
+                            Text(bucket.label, fontSize = 10.sp, color = Color(0xFF94A3B8))
                         }
                     }
                 }
             }
         }
 
-        // Quick Relaxation
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("快速放松练习", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(top = 8.dp))
-            
-            ExerciseCard("盒式呼吸", "4 分钟 • 专注与平静", Icons.Default.SelfImprovement, Color(0xFF007bff), Color(0xFF007bff).copy(alpha = 0.1f))
-            ExerciseCard("全身扫描", "10 分钟 • 释放身体紧张", Icons.Default.SelfImprovement, Color(0xFF4F46E5), Color(0xFF4F46E5).copy(alpha = 0.1f))
-            
-            // Insight Card
+
+            ExerciseCard("盒式呼吸", "4 分钟", Icons.Default.SelfImprovement, Color(0xFF007bff), Color(0xFF007bff).copy(alpha = 0.1f))
+            ExerciseCard("全身扫描", "10 分钟", Icons.Default.SelfImprovement, Color(0xFF4F46E5), Color(0xFF4F46E5).copy(alpha = 0.1f))
+
             Surface(color = Color(0xFF007bff).copy(alpha = 0.05f), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF007bff).copy(alpha = 0.1f))) {
                 Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Color(0xFF007bff))
                     Column {
                         Text("小贴士", color = Color(0xFF007bff), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("尝试“5-4-3-2-1”五感抽离技术，有助于快速摆脱当前的压力状态。", color = Color(0xFF334155), fontSize = 14.sp)
+                        Text("页面已经改成读取真实压力数据。当前建议以最近一次压力值和当天波动为参考，避免只看单点数值。", color = Color(0xFF334155), fontSize = 14.sp)
                     }
                 }
             }
@@ -231,38 +272,46 @@ private fun DaySection() {
 }
 
 @Composable
-private fun WeekSection() {
+private fun WeekSection(data: StressUiData) {
+    val weekPoints = data.summary.takeLast(7)
+    val average = averageValue(weekPoints)
+    val highDays = weekPoints.count { it.value >= 60 }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "本周平均", "42", " /中等", Icons.Default.TrendingDown, Color(0xFFF59E0B))
-            StatCard(Modifier.weight(1f), "高压力天数", "2", "天", Icons.Default.Warning, Color(0xFFEF4444))
+            StatCard(Modifier.weight(1f), "本周平均", average.toString(), " /${stressLevel(average).shortLabel}", Icons.Default.TrendingDown, stressLevel(average).color)
+            StatCard(Modifier.weight(1f), "高压力天数", highDays.toString(), "天", Icons.Default.Warning, Color(0xFFEF4444))
         }
-        
+
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("周度压力趋势", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(bottom = 16.dp))
-                WeeklyStressBars()
+                WeeklyStressBars(weekPoints)
             }
         }
-        
+
         Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("建议反馈", fontWeight = FontWeight.Bold, color = Color(0xFF334155))
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("本周三和周四下午记录到较高压力。这可能与行程安排较紧凑有关，建议在那个时段预留10分钟空隙。", color = Color(0xFF475569), fontSize = 14.sp)
+                Text("本周真实平均压力为 $average，达到高压区间的天数为 $highDays。建议优先关注压力峰值较高的日期，而不是只看单日波动。", color = Color(0xFF475569), fontSize = 14.sp)
             }
         }
     }
 }
 
 @Composable
-private fun MonthSection() {
+private fun MonthSection(data: StressUiData) {
+    val monthPoints = data.summary.takeLast(30)
+    val average = averageValue(monthPoints)
+    val relaxHours = (monthPoints.count { it.value < 40 } * 0.5f)
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "本月平均", "38", " /偏低", Icons.Default.TrendingDown, Color(0xFF10B981))
-            StatCard(Modifier.weight(1f), "放松时间", "12h", " 30m", Icons.Default.SelfImprovement, Color(0xFF007bff))
+            StatCard(Modifier.weight(1f), "本月平均", average.toString(), " /${stressLevel(average).shortLabel}", Icons.Default.TrendingDown, stressLevel(average).color)
+            StatCard(Modifier.weight(1f), "放松时间", String.format("%.1f", relaxHours), "h", Icons.Default.SelfImprovement, Color(0xFF007bff))
         }
-        
+
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("月度压力分布", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(bottom = 8.dp))
@@ -271,29 +320,28 @@ private fun MonthSection() {
                     Legend("中", Color(0xFFF59E0B))
                     Legend("高", Color(0xFFEF4444))
                 }
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    listOf("日", "一", "二", "三", "四", "五", "六").forEach {
-                        Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 11.sp, color = Color(0xFF94A3B8))
-                    }
-                }
-                MonthStressGrid()
+                MonthStressGrid(monthPoints)
             }
         }
     }
 }
 
 @Composable
-private fun YearSection() {
+private fun YearSection(data: StressUiData) {
+    val yearPoints = data.summary
+    val average = averageValue(yearPoints)
+    val highestMonth = highestPressureMonth(yearPoints)
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "年均压力等级", "45", " /中等", Icons.Default.TrendingUp, Color(0xFFF59E0B))
-            StatCard(Modifier.weight(1f), "最高月", "11月", "", Icons.Default.Warning, Color(0xFFEF4444))
+            StatCard(Modifier.weight(1f), "年均压力等级", average.toString(), " /${stressLevel(average).shortLabel}", Icons.Default.TrendingUp, stressLevel(average).color)
+            StatCard(Modifier.weight(1f), "最高月", highestMonth, "", Icons.Default.Warning, Color(0xFFEF4444))
         }
-        
+
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("年度趋势分析", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(bottom = 16.dp))
-                YearlyStressChart()
+                YearlyStressChart(yearPoints)
             }
         }
     }
@@ -343,15 +391,17 @@ private fun StatCard(modifier: Modifier, title: String, value: String, unit: Str
 }
 
 @Composable
-private fun WeeklyStressBars() {
-    val heights = listOf(0.4f, 0.5f, 0.8f, 0.9f, 0.6f, 0.3f, 0.2f)
+private fun WeeklyStressBars(points: List<HealthTrendPoint>) {
     val labels = listOf("一", "二", "三", "四", "五", "六", "日")
-    
+    val padded = if (points.size >= 7) points.takeLast(7) else List(7 - points.size) { HealthTrendPoint(0L, 0) } + points
+
     Row(modifier = Modifier.fillMaxWidth().height(160.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-        heights.forEachIndexed { index, h ->
-            val color = if (h > 0.7f) Color(0xFFEF4444) else if (h > 0.4f) Color(0xFFF59E0B) else Color(0xFF10B981)
+        padded.forEachIndexed { index, point ->
+            val value = point.value.coerceAtLeast(0)
+            val height = (value / 100f).coerceIn(0.08f, 1f)
+            val level = stressLevel(value)
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                Box(modifier = Modifier.fillMaxWidth(0.6f).fillMaxHeight(h).background(color, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                Box(modifier = Modifier.fillMaxWidth(0.6f).fillMaxSize(height).background(level.color, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(labels[index], fontSize = 12.sp, color = Color(0xFF94A3B8))
             }
@@ -360,21 +410,17 @@ private fun WeeklyStressBars() {
 }
 
 @Composable
-private fun MonthStressGrid() {
-    val cells = remember {
-        buildList {
-            repeat(3) { add("" to Color.Transparent) }
-            for (day in 1..31) {
-                val color = when {
-                    day in listOf(5, 12, 18, 19, 26) -> Color(0xFFEF4444)
-                    day % 4 == 0 -> Color(0xFFF59E0B)
-                    else -> Color(0xFF10B981)
-                }
-                add(day.toString() to color)
-            }
-            while (size % 7 != 0) add("" to Color.Transparent)
+private fun MonthStressGrid(points: List<HealthTrendPoint>) {
+    val cells = buildList {
+        repeat(2) { add("" to Color.Transparent) }
+        val formatter = DateTimeFormatter.ofPattern("d")
+        points.takeLast(30).forEach { point ->
+            val label = LocalDate.ofInstant(java.time.Instant.ofEpochMilli(point.timestamp), ZoneId.systemDefault()).format(formatter)
+            add(label to stressLevel(point.value).color)
         }
+        while (size % 7 != 0) add("" to Color.Transparent)
     }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cells.chunked(7).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -382,7 +428,7 @@ private fun MonthStressGrid() {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .aspectRatio(1f)
+                            .height(36.dp)
                             .background(color, RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -395,41 +441,22 @@ private fun MonthStressGrid() {
 }
 
 @Composable
-private fun YearlyStressChart() {
-    val values = listOf(40f, 42f, 45f, 41f, 38f, 35f, 40f, 44f, 48f, 55f, 60f, 52f)
+private fun YearlyStressChart(points: List<HealthTrendPoint>) {
+    val monthlyValues = points
+        .groupBy { LocalDate.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), ZoneId.systemDefault()).monthValue }
+        .toSortedMap()
+        .mapValues { (_, values) -> averageValue(values) }
+
     Column {
-        Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.fillMaxSize().padding(vertical = 16.dp)) {
-                val minValue = 20f
-                val maxValue = 80f
-                val stepX = size.width / (values.size - 1).coerceAtLeast(1)
-                val linePath = Path()
-                
-                // Draw limit lines
-                drawLine(Color(0xFFEF4444).copy(alpha = 0.2f), Offset(0f, size.height * 0.2f), Offset(size.width, size.height * 0.2f), 2f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
-                
-                values.forEachIndexed { index, value ->
-                    val x = stepX * index
-                    val ratio = (value - minValue) / (maxValue - minValue)
-                    val y = size.height - ratio * size.height
-                    if (index == 0) linePath.moveTo(x, y) else linePath.lineTo(x, y)
+        Row(modifier = Modifier.fillMaxWidth().height(180.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+            (1..12).forEach { month ->
+                val value = monthlyValues[month] ?: 0
+                val height = (value / 100f).coerceIn(0.05f, 1f)
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                    Box(modifier = Modifier.fillMaxWidth(0.5f).fillMaxSize(height).background(stressLevel(value).color, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("${month}月", fontSize = 10.sp, color = Color(0xFF94A3B8))
                 }
-                
-                drawPath(linePath, color = Color(0xFF007bff), style = Stroke(width = 4f, cap = StrokeCap.Round))
-                
-                values.forEachIndexed { index, value ->
-                    val x = stepX * index
-                    val ratio = (value - minValue) / (maxValue - minValue)
-                    val y = size.height - ratio * size.height
-                    val dotColor = if (value > 50f) Color(0xFFEF4444) else Color(0xFF007bff)
-                    drawCircle(Color.White, radius = 6f, center = Offset(x, y))
-                    drawCircle(dotColor, radius = 4f, center = Offset(x, y))
-                }
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf("1月", "3月", "5月", "7月", "9月", "11月").forEach {
-                Text(it, fontSize = 10.sp, color = Color(0xFF94A3B8))
             }
         }
     }
@@ -442,4 +469,109 @@ private fun Legend(text: String, color: Color) {
         Spacer(modifier = Modifier.width(4.dp))
         Text(text, fontSize = 10.sp, color = Color(0xFF94A3B8))
     }
+}
+
+private suspend fun loadStressUiData(
+    context: android.content.Context,
+    selectedRange: TimeRange,
+    fallbackCurrent: Int,
+    fallbackDayDetail: List<HealthTrendPoint>,
+    fallbackRecentSummary: List<HealthTrendPoint>
+): StressUiData {
+    val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    val start = when (selectedRange) {
+        TimeRange.DAY -> today.atStartOfDay(zone).toInstant().toEpochMilli()
+        TimeRange.WEEK -> today.minusDays(6).atStartOfDay(zone).toInstant().toEpochMilli()
+        TimeRange.MONTH -> today.minusDays(29).atStartOfDay(zone).toInstant().toEpochMilli()
+        TimeRange.YEAR -> today.minusDays(364).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+    val end = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+
+    return when (selectedRange) {
+        TimeRange.DAY -> {
+            val detail = OppoHealthSdkManager.getPressureTimeline(context, start, end).getOrDefault(fallbackDayDetail)
+            StressUiData(
+                current = detail.lastOrNull()?.value ?: fallbackCurrent,
+                detail = detail,
+                summary = detail
+            )
+        }
+        else -> {
+            val summary = OppoHealthSdkManager.getPressureSummary(context, start, end)
+                .getOrDefault(if (selectedRange == TimeRange.WEEK || selectedRange == TimeRange.MONTH) fallbackRecentSummary else emptyList())
+            StressUiData(
+                current = summary.lastOrNull()?.value ?: fallbackCurrent,
+                detail = emptyList(),
+                summary = summary
+            )
+        }
+    }
+}
+
+private data class StressUiData(
+    val current: Int,
+    val detail: List<HealthTrendPoint>,
+    val summary: List<HealthTrendPoint>
+) {
+    companion object {
+        fun empty(current: Int) = StressUiData(current = current, detail = emptyList(), summary = emptyList())
+    }
+}
+
+private data class StressLevel(
+    val label: String,
+    val shortLabel: String,
+    val description: String,
+    val color: Color,
+    val background: Color,
+    val alpha: Float
+)
+
+private fun stressLevel(value: Int): StressLevel {
+    return when {
+        value >= 70 -> StressLevel("高压力", "偏高", "当前压力处于较高区间，建议先做短时放松，再关注趋势变化。", Color(0xFFEA580C), Color(0xFFFFF7ED), 1f)
+        value >= 40 -> StressLevel("中等压力", "中等", "当前压力略有波动，结合最近几天平均值一起判断会更可靠。", Color(0xFFF59E0B), Color(0xFFFEF3C7), 0.7f)
+        value > 0 -> StressLevel("较低压力", "偏低", "当前压力相对稳定，可继续保持规律作息和活动节奏。", Color(0xFF10B981), Color(0xFFECFDF5), 0.45f)
+        else -> StressLevel("待同步", "待同步", "当前还没有读取到足够的压力数据。", Color(0xFF94A3B8), Color(0xFFF1F5F9), 0.2f)
+    }
+}
+
+private fun averageValue(points: List<HealthTrendPoint>): Int {
+    return points.map { it.value }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
+}
+
+private fun highestPressureMonth(points: List<HealthTrendPoint>): String {
+    if (points.isEmpty()) return "--"
+    val month = points
+        .groupBy { LocalDate.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), ZoneId.systemDefault()).monthValue }
+        .maxByOrNull { (_, values) -> averageValue(values) }
+        ?.key
+    return month?.let { "${it}月" } ?: "--"
+}
+
+private data class StressBucket(
+    val label: String,
+    val value: Int,
+    val color: Color,
+    val alpha: Float
+)
+
+private fun bucketIntraday(points: List<HealthTrendPoint>): List<StressBucket> {
+    if (points.isEmpty()) {
+        return listOf("08", "10", "12", "14", "16", "18").map {
+            StressBucket("$it:00", 0, Color(0xFF94A3B8), 0.2f)
+        }
+    }
+
+    val groups = listOf(8, 10, 12, 14, 16, 18).map { hour ->
+        val window = points.filter {
+            val h = java.time.Instant.ofEpochMilli(it.timestamp).atZone(ZoneId.systemDefault()).hour
+            h in hour until hour + 2
+        }
+        val value = averageValue(window)
+        val level = stressLevel(value)
+        StressBucket("${hour}:00", value, level.color, level.alpha)
+    }
+    return groups
 }

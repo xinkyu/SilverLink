@@ -71,6 +71,10 @@ fun HistoryScreen(
     val sleepMinutes = healthDashboardData?.sleepMinutes ?: 0
     val heartRate = healthDashboardData?.latestHeartRate ?: 0
     val bloodOxygen = healthDashboardData?.bloodOxygen ?: 0
+    val pressure = healthDashboardData?.latestPressure ?: 0
+    val bloodPressureSystolic = healthDashboardData?.latestBloodPressureSystolic ?: 0
+    val bloodPressureDiastolic = healthDashboardData?.latestBloodPressureDiastolic ?: 0
+    val weightKg = healthDashboardData?.latestWeightKg ?: 0f
 
     val adherenceText = medicationSummary?.let { "${it.takenCount}/${it.totalCount}" } ?: "未按时"
     val cognitionText = cognitiveReport?.let { "${(it.correctRate * 100).toInt()}%" } ?: "--"
@@ -93,6 +97,9 @@ fun HistoryScreen(
     val bloodOxygenText = if (bloodOxygen > 0) "$bloodOxygen%" else "--"
     val sleepText = if (sleepMinutes > 0) "${sleepMinutes / 60}h ${sleepMinutes % 60}m" else "未同步"
     val stepsText = if (steps > 0) steps.toString() else "--"
+    val pressureText = if (pressure > 0) pressure.toString() else "--"
+    val bloodPressureText = if (bloodPressureSystolic > 0 && bloodPressureDiastolic > 0) "$bloodPressureSystolic/$bloodPressureDiastolic" else "--"
+    val weightText = if (weightKg > 0f) String.format(java.util.Locale.US, "%.1f", weightKg) else "--"
     val stressText = if (!currentMood.isNullOrBlank()) moodStressLabel(currentMood) else "未接入"
     val medicationDisplayText = medicationSummary?.let {
         if (it.totalCount > 0 && it.takenCount == it.totalCount) "已按时服用" else adherenceText
@@ -159,7 +166,7 @@ fun HistoryScreen(
         DashboardMetricCardState(
             id = "stress",
             title = "压力指数",
-            value = stressText,
+            value = pressureText,
             unit = "",
             iconBgColor = Color(0xFFFFEDD5),
             iconColor = Color(0xFFEA580C),
@@ -189,7 +196,7 @@ fun HistoryScreen(
         DashboardMetricCardState(
             id = "bloodPressure",
             title = "血压",
-            value = "118/76",
+            value = bloodPressureText,
             unit = "",
             iconBgColor = Color(0xFFFFE4E6), // rose-100
             iconColor = Color(0xFFE11D48), // rose-600
@@ -199,8 +206,8 @@ fun HistoryScreen(
         DashboardMetricCardState(
             id = "weight",
             title = "体重",
-            value = "72.5",
-            unit = "kg",
+            value = weightText,
+            unit = if (weightKg > 0f) "kg" else "",
             iconBgColor = Color(0xFFF1F5F9),
             iconColor = Color(0xFF475569),
             icon = Icons.Default.Info,

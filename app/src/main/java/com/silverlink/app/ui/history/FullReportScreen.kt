@@ -50,8 +50,10 @@ fun FullReportBottomSheet(
     val calories = healthDashboardData?.calories ?: 0
     val activeMinutes = healthDashboardData?.moveMinutes ?: 0
     val sleepMinutes = healthDashboardData?.sleepMinutes ?: 0
+    val sleepScore = healthDashboardData?.sleepScore ?: 0
     val heartRate = healthDashboardData?.latestHeartRate ?: 60
     val bloodOxygen = healthDashboardData?.bloodOxygen ?: 98
+    val pressure = healthDashboardData?.latestPressure ?: 0
     
     val todayLabel = remember { SimpleDateFormat("M月d日", Locale.CHINA).format(Date()) }
 
@@ -100,13 +102,13 @@ fun FullReportBottomSheet(
                     ActivitySummarySection(steps = steps, calories = calories)
                 }
                 item {
-                    SleepAnalysisSection(sleepMinutes = sleepMinutes)
+                    SleepAnalysisSection(sleepMinutes = sleepMinutes, sleepScore = sleepScore)
                 }
                 item {
                     HeartRateTrendSection(heartRate = heartRate)
                 }
                 item {
-                    SpO2AndStressSection(bloodOxygen = bloodOxygen)
+                    SpO2AndStressSection(bloodOxygen = bloodOxygen, pressure = pressure)
                 }
                 item {
                     HealthInsightsSection()
@@ -253,12 +255,13 @@ private fun ActivitySummarySection(steps: Int, calories: Int) {
 }
 
 @Composable
-private fun SleepAnalysisSection(sleepMinutes: Int) {
+private fun SleepAnalysisSection(sleepMinutes: Int, sleepScore: Int) {
     val hours = sleepMinutes / 60
     val minutes = sleepMinutes % 60
     
     val dHours = if (sleepMinutes > 0) hours else 7
     val dMins = if (sleepMinutes > 0) minutes else 12
+    val displaySleepScore = if (sleepScore > 0) sleepScore else 88
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -297,7 +300,7 @@ private fun SleepAnalysisSection(sleepMinutes: Int) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text("质量评分", fontSize = 12.sp, color = Color(0xFF94A3B8), modifier = Modifier.padding(bottom = 4.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
-                            Text("88", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                            Text("$displaySleepScore", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
                             Text(" / 100", fontSize = 14.sp, color = Color(0xFF64748B), modifier = Modifier.padding(bottom = 2.dp))
                         }
                     }
@@ -352,7 +355,7 @@ private fun HeartRateTrendSection(heartRate: Int) {
 }
 
 @Composable
-private fun SpO2AndStressSection(bloodOxygen: Int) {
+private fun SpO2AndStressSection(bloodOxygen: Int, pressure: Int) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(
             shape = RoundedCornerShape(12.dp),
@@ -378,7 +381,7 @@ private fun SpO2AndStressSection(bloodOxygen: Int) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("平均压力值", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B), modifier = Modifier.padding(bottom = 8.dp))
-                Text("32", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                Text(if (pressure > 0) pressure.toString() else "--", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
                 Text("状态：轻松", fontSize = 10.sp, color = Color(0xFF3B82F6), modifier = Modifier.padding(top = 4.dp))
             }
         }

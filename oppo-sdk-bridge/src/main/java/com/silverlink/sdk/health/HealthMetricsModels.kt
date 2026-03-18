@@ -12,6 +12,28 @@ data class HealthValuePoint(
     val value: Int
 )
 
+data class BloodPressureData(
+    val timestamp: Long,
+    val systolic: Int,
+    val diastolic: Int
+)
+
+data class BodyMeasurementData(
+    val timestamp: Long,
+    val weightKg: Float,
+    val bmi: Float = 0f
+)
+
+data class SleepSummaryPoint(
+    val timestamp: Long,
+    val totalMinutes: Int,
+    val deepSleepMinutes: Int,
+    val lightSleepMinutes: Int,
+    val remMinutes: Int,
+    val awakeMinutes: Int,
+    val score: Int
+)
+
 data class SleepStagePoint(
     val startTimestamp: Long,
     val endTimestamp: Long,

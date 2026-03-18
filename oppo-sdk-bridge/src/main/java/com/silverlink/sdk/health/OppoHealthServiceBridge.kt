@@ -3,6 +3,8 @@ package com.silverlink.sdk.health
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.pm.ApplicationInfo
+import android.util.Log
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -13,19 +15,23 @@ import java.lang.reflect.Proxy
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.coroutines.resume
+import kotlin.math.min
 
 class OppoHealthServiceBridge(
     private val appContext: Context
 ) : HealthServiceBridge {
 
     private var isMonitoring = false
+    private val tag = "SL-HealthSdk"
 
     override fun initialize(context: Context): Result<Unit> = runCatching {
         val apiClass = findHeytapApiClass()
+        enableSdkLogging(apiClass)
         val initMethod = apiClass.methods.firstOrNull {
             it.name == "init" && it.parameterTypes.size == 1
         } ?: error("HeytapHealthApi.init(context) not found")
         initMethod.invoke(null, context.applicationContext)
+        Log.i(tag, "HeytapHealthApi.init success class=${apiClass.name}")
         Unit
     }
 
@@ -86,6 +92,15 @@ class OppoHealthServiceBridge(
         )
     }
 
+    override suspend fun getHeartRateDailySummary(startTime: Long, endTime: Long): Result<List<HealthValuePoint>> {
+        return readSummaryTimeline(
+            dataTypeName = "TYPE_HEART_RATE_COUNT",
+            startTime = startTime,
+            endTime = endTime,
+            elementCandidates = listOf("ELEMENT_AVERAGE", "ELEMENT_HEART_RATE")
+        )
+    }
+
     override suspend fun getSteps(): Result<Int> {
         val now = System.currentTimeMillis()
         val start = now - 24 * 60 * 60 * 1000L
@@ -97,13 +112,22 @@ class OppoHealthServiceBridge(
         )
     }
 
+    override suspend fun getDailyActivityTimeline(startTime: Long, endTime: Long): Result<List<HealthValuePoint>> {
+        return readSummaryTimeline(
+            dataTypeName = "TYPE_DAILY_ACTIVITY_COUNT",
+            startTime = startTime,
+            endTime = endTime,
+            elementCandidates = listOf("ELEMENT_STEP")
+        )
+    }
+
     override suspend fun getSleepData(date: String): Result<SleepData> {
         return runCatching {
             val day = LocalDate.parse(date)
             val zone = ZoneId.systemDefault()
             val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
             val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
-            val dataPoints = readDataPoints("TYPE_SLEEP_COUNT", start, end).getOrThrow()
+            val dataPoints = readDataPointsChunked("TYPE_SLEEP_COUNT", start, end).getOrThrow()
             val point = dataPoints.firstOrNull() ?: error("No sleep data")
 
             val total = readElementAsInt(point, listOf("ELEMENT_TOTAL"))
@@ -125,6 +149,24 @@ class OppoHealthServiceBridge(
         }
     }
 
+    override suspend fun getSleepDailySummary(startTime: Long, endTime: Long): Result<List<SleepSummaryPoint>> {
+        return runCatching {
+            readDataPointsChunked("TYPE_SLEEP_COUNT", startTime, endTime).getOrThrow()
+                .map { point ->
+                    SleepSummaryPoint(
+                        timestamp = pointTimestamp(point),
+                        totalMinutes = readElementAsInt(point, listOf("ELEMENT_TOTAL")),
+                        deepSleepMinutes = readElementAsInt(point, listOf("ELEMENT_TOTAL_DEEP_SLEEP_TIME")),
+                        lightSleepMinutes = readElementAsInt(point, listOf("ELEMENT_TOTAL_LIGHTLY_SLEEP_TIME")),
+                        remMinutes = readElementAsInt(point, listOf("ELEMENT_TOTAL_REM_TIME")),
+                        awakeMinutes = readElementAsInt(point, listOf("ELEMENT_TOTAL_WAKE_UP_TIME")),
+                        score = readElementAsInt(point, listOf("ELEMENT_SLEEP_SCORE"))
+                    )
+                }
+                .sortedBy { it.timestamp }
+        }
+    }
+
     override suspend fun getBloodOxygen(): Result<Int> {
         val now = System.currentTimeMillis()
         val start = now - 24 * 60 * 60 * 1000L
@@ -136,10 +178,95 @@ class OppoHealthServiceBridge(
         )
     }
 
+    override suspend fun getBloodOxygenTimeline(startTime: Long, endTime: Long): Result<List<HealthValuePoint>> {
+        return readDetailTimeline(
+            dataTypeName = "TYPE_BLOOD_OXYGEN",
+            startTime = startTime,
+            endTime = endTime,
+            elementCandidates = listOf("ELEMENT_BLOOD_OXYGEN")
+        )
+    }
+
+    override suspend fun getBloodOxygenDailySummary(startTime: Long, endTime: Long): Result<List<HealthValuePoint>> {
+        return readSummaryTimeline(
+            dataTypeName = "TYPE_BLOOD_OXYGEN_COUNT",
+            startTime = startTime,
+            endTime = endTime,
+            elementCandidates = listOf("ELEMENT_AVERAGE", "ELEMENT_BLOOD_OXYGEN")
+        )
+    }
+
+    override suspend fun getPressure(): Result<Int> {
+        val now = System.currentTimeMillis()
+        val start = now - 24 * 60 * 60 * 1000L
+        return readSingleValue(
+            dataTypeName = "TYPE_PRESSURE_COUNT",
+            startTime = start,
+            endTime = now,
+            elementCandidates = listOf("ELEMENT_AVERAGE", "ELEMENT_PRESSURE")
+        )
+    }
+
+    override suspend fun getPressureTimeline(startTime: Long, endTime: Long): Result<List<HealthValuePoint>> {
+        return readDetailTimeline(
+            dataTypeName = "TYPE_PRESSURE",
+            startTime = startTime,
+            endTime = endTime,
+            elementCandidates = listOf("ELEMENT_PRESSURE")
+        )
+    }
+
+    override suspend fun getPressureDailySummary(startTime: Long, endTime: Long): Result<List<HealthValuePoint>> {
+        return readSummaryTimeline(
+            dataTypeName = "TYPE_PRESSURE_COUNT",
+            startTime = startTime,
+            endTime = endTime,
+            elementCandidates = listOf("ELEMENT_AVERAGE", "ELEMENT_PRESSURE")
+        )
+    }
+
+    override suspend fun getBloodPressure(): Result<BloodPressureData> {
+        val now = System.currentTimeMillis()
+        val start = now - 30L * 24 * 60 * 60 * 1000L
+        return runCatching {
+            val point = readDataPointsChunked("TYPE_BLOOD_PRESSURE", start, now).getOrThrow()
+                .maxByOrNull { pointTimestamp(it) }
+                ?: error("No blood pressure data")
+            toBloodPressureData(point)
+        }
+    }
+
+    override suspend fun getBloodPressureTimeline(startTime: Long, endTime: Long): Result<List<BloodPressureData>> {
+        return runCatching {
+            readDataPointsChunked("TYPE_BLOOD_PRESSURE", startTime, endTime).getOrThrow()
+                .map(::toBloodPressureData)
+                .sortedBy { it.timestamp }
+        }
+    }
+
+    override suspend fun getWeight(): Result<BodyMeasurementData> {
+        val now = System.currentTimeMillis()
+        val start = now - 365L * 24 * 60 * 60 * 1000L
+        return runCatching {
+            val point = readDataPointsChunked("TYPE_BODY_WEIGHT", start, now).getOrThrow()
+                .maxByOrNull { pointTimestamp(it) }
+                ?: error("No weight data")
+            toBodyMeasurementData(point)
+        }
+    }
+
+    override suspend fun getWeightTimeline(startTime: Long, endTime: Long): Result<List<BodyMeasurementData>> {
+        return runCatching {
+            readDataPointsChunked("TYPE_BODY_WEIGHT", startTime, endTime).getOrThrow()
+                .map(::toBodyMeasurementData)
+                .sortedBy { it.timestamp }
+        }
+    }
+
     override suspend fun getDailyActivitySummary(startTime: Long, endTime: Long): Result<DailyActivitySummary> {
         return runCatching {
-            val points = readDataPoints("TYPE_DAILY_ACTIVITY_COUNT", startTime, endTime).getOrThrow()
-            val latest = points.lastOrNull() ?: error("No daily activity data")
+            val points = readDataPointsChunked("TYPE_DAILY_ACTIVITY_COUNT", startTime, endTime).getOrThrow()
+            val latest = points.maxByOrNull { pointTimestamp(it) } ?: error("No daily activity data")
             DailyActivitySummary(
                 steps = readElementAsInt(latest, listOf("ELEMENT_STEP")),
                 calories = readElementAsInt(latest, listOf("ELEMENT_CALORIE")),
@@ -150,33 +277,30 @@ class OppoHealthServiceBridge(
     }
 
     override suspend fun getHeartRateTimeline(startTime: Long, endTime: Long): Result<List<HealthValuePoint>> {
-        return runCatching {
-            val points = readDataPoints("TYPE_HEART_RATE", startTime, endTime).getOrThrow()
-            points.mapNotNull { point ->
-                val value = runCatching {
-                    readElementAsInt(point, listOf("ELEMENT_HEART_RATE"))
-                }.getOrNull() ?: return@mapNotNull null
-                HealthValuePoint(
-                    timestamp = readPointTimestamp(point),
-                    value = value
-                )
-            }.sortedBy { it.timestamp }
-        }
+        return readDetailTimeline(
+            dataTypeName = "TYPE_HEART_RATE",
+            startTime = startTime,
+            endTime = endTime,
+            elementCandidates = listOf("ELEMENT_HEART_RATE")
+        )
     }
 
     override suspend fun getSleepTimeline(startTime: Long, endTime: Long): Result<List<SleepStagePoint>> {
         return runCatching {
-            val points = readDataPoints("TYPE_SLEEP", startTime, endTime).getOrThrow()
-            points.mapNotNull { point ->
-                val stage = runCatching {
-                    readElementAsInt(point, listOf("ELEMENT_SLEEP"))
-                }.getOrNull() ?: return@mapNotNull null
-                SleepStagePoint(
-                    startTimestamp = readPointStartTimestamp(point),
-                    endTimestamp = readPointTimestamp(point).takeIf { it > 0 } ?: readPointStartTimestamp(point),
-                    stage = stage
-                )
-            }.sortedBy { it.startTimestamp }
+            readDataPointsChunked("TYPE_SLEEP", startTime, endTime).getOrThrow()
+                .mapNotNull { point ->
+                    val stage = runCatching {
+                        readElementAsInt(point, listOf("ELEMENT_SLEEP"))
+                    }.getOrNull() ?: return@mapNotNull null
+                    val startTimestamp = readPointStartTimestamp(point)
+                    val endTimestamp = readPointTimestamp(point).takeIf { it > 0 } ?: startTimestamp
+                    SleepStagePoint(
+                        startTimestamp = startTimestamp,
+                        endTimestamp = endTimestamp,
+                        stage = stage
+                    )
+                }
+                .sortedBy { it.startTimestamp }
         }
     }
 
@@ -203,7 +327,7 @@ class OppoHealthServiceBridge(
 
     override fun openHealthAppDownload(activity: Activity) {
         runCatching {
-            val installUtilsClass = Class.forName("com.heytap.health.sdk.utils.InstallUtils")
+            val installUtilsClass = Class.forName("com.heytap.databaseengine.apiv2.common.util.InstallUtils")
             val method = installUtilsClass.methods.firstOrNull {
                 (it.name == "DownloadApp" || it.name == "downloadApp") &&
                     it.parameterTypes.size == 1 &&
@@ -220,6 +344,7 @@ class OppoHealthServiceBridge(
 
     private fun findHeytapApiClass(): Class<*> {
         val candidates = listOf(
+            "com.heytap.databaseengine.HeytapHealthApi",
             "com.heytap.health.sdk.api.HeytapHealthApi",
             "com.heytap.health.sdk.HeytapHealthApi",
             "com.heytap.health.HeytapHealthApi"
@@ -227,6 +352,23 @@ class OppoHealthServiceBridge(
         return candidates.firstNotNullOfOrNull { name ->
             runCatching { Class.forName(name) }.getOrNull()
         } ?: error("HeytapHealthApi class not found")
+    }
+
+    private fun enableSdkLogging(apiClass: Class<*>) {
+        val isDebuggable = (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!isDebuggable) return
+
+        runCatching {
+            val method = apiClass.methods.firstOrNull {
+                it.name == "setLoggable" &&
+                    it.parameterTypes.size == 1 &&
+                    (it.parameterTypes[0] == Boolean::class.javaPrimitiveType || it.parameterTypes[0] == Boolean::class.javaObjectType)
+            } ?: return
+            method.invoke(null, true)
+            Log.i(tag, "Enabled HeytapHealthApi.setLoggable(true)")
+        }.onFailure {
+            Log.w(tag, "Failed to enable SDK internal logging", it)
+        }
     }
 
     private fun getApiInstance(): Any {
@@ -260,10 +402,66 @@ class OppoHealthServiceBridge(
         elementCandidates: List<String>
     ): Result<Int> {
         return runCatching {
-            val dataPoints = readDataPoints(dataTypeName, startTime, endTime).getOrThrow()
-            val latest = dataPoints.lastOrNull() ?: error("No data points")
+            val dataPoints = readDataPointsChunked(dataTypeName, startTime, endTime).getOrThrow()
+            val latest = dataPoints.maxByOrNull { pointTimestamp(it) } ?: error("No data points")
             readElementAsInt(latest, elementCandidates)
         }
+    }
+
+    private suspend fun readDetailTimeline(
+        dataTypeName: String,
+        startTime: Long,
+        endTime: Long,
+        elementCandidates: List<String>
+    ): Result<List<HealthValuePoint>> {
+        return runCatching {
+            readDataPointsChunked(dataTypeName, startTime, endTime).getOrThrow()
+                .mapNotNull { point ->
+                    val value = runCatching { readElementAsInt(point, elementCandidates) }.getOrNull()
+                        ?: return@mapNotNull null
+                    HealthValuePoint(timestamp = pointTimestamp(point), value = value)
+                }
+                .sortedBy { it.timestamp }
+        }
+    }
+
+    private suspend fun readSummaryTimeline(
+        dataTypeName: String,
+        startTime: Long,
+        endTime: Long,
+        elementCandidates: List<String>
+    ): Result<List<HealthValuePoint>> {
+        return runCatching {
+            readDataPointsChunked(dataTypeName, startTime, endTime).getOrThrow()
+                .mapNotNull { point ->
+                    val value = runCatching { readElementAsInt(point, elementCandidates) }.getOrNull()
+                        ?: return@mapNotNull null
+                    HealthValuePoint(timestamp = pointTimestamp(point), value = value)
+                }
+                .sortedBy { it.timestamp }
+        }
+    }
+
+    private suspend fun readDataPointsChunked(
+        dataTypeName: String,
+        startTime: Long,
+        endTime: Long
+    ): Result<List<Any>> {
+        if (startTime > endTime) {
+            return Result.success(emptyList())
+        }
+
+        val result = mutableListOf<Any>()
+        var chunkStart = startTime
+        while (chunkStart <= endTime) {
+            val chunkEnd = min(chunkStart + MAX_QUERY_RANGE_MS - 1L, endTime)
+            val chunk = readDataPoints(dataTypeName, chunkStart, chunkEnd).getOrElse {
+                return Result.failure(it)
+            }
+            result.addAll(chunk)
+            chunkStart = chunkEnd + 1L
+        }
+        return Result.success(result)
     }
 
     private suspend fun readDataPoints(
@@ -281,8 +479,7 @@ class OppoHealthServiceBridge(
         } ?: return Result.failure(IllegalStateException("dataApi.read(request, callback) not found"))
 
         return awaitCallbackResult(dataApi, readMethod, arrayOf(request)) { payload ->
-            val points = extractDataPoints(payload)
-            Result.success(points)
+            Result.success(extractDataPoints(payload))
         }
     }
 
@@ -331,7 +528,38 @@ class OppoHealthServiceBridge(
         return result
     }
 
+    private fun toBloodPressureData(dataPoint: Any): BloodPressureData {
+        return BloodPressureData(
+            timestamp = pointTimestamp(dataPoint),
+            systolic = readElementAsInt(dataPoint, listOf("ELEMENT_BLOOD_PRESSURE_SYSTOLIC")),
+            diastolic = readElementAsInt(dataPoint, listOf("ELEMENT_BLOOD_PRESSURE_DIASTOLIC"))
+        )
+    }
+
+    private fun toBodyMeasurementData(dataPoint: Any): BodyMeasurementData {
+        return BodyMeasurementData(
+            timestamp = pointTimestamp(dataPoint),
+            weightKg = readElementAsFloat(dataPoint, listOf("ELEMENT_WEIGHT")),
+            bmi = readElementAsFloat(dataPoint, listOf("ELEMENT_BMI"), defaultValue = 0f)
+        )
+    }
+
     private fun readElementAsInt(dataPoint: Any, elementCandidates: List<String>): Int {
+        return readElementAsNumber(dataPoint, elementCandidates)?.toInt()
+            ?: error("Element value not found for ${elementCandidates.joinToString()}")
+    }
+
+    private fun readElementAsFloat(
+        dataPoint: Any,
+        elementCandidates: List<String>,
+        defaultValue: Float? = null
+    ): Float {
+        return readElementAsNumber(dataPoint, elementCandidates)?.toFloat()
+            ?: defaultValue
+            ?: error("Element value not found for ${elementCandidates.joinToString()}")
+    }
+
+    private fun readElementAsNumber(dataPoint: Any, elementCandidates: List<String>): Double? {
         val elementClass = Class.forName("com.heytap.databaseengine.apiv3.data.Element")
         val getValueMethod = dataPoint.javaClass.methods.firstOrNull {
             it.name == "getValue" && it.parameterTypes.size == 1
@@ -340,14 +568,39 @@ class OppoHealthServiceBridge(
         for (fieldName in elementCandidates) {
             val element = runCatching { elementClass.getField(fieldName).get(null) }.getOrNull() ?: continue
             val value = runCatching { getValueMethod.invoke(dataPoint, element) }.getOrNull() ?: continue
-            val numeric = when (value) {
-                is Number -> value.toInt()
-                is String -> value.toIntOrNull()
-                else -> null
-            }
-            if (numeric != null) return numeric
+            decodeNumericValue(value)?.let { return it }
         }
-        error("Element value not found for ${elementCandidates.joinToString()}")
+        return null
+    }
+
+    private fun decodeNumericValue(value: Any?): Double? {
+        return when (value) {
+            null -> null
+            is Number -> value.toDouble()
+            is String -> value.toDoubleOrNull()
+            else -> {
+                runCatching {
+                    val asInt = value.javaClass.methods.firstOrNull {
+                        it.name == "asInt" && it.parameterTypes.isEmpty()
+                    }
+                    val asFloat = value.javaClass.methods.firstOrNull {
+                        it.name == "asFloat" && it.parameterTypes.isEmpty()
+                    }
+                    val asString = value.javaClass.methods.firstOrNull {
+                        it.name == "asString" && it.parameterTypes.isEmpty()
+                    }
+
+                    asFloat?.invoke(value)?.let { return (it as Number).toDouble() }
+                    asInt?.invoke(value)?.let { return (it as Number).toDouble() }
+                    asString?.invoke(value)?.toString()?.toDoubleOrNull()
+                }.getOrNull()
+            }
+        }
+    }
+
+    private fun pointTimestamp(dataPoint: Any): Long {
+        val primary = readPointTimestamp(dataPoint)
+        return if (primary > 0L) primary else readPointStartTimestamp(dataPoint)
     }
 
     private fun readPointTimestamp(dataPoint: Any): Long {
@@ -355,7 +608,7 @@ class OppoHealthServiceBridge(
             it.name == "getTimeStamp" && it.parameterTypes.isEmpty()
         } ?: return 0L
         val value = method.invoke(dataPoint)
-        return (value as? Number)?.toLong() ?: 0L
+        return normalizeTimestamp((value as? Number)?.toLong() ?: 0L)
     }
 
     private fun readPointStartTimestamp(dataPoint: Any): Long {
@@ -363,7 +616,26 @@ class OppoHealthServiceBridge(
             it.name == "getStartTimeStamp" && it.parameterTypes.isEmpty()
         } ?: return 0L
         val value = method.invoke(dataPoint)
-        return (value as? Number)?.toLong() ?: 0L
+        return normalizeTimestamp((value as? Number)?.toLong() ?: 0L)
+    }
+
+    private fun normalizeTimestamp(raw: Long): Long {
+        return when {
+            raw <= 0L -> 0L
+            raw in 19_000_000L..29_991_231L -> {
+                runCatching {
+                    val year = (raw / 10000).toInt()
+                    val month = ((raw / 100) % 100).toInt()
+                    val day = (raw % 100).toInt()
+                    LocalDate.of(year, month, day)
+                        .atStartOfDay(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+                }.getOrDefault(raw)
+            }
+            raw in 1L..9_999_999_999L -> raw * 1000L
+            else -> raw
+        }
     }
 
     private suspend fun <T> awaitCallbackResult(
@@ -410,5 +682,9 @@ class OppoHealthServiceBridge(
                 continuation.resume(Result.failure(it))
             }
         }
+    }
+
+    private companion object {
+        private const val MAX_QUERY_RANGE_MS = 29L * 24 * 60 * 60 * 1000L
     }
 }

@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.Dialect
 import com.silverlink.app.data.local.UserPreferences
+import com.silverlink.app.feature.health.HealthDebugLogger
 import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.feature.emotion.EmotionRecognitionService
 import com.silverlink.app.feature.memory.MemorySyncService
@@ -28,6 +29,8 @@ class SilverLinkApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        HealthDebugLogger.logCurrentSigningSha1(this)
 
         // Initialize Room Database using Singleton
         database = AppDatabase.getInstance(this)

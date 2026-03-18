@@ -15,6 +15,15 @@ if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
 
+val releaseStoreFilePath = localProperties.getProperty("RELEASE_STORE_FILE", "").trim()
+val releaseStorePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD", "").trim()
+val releaseKeyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS", "").trim()
+val releaseKeyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD", "").trim()
+val hasReleaseSigning = releaseStoreFilePath.isNotEmpty() &&
+    releaseStorePassword.isNotEmpty() &&
+    releaseKeyAlias.isNotEmpty() &&
+    releaseKeyPassword.isNotEmpty()
+
 android {
     namespace = "com.silverlink.app"
     compileSdk = 34
@@ -41,13 +50,32 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseStoreFilePath.isNotEmpty()) {
+                storeFile = file(releaseStoreFilePath)
+            }
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+
     buildTypes {
+        debug {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

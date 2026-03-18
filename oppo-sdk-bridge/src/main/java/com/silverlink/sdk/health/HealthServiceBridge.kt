@@ -15,9 +15,21 @@ interface HealthServiceBridge {
     suspend fun revokeAuthorization(): Result<Unit>
     suspend fun getAuthorizedScopes(): Result<List<String>>
     suspend fun getHeartRate(): Result<Int>
+    suspend fun getHeartRateDailySummary(startTime: Long, endTime: Long): Result<List<HealthValuePoint>>
     suspend fun getSteps(): Result<Int>
+    suspend fun getDailyActivityTimeline(startTime: Long, endTime: Long): Result<List<HealthValuePoint>>
     suspend fun getSleepData(date: String): Result<SleepData>
+    suspend fun getSleepDailySummary(startTime: Long, endTime: Long): Result<List<SleepSummaryPoint>>
     suspend fun getBloodOxygen(): Result<Int>
+    suspend fun getBloodOxygenTimeline(startTime: Long, endTime: Long): Result<List<HealthValuePoint>>
+    suspend fun getBloodOxygenDailySummary(startTime: Long, endTime: Long): Result<List<HealthValuePoint>>
+    suspend fun getPressure(): Result<Int>
+    suspend fun getPressureTimeline(startTime: Long, endTime: Long): Result<List<HealthValuePoint>>
+    suspend fun getPressureDailySummary(startTime: Long, endTime: Long): Result<List<HealthValuePoint>>
+    suspend fun getBloodPressure(): Result<BloodPressureData>
+    suspend fun getBloodPressureTimeline(startTime: Long, endTime: Long): Result<List<BloodPressureData>>
+    suspend fun getWeight(): Result<BodyMeasurementData>
+    suspend fun getWeightTimeline(startTime: Long, endTime: Long): Result<List<BodyMeasurementData>>
     suspend fun getDailyActivitySummary(startTime: Long, endTime: Long): Result<DailyActivitySummary>
     suspend fun getHeartRateTimeline(startTime: Long, endTime: Long): Result<List<HealthValuePoint>>
     suspend fun getSleepTimeline(startTime: Long, endTime: Long): Result<List<SleepStagePoint>>

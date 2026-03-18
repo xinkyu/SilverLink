@@ -21,7 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Settings
@@ -30,7 +29,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,7 +37,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -59,12 +58,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.feature.health.HealthTrendPoint
 import com.silverlink.app.feature.health.OppoHealthDashboardData
+import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.ui.components.TimeRange
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import kotlin.math.max
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,8 +71,25 @@ fun HeartRateDetailScreen(
     onNavigateBack: () -> Unit,
     viewModel: HistoryViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val healthDashboardData by viewModel.healthDashboardData.collectAsState()
     var selectedRange by rememberSaveable { androidx.compose.runtime.mutableStateOf(TimeRange.DAY) }
+    val dayPoints = healthDashboardData?.heartRateTimeline.orEmpty().sortedBy { it.timestamp }
+    val rangePoints by produceState(
+        initialValue = emptyList<HealthTrendPoint>(),
+        selectedRange,
+        healthDashboardData
+    ) {
+        value = when (selectedRange) {
+            TimeRange.DAY -> dayPoints
+            else -> {
+                val window = currentTimeWindow(selectedRange)
+                OppoHealthSdkManager.getHeartRateSummary(context, window.start, window.end)
+                    .getOrDefault(emptyList())
+                    .sortedBy { it.timestamp }
+            }
+        }
+    }
 
     Scaffold(
         containerColor = Color(0xFFF5F7F8),
@@ -107,18 +123,30 @@ fun HeartRateDetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                RangeTabs(
+                HeartRateRangeTabs(
                     selectedRange = selectedRange,
                     onRangeSelected = { selectedRange = it }
                 )
             }
-            item { PlaceholderCard() }
+            item {
+                SourceCard(
+                    title = "数据来源",
+                    body = if (rangePoints.isEmpty()) {
+                        "当前时间范围内没有可展示的真实心率数据。"
+                    } else {
+                        "当前页面已接入 OPPO 健康真实心率数据，日视图读取明细，周月年读取汇总。"
+                    }
+                )
+            }
             item {
                 when (selectedRange) {
-                    TimeRange.DAY -> DaySection(healthDashboardData)
-                    TimeRange.WEEK -> WeekSection()
-                    TimeRange.MONTH -> MonthSection()
-                    TimeRange.YEAR -> YearSection()
+                    TimeRange.DAY -> HeartRateDaySection(
+                        data = healthDashboardData,
+                        points = rangePoints
+                    )
+                    TimeRange.WEEK -> HeartRateWeekSection(points = rangePoints)
+                    TimeRange.MONTH -> HeartRateMonthSection(points = rangePoints)
+                    TimeRange.YEAR -> HeartRateYearSection(points = rangePoints)
                 }
             }
         }
@@ -126,7 +154,7 @@ fun HeartRateDetailScreen(
 }
 
 @Composable
-private fun RangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> Unit) {
+private fun HeartRateRangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> Unit) {
     val tabs = listOf(
         TimeRange.DAY to "日",
         TimeRange.WEEK to "周",
@@ -166,7 +194,7 @@ private fun RangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> 
 }
 
 @Composable
-private fun PlaceholderCard() {
+private fun SourceCard(title: String, body: String) {
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF))
@@ -184,12 +212,12 @@ private fun PlaceholderCard() {
                     .background(Color(0x1A007BFF), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF007BFF))
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFF007BFF))
             }
             Column {
-                Text("手表数据接入中", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                Text(title, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
                 Text(
-                    "当前页面先按 Stitch 新稿展示，趋势和统计为占位态，后续直接替换成真实心率数据。",
+                    body,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                     color = Color(0xFF475569)
@@ -200,11 +228,14 @@ private fun PlaceholderCard() {
 }
 
 @Composable
-private fun DaySection(data: OppoHealthDashboardData?) {
-    val points = remember(data) { if (data?.heartRateTimeline.isNullOrEmpty()) demoTimeline() else data!!.heartRateTimeline }
-    val current = data?.latestHeartRate?.takeIf { it > 0 } ?: 72
-    val resting = points.minOf { it.value }
-    val average = points.map { it.value }.average().toInt()
+private fun HeartRateDaySection(
+    data: OppoHealthDashboardData?,
+    points: List<HealthTrendPoint>
+) {
+    val current = data?.latestHeartRate?.takeIf { it > 0 } ?: points.lastOrNull()?.value ?: 0
+    val resting = minTrend(points)
+    val average = averageTrend(points)
+    val zones = heartRateZones(points)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -219,106 +250,153 @@ private fun DaySection(data: OppoHealthDashboardData?) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("BPM", color = Color(0xFF64748B), modifier = Modifier.padding(bottom = 10.dp))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFF007BFF), modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("实时心率", color = Color(0xFF007BFF), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                }
+                Text("今日最新心率", color = Color(0xFF007BFF), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Spacer(modifier = Modifier.height(20.dp))
-                LineChart(points)
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "静息心率", resting.toString(), "bpm", "示意统计")
-            StatCard(Modifier.weight(1f), "日均心率", average.toString(), "bpm", "示意统计")
-        }
-        SectionCard("心率区间") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ZoneBar("静息", "< 100", "18h 45m", 0.75f, Color(0xFF60A5FA))
-                ZoneBar("燃脂", "110 - 135", "1h 12m", 0.15f, Color(0xFF22C55E))
-                ZoneBar("有氧", "136 - 155", "32m", 0.08f, Color(0xFFF59E0B))
-                ZoneBar("峰值", "> 156", "5m", 0.02f, Color(0xFFEF4444))
-            }
-        }
-        InsightCard("健康提示", "日视图已切成新版头图、曲线和区间结构。后续只需要把这些占位统计映射到真实心率数据。", false)
-    }
-}
-
-@Composable
-private fun WeekSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "平均静息心率", "62", "bpm", "示意值")
-            StatCard(Modifier.weight(1f), "平均每日峰值", "85", "bpm", "示意值")
-        }
-        SectionCard("本周范围", "3月11日 - 3月17日") {
-            Text("62 - 142 bpm", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-            Spacer(modifier = Modifier.height(16.dp))
-            WeeklyBars()
-        }
-        InsightCard("本周洞察", "周视图已按 Stitch 切成范围柱状结构，等手表数据接通后可直接展示每日最低/最高心率。", true)
-        SectionCard("心率区间") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ZoneSummary("静息", "< 90 bpm", "82%", "138h 12m", Color(0xFF94A3B8))
-                ZoneSummary("燃脂", "91 - 115 bpm", "12%", "20h 15m", Color(0xFF22C55E))
-                ZoneSummary("有氧", "116 - 145 bpm", "5%", "8h 45m", Color(0xFFF59E0B))
-                ZoneSummary("峰值", "> 145 bpm", "1%", "0h 48m", Color(0xFFEF4444))
-            }
-        }
-    }
-}
-
-@Composable
-private fun MonthSection() {
-    val monthLabel = remember { SimpleDateFormat("yyyy年M月", Locale.CHINA).format(Date()) }
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "月平均心率", "65", "bpm", "占位值")
-            StatCard(Modifier.weight(1f), "最高记录", "110", "bpm", "占位值")
-        }
-        SectionCard(monthLabel) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Legend("偏低", Color(0xFF34D399))
-                Legend("正常", Color(0xFF007BFF))
-                Legend("偏高", Color(0xFFFB923C))
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                listOf("日", "一", "二", "三", "四", "五", "六").forEach {
-                    Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 11.sp, color = Color(0xFF94A3B8))
+                if (points.isEmpty()) {
+                    EmptyStateCard()
+                } else {
+                    HeartRateLineChart(points = points)
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            MonthGrid()
         }
-        StatList("静息心率稳定度", "92%")
-        StatList("最高心率日期", "12日")
-        InsightCard("智能提示", "月视图已改成热力日历样式，后续只需把每天的心率状态映射为不同颜色。", true)
-    }
-}
-
-@Composable
-private fun YearSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(Modifier.weight(1f), "年度平均", "68", "bpm", "2026 占位值")
-            StatCard(Modifier.weight(1f), "较去年变化", "-3", "%", "改善趋势")
+            MetricCard(Modifier.weight(1f), "最低心率", resting.toString(), "bpm", "今日最低")
+            MetricCard(Modifier.weight(1f), "平均心率", average.toString(), "bpm", "今日均值")
         }
-        SectionCard("月均心率", "1月 - 12月") {
-            YearChart()
-        }
-        SectionCard("年度里程碑") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatList("运动最稳定月份", "5月")
-                StatList("最低平均心率月份", "10月")
+        SectionCard(title = "心率区间") {
+            if (points.isEmpty()) {
+                EmptySectionText()
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    zones.forEach { zone ->
+                        val ratio = if (points.isNotEmpty()) zone.minutes.toFloat() / points.size else 0f
+                        ProgressRow(
+                            title = zone.title,
+                            range = zone.range,
+                            trailing = "${zone.minutes} 次",
+                            progress = ratio,
+                            color = zone.color
+                        )
+                    }
+                }
             }
         }
-        InsightCard("年度洞察", "年视图已经切成折线趋势和里程碑结构，真实月均心率接入后可直接替换。", false)
+        InsightCard(
+            title = "健康提示",
+            body = if (points.isEmpty()) {
+                "今天还没有读取到心率明细，完成授权并在健康 App 中有数据后会显示真实曲线。"
+            } else {
+                "今日心率范围 ${minTrend(points)} - ${maxTrend(points)} bpm，曲线与区间统计均来自真实采样。"
+            },
+            solid = false
+        )
     }
 }
 
 @Composable
-private fun LineChart(points: List<HealthTrendPoint>) {
+private fun HeartRateWeekSection(points: List<HealthTrendPoint>) {
+    val weeklyPoints = lastDays(points, 7)
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(Modifier.weight(1f), "周平均", averageTrend(weeklyPoints).toString(), "bpm", "最近 7 天")
+            MetricCard(Modifier.weight(1f), "周最高", maxTrend(weeklyPoints).toString(), "bpm", "最近 7 天")
+        }
+        SectionCard("本周趋势", formatRangeLabel(weeklyPoints)) {
+            if (weeklyPoints.isEmpty()) {
+                EmptySectionText()
+            } else {
+                Text(
+                    "${minTrend(weeklyPoints)} - ${maxTrend(weeklyPoints)} bpm",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                HeartRateBarChart(points = weeklyPoints, highlightIndex = weeklyPoints.lastIndex)
+            }
+        }
+        InsightCard(
+            title = "本周洞察",
+            body = if (weeklyPoints.isEmpty()) {
+                "本周还没有读取到真实心率汇总。"
+            } else {
+                "最近 7 天平均心率为 ${averageTrend(weeklyPoints)} bpm，最高出现在 ${formatPointDate(weeklyPoints.maxByOrNull { it.value }?.timestamp)}。"
+            },
+            solid = true
+        )
+    }
+}
+
+@Composable
+private fun HeartRateMonthSection(points: List<HealthTrendPoint>) {
+    val monthlyPoints = lastDays(points, 30)
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(Modifier.weight(1f), "月平均", averageTrend(monthlyPoints).toString(), "bpm", "最近 30 天")
+            MetricCard(Modifier.weight(1f), "月最高", maxTrend(monthlyPoints).toString(), "bpm", "最近 30 天")
+        }
+        SectionCard(formatMonthTitle()) {
+            if (monthlyPoints.isEmpty()) {
+                EmptySectionText()
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Legend("偏低", Color(0xFF34D399))
+                    Legend("正常", Color(0xFF007BFF))
+                    Legend("偏高", Color(0xFFFB923C))
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                HeartRateMonthGrid(points = monthlyPoints)
+            }
+        }
+        MetricRow(title = "稳定天数", value = "${monthlyPoints.count { it.value in 55..95 }} 天")
+        MetricRow(title = "最高日", value = formatPointDate(monthlyPoints.maxByOrNull { it.value }?.timestamp))
+        InsightCard(
+            title = "月度分析",
+            body = if (monthlyPoints.isEmpty()) {
+                "本月暂无真实心率汇总。"
+            } else {
+                "月视图中的每个格子都映射真实日均心率，颜色不再使用占位值。"
+            },
+            solid = false
+        )
+    }
+}
+
+@Composable
+private fun HeartRateYearSection(points: List<HealthTrendPoint>) {
+    val values = monthlyAverageValues(points)
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(Modifier.weight(1f), "年度平均", averageTrend(points).toString(), "bpm", "最近 12 个月")
+            MetricCard(
+                Modifier.weight(1f),
+                "峰值月份",
+                monthLabelFromIndex(values.indices.maxByOrNull { values[it] } ?: 0),
+                "",
+                "${values.maxOrNull() ?: 0} bpm"
+            )
+        }
+        SectionCard("月均心率", "最近 12 个月") {
+            if (points.isEmpty()) {
+                EmptySectionText()
+            } else {
+                HeartRateYearChart(values = values)
+            }
+        }
+        InsightCard(
+            title = "年度洞察",
+            body = if (points.isEmpty()) {
+                "最近 12 个月没有读取到真实心率汇总。"
+            } else {
+                "年度趋势按真实月均心率生成，峰值出现在 ${monthLabelFromIndex(values.indices.maxByOrNull { values[it] } ?: 0)}。"
+            },
+            solid = false
+        )
+    }
+}
+
+@Composable
+private fun HeartRateLineChart(points: List<HealthTrendPoint>) {
     Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0x0D007BFF))) {
         Canvas(
             modifier = Modifier
@@ -326,8 +404,8 @@ private fun LineChart(points: List<HealthTrendPoint>) {
                 .height(132.dp)
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            val minValue = points.minOf { it.value }
-            val maxValue = max(points.maxOf { it.value }, minValue + 1)
+            val minValue = minTrend(points)
+            val maxValue = maxTrend(points).coerceAtLeast(minValue + 1)
             val stepX = size.width / (points.size - 1).coerceAtLeast(1)
             val linePath = Path()
             val fillPath = Path()
@@ -353,44 +431,55 @@ private fun LineChart(points: List<HealthTrendPoint>) {
 }
 
 @Composable
-private fun WeeklyBars() {
-    val ranges = listOf(0.56f, 0.82f, 0.60f, 0.72f, 0.54f, 0.40f, 0.46f)
-    Row(modifier = Modifier.fillMaxWidth().height(210.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-        ranges.forEachIndexed { index, value ->
+private fun HeartRateBarChart(points: List<HealthTrendPoint>, highlightIndex: Int) {
+    val maxValue = maxTrend(points).coerceAtLeast(1)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(210.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        points.forEachIndexed { index, point ->
+            val value = point.value.toFloat() / maxValue.toFloat()
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                    Box(modifier = Modifier.fillMaxWidth().height(170.dp).background(Color(0xFFE2E8F0), RoundedCornerShape(999.dp)))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(170.dp)
+                            .background(Color(0xFFE2E8F0), RoundedCornerShape(999.dp))
+                    )
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(170.dp * value)
-                            .background(if (index == 1 || index == 3) Color(0xFF007BFF) else Color(0x66007BFF), RoundedCornerShape(999.dp))
+                            .background(
+                                if (index == highlightIndex) Color(0xFF007BFF) else Color(0x66007BFF),
+                                RoundedCornerShape(999.dp)
+                            )
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(listOf("一", "二", "三", "四", "五", "六", "日")[index], fontSize = 11.sp, color = Color(0xFF94A3B8))
+                Text(
+                    text = weekdayLabel(point.timestamp),
+                    fontSize = 11.sp,
+                    color = Color(0xFF94A3B8)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun MonthGrid() {
-    val cells = remember {
-        buildList {
-            repeat(5) { add("" to Color.Transparent) }
-            for (day in 1..30) {
-                val color = when {
-                    day == 12 -> Color(0xFFF97316)
-                    day % 7 == 0 -> Color(0xFFFB923C)
-                    day % 5 == 0 || day % 6 == 0 -> Color(0xFF007BFF)
-                    day % 3 == 0 -> Color(0xFF10B981)
-                    else -> Color(0xFF34D399)
-                }
-                add(day.toString() to color)
-            }
-            while (size % 7 != 0) add("" to Color.Transparent)
+private fun HeartRateMonthGrid(points: List<HealthTrendPoint>) {
+    val cells = points.map { point ->
+        val color = when {
+            point.value < 55 -> Color(0xFF34D399)
+            point.value <= 95 -> Color(0xFF007BFF)
+            else -> Color(0xFFFB923C)
         }
+        dayOfMonthLabel(point.timestamp) to color
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cells.chunked(7).forEach { row ->
@@ -403,8 +492,11 @@ private fun MonthGrid() {
                             .background(color, RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(label, color = if (color == Color.Transparent) Color(0xFFCBD5E1) else Color.White, fontSize = 12.sp)
+                        Text(label, color = Color.White, fontSize = 12.sp)
                     }
+                }
+                repeat((7 - row.size).coerceAtLeast(0)) {
+                    Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
                 }
             }
         }
@@ -412,13 +504,12 @@ private fun MonthGrid() {
 }
 
 @Composable
-private fun YearChart() {
-    val values = listOf(70, 68, 69, 66, 64, 63, 65, 67, 61, 60, 62, 61)
+private fun HeartRateYearChart(values: List<Int>) {
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Canvas(modifier = Modifier.fillMaxWidth().height(180.dp)) {
-                val minValue = values.minOrNull() ?: 0
-                val maxValue = max(values.maxOrNull() ?: 0, minValue + 1)
+                val minValue = (values.minOrNull() ?: 0).coerceAtMost(50)
+                val maxValue = (values.maxOrNull() ?: 0).coerceAtLeast(minValue + 1)
                 val stepX = size.width / (values.size - 1).coerceAtLeast(1)
                 val linePath = Path()
                 val fillPath = Path()
@@ -451,15 +542,17 @@ private fun YearChart() {
 }
 
 @Composable
-private fun StatCard(modifier: Modifier, title: String, value: String, unit: String, caption: String) {
+private fun MetricCard(modifier: Modifier, title: String, value: String, unit: String, caption: String) {
     Card(modifier = modifier, shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text(title, fontSize = 12.sp, color = Color(0xFF64748B))
             Spacer(modifier = Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(unit, fontSize = 12.sp, color = Color(0xFF64748B), modifier = Modifier.padding(bottom = 4.dp))
+                if (unit.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(unit, fontSize = 12.sp, color = Color(0xFF64748B), modifier = Modifier.padding(bottom = 4.dp))
+                }
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(caption, fontSize = 11.sp, color = Color(0xFF94A3B8))
@@ -483,38 +576,15 @@ private fun SectionCard(title: String, subtitle: String? = null, content: @Compo
 }
 
 @Composable
-private fun ZoneBar(title: String, range: String, duration: String, progress: Float, color: Color) {
+private fun ProgressRow(title: String, range: String, trailing: String, progress: Float, color: Color) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("$title ($range)", color = Color(0xFF475569), fontSize = 13.sp)
-            Text(duration, color = Color(0xFF0F172A), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(trailing, color = Color(0xFF0F172A), fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         Canvas(modifier = Modifier.fillMaxWidth().height(10.dp)) {
             drawRoundRect(Color(0xFFE2E8F0), cornerRadius = CornerRadius(size.height / 2, size.height / 2))
-            drawRoundRect(color, size = Size(size.width * progress, size.height), cornerRadius = CornerRadius(size.height / 2, size.height / 2))
-        }
-    }
-}
-
-@Composable
-private fun ZoneSummary(title: String, range: String, percent: String, duration: String, color: Color) {
-    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.width(6.dp).height(40.dp).background(color, RoundedCornerShape(999.dp)))
-                Column {
-                    Text(title, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A))
-                    Text(range, fontSize = 12.sp, color = Color(0xFF64748B))
-                }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(percent, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                Text(duration, fontSize = 11.sp, color = Color(0xFF94A3B8))
-            }
+            drawRoundRect(color, size = Size(size.width * progress.coerceIn(0f, 1f), size.height), cornerRadius = CornerRadius(size.height / 2, size.height / 2))
         }
     }
 }
@@ -530,7 +600,9 @@ private fun InsightCard(title: String, body: String, solid: Boolean) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
-                modifier = Modifier.size(38.dp).background(if (solid) Color.White.copy(alpha = 0.18f) else Color(0x1A007BFF), RoundedCornerShape(12.dp)),
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(if (solid) Color.White.copy(alpha = 0.18f) else Color(0x1A007BFF), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.Lightbulb, contentDescription = null, tint = if (solid) Color.White else Color(0xFF007BFF))
@@ -554,7 +626,7 @@ private fun Legend(text: String, color: Color) {
 }
 
 @Composable
-private fun StatList(title: String, value: String) {
+private fun MetricRow(title: String, value: String) {
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -567,15 +639,60 @@ private fun StatList(title: String, value: String) {
     }
 }
 
-private fun demoTimeline(): List<HealthTrendPoint> {
-    val calendar = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }
-    val values = listOf(68, 70, 67, 72, 76, 74, 78, 84, 80, 77, 73, 71)
-    return values.mapIndexed { index, value ->
-        HealthTrendPoint(calendar.timeInMillis + index * 2L * 60L * 60L * 1000L, value)
+@Composable
+private fun EmptyStateCard() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(132.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("暂无真实心率曲线", color = Color(0xFF94A3B8))
     }
 }
+
+@Composable
+private fun EmptySectionText() {
+    Text("暂无真实数据", color = Color(0xFF94A3B8))
+}
+
+private data class HeartRateZone(
+    val title: String,
+    val range: String,
+    val minutes: Int,
+    val color: Color
+)
+
+private fun heartRateZones(points: List<HealthTrendPoint>): List<HeartRateZone> {
+    return listOf(
+        HeartRateZone("静息", "< 60", points.count { it.value < 60 }, Color(0xFF60A5FA)),
+        HeartRateZone("日常", "60 - 100", points.count { it.value in 60..100 }, Color(0xFF22C55E)),
+        HeartRateZone("偏高", "101 - 140", points.count { it.value in 101..140 }, Color(0xFFF59E0B)),
+        HeartRateZone("高强度", "> 140", points.count { it.value > 140 }, Color(0xFFEF4444))
+    )
+}
+
+private fun weekdayLabel(timestamp: Long): String {
+    return SimpleDateFormat("E", Locale.CHINA).format(Date(timestamp))
+}
+
+private fun dayOfMonthLabel(timestamp: Long): String {
+    return SimpleDateFormat("d", Locale.CHINA).format(Date(timestamp))
+}
+
+private fun formatPointDate(timestamp: Long?): String {
+    if (timestamp == null || timestamp <= 0L) return "--"
+    return SimpleDateFormat("M月d日", Locale.CHINA).format(Date(timestamp))
+}
+
+private fun formatRangeLabel(points: List<HealthTrendPoint>): String {
+    if (points.isEmpty()) return "暂无数据"
+    val format = SimpleDateFormat("M月d日", Locale.CHINA)
+    return "${format.format(Date(points.first().timestamp))} - ${format.format(Date(points.last().timestamp))}"
+}
+
+private fun formatMonthTitle(): String {
+    return SimpleDateFormat("yyyy年M月", Locale.CHINA).format(Date())
+}
+
+private fun monthLabelFromIndex(index: Int): String = "${index + 1}月"

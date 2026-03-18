@@ -2,12 +2,14 @@ package com.silverlink.app.ui.history
 
 import android.app.Activity
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.entity.MedicationLogEntity
 import com.silverlink.app.data.local.entity.MoodLogEntity
+import com.silverlink.app.feature.health.HealthDebugLogger
 import com.silverlink.app.feature.health.OppoHealthDashboardData
 import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.data.remote.CognitiveReportData
@@ -195,14 +197,17 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
 
     fun requestHealthAuthorization(activity: Activity) {
         viewModelScope.launch {
+            Log.i(HealthDebugLogger.TAG_AUTH, "HistoryViewModel.requestHealthAuthorization clicked")
             _isHealthLoading.value = true
             _healthError.value = null
             val result = OppoHealthSdkManager.requestAuthorization(activity)
             _isHealthLoading.value = false
             if (result.isSuccess) {
+                Log.i(HealthDebugLogger.TAG_AUTH, "HistoryViewModel.requestHealthAuthorization success")
                 _healthAuthorized.value = true
                 loadHealthData()
             } else {
+                Log.e(HealthDebugLogger.TAG_AUTH, "HistoryViewModel.requestHealthAuthorization failed", result.exceptionOrNull())
                 val code = OppoHealthSdkManager.getErrorCode(result.exceptionOrNull())
                 _healthError.value = if (code == OppoHealthSdkManager.ERROR_HEALTH_APP_NOT_INSTALLED) {
                     "未安装HeyTap Health，已尝试拉起下载"
@@ -217,15 +222,18 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         if (!userPreferences.isOppoHealthSdkConsentGranted()) return
 
         viewModelScope.launch {
+            Log.i(HealthDebugLogger.TAG_DATA, "HistoryViewModel.loadHealthData start")
             _isHealthLoading.value = true
             _healthError.value = null
             val today = dateFormat.format(Date())
             val result = OppoHealthSdkManager.pullDashboardData(getApplication(), today)
             _isHealthLoading.value = false
             if (result.isSuccess) {
+                Log.i(HealthDebugLogger.TAG_DATA, "HistoryViewModel.loadHealthData success")
                 _healthDashboardData.value = result.getOrNull()
                 _healthAuthorized.value = true
             } else {
+                Log.e(HealthDebugLogger.TAG_DATA, "HistoryViewModel.loadHealthData failed", result.exceptionOrNull())
                 val code = OppoHealthSdkManager.getErrorCode(result.exceptionOrNull())
                 _healthError.value = if (code == OppoHealthSdkManager.ERROR_HEALTH_APP_NOT_INSTALLED) {
                     "检测到未安装HeyTap Health，请先安装后再绑定"
