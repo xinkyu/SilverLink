@@ -42,8 +42,7 @@ fun HistoryScreen(
     onNavigateToBloodPressureDetail: () -> Unit = {},
     onNavigateToBloodOxygenDetail: () -> Unit = {},
     onNavigateToStressDetail: () -> Unit = {},
-    onNavigateToWeightDetail: () -> Unit = {},
-    onNavigateToFullReport: () -> Unit = {}
+    onNavigateToWeightDetail: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
@@ -59,6 +58,7 @@ fun HistoryScreen(
     val cognitiveReport by viewModel.cognitiveReport.collectAsState()
 
     var showBoardEditor by rememberSaveable { mutableStateOf(false) }
+    var showFullReport by rememberSaveable { mutableStateOf(false) }
     var selectedMetricDetail by remember { mutableStateOf<MetricDetailDialogState?>(null) }
     val defaultVisibleMetricIds = remember {
         listOf("mood", "medication", "cognitive", "heartRate", "activity", "stress", "bloodOxygen", "sleep", "bloodPressure", "weight")
@@ -359,7 +359,7 @@ fun HistoryScreen(
                             }
 
                             Button(
-                                onClick = onNavigateToFullReport,
+                                onClick = { showFullReport = true },
                                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp).height(48.dp),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff))
@@ -653,6 +653,13 @@ fun HistoryScreen(
                     }
                 }
             }
+        }
+        
+        if (showFullReport) {
+            FullReportBottomSheet(
+                onDismissRequest = { showFullReport = false },
+                viewModel = viewModel
+            )
         }
     }
 }

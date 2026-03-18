@@ -84,8 +84,6 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
     var showBloodOxygenDetail by remember { mutableStateOf(false) }
     var showStressDetail by remember { mutableStateOf(false) }
     var showWeightDetail by remember { mutableStateOf(false) }
-    var showFullReport by remember { mutableStateOf(false) }
-
     Scaffold(
         modifier = modifier.fillMaxSize(),
         bottomBar = {
@@ -287,10 +285,6 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                         com.silverlink.app.ui.history.WeightDetailScreen(
                             onNavigateBack = { showWeightDetail = false }
                         )
-                    } else if (showFullReport) {
-                        com.silverlink.app.ui.history.FullReportScreen(
-                            onNavigateBack = { showFullReport = false }
-                        )
                     } else {
                         HistoryScreen(
                             onNavigateToMedicationHistory = { showMedicationHistory = true },
@@ -301,8 +295,7 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                             onNavigateToBloodPressureDetail = { showBloodPressureDetail = true },
                             onNavigateToBloodOxygenDetail = { showBloodOxygenDetail = true },
                             onNavigateToStressDetail = { showStressDetail = true },
-                            onNavigateToWeightDetail = { showWeightDetail = true },
-                            onNavigateToFullReport = { showFullReport = true }
+                            onNavigateToWeightDetail = { showWeightDetail = true }
                         )
                     }
                 }

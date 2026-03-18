@@ -39,8 +39,8 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FullReportScreen(
-    onNavigateBack: () -> Unit,
+fun FullReportBottomSheet(
+    onDismissRequest: () -> Unit,
     viewModel: HistoryViewModel = viewModel()
 ) {
     val healthDashboardData by viewModel.healthDashboardData.collectAsState()
@@ -55,29 +55,71 @@ fun FullReportScreen(
     
     val todayLabel = remember { SimpleDateFormat("M月d日", Locale.CHINA).format(Date()) }
 
-    Scaffold(
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
         containerColor = Color(0xFFF8FAFC),
-        topBar = {
-            TopAppBar(
-                title = { Text("完整健康报告", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = Color(0xFF1E293B)) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Color(0xFF475569))
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置", tint = Color(0xFF475569))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
-        },
-        bottomBar = {
+        dragHandle = null,
+        modifier = Modifier.fillMaxHeight(0.9f)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Top Navigation Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDismissRequest, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Color(0xFF1E293B))
+                }
+                Text(
+                    "完整健康报告",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1E293B),
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
+                )
+                IconButton(onClick = {}, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.Settings, contentDescription = "设置", tint = Color(0xFF475569))
+                }
+            }
+
+            // Scrollable Content
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    ReportPeriodSelector(todayLabel)
+                }
+                item {
+                    ActivitySummarySection(steps = steps, calories = calories)
+                }
+                item {
+                    SleepAnalysisSection(sleepMinutes = sleepMinutes)
+                }
+                item {
+                    HeartRateTrendSection(heartRate = heartRate)
+                }
+                item {
+                    SpO2AndStressSection(bloodOxygen = bloodOxygen)
+                }
+                item {
+                    HealthInsightsSection()
+                }
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
+
+            // Sticky Footer Action
             Surface(
                 color = Color.White.copy(alpha = 0.9f),
                 modifier = Modifier.fillMaxWidth(),
-                tonalElevation = 8.dp,
                 shadowElevation = 8.dp
             ) {
                 Row(
@@ -101,36 +143,6 @@ fun FullReportScreen(
                         Icon(Icons.Default.Share, contentDescription = "分享", tint = Color(0xFF475569))
                     }
                 }
-            }
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                ReportPeriodSelector(todayLabel)
-            }
-            item {
-                ActivitySummarySection(steps = steps, calories = calories)
-            }
-            item {
-                SleepAnalysisSection(sleepMinutes = sleepMinutes)
-            }
-            item {
-                HeartRateTrendSection(heartRate = heartRate)
-            }
-            item {
-                SpO2AndStressSection(bloodOxygen = bloodOxygen)
-            }
-            item {
-                HealthInsightsSection()
-            }
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
