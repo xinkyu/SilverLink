@@ -1,4 +1,4 @@
-package com.silverlink.app.ui.components
+﻿package com.silverlink.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
@@ -325,39 +325,7 @@ fun TimeRangeSelector(
             .padding(horizontal = 16.dp)
     ) {
         // Tab 切换
-        val tabs = TimeRange.entries.toList()
-        val selectedIndex = tabs.indexOf(selectedRange)
-        
-        TabRow(
-            selectedTabIndex = selectedIndex,
-            containerColor = Color.Transparent,
-            contentColor = primaryColor,
-            indicator = { tabPositions ->
-                if (selectedIndex < tabPositions.size) {
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedIndex]),
-                        height = 3.dp,
-                        color = primaryColor
-                    )
-                }
-            },
-            divider = {}
-        ) {
-            tabs.forEachIndexed { index, range ->
-                Tab(
-                    selected = selectedIndex == index,
-                    onClick = { onRangeSelected(range) },
-                    text = {
-                        Text(
-                            text = range.label,
-                            fontWeight = if (selectedIndex == index) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = 16.sp
-                        )
-                    }
-                )
-            }
-        }
-        
+        RangeTabs(selectedRange = selectedRange, onRangeSelected = onRangeSelected)
         Spacer(modifier = Modifier.height(12.dp))
         
         // 日期选择
@@ -406,6 +374,52 @@ fun TimeRangeSelector(
             }
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+}
+
+// ==================== RangeTabs ====================
+
+@Composable
+fun RangeTabs(
+    selectedRange: TimeRange,
+    onRangeSelected: (TimeRange) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tabs = listOf(
+        TimeRange.DAY to "日",
+        TimeRange.WEEK to "周",
+        TimeRange.MONTH to "月",
+        TimeRange.YEAR to "年"
+    )
+    Surface(shape = RoundedCornerShape(24.dp), color = Color(0xFFF1F5F9), modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            tabs.forEach { (range, label) ->
+                val selected = range == selectedRange
+                Surface(
+                    onClick = { onRangeSelected(range) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (selected) Color.White else Color.Transparent,
+                    shadowElevation = if (selected) 2.dp else 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (selected) Color(0xFF0F172A) else Color(0xFF64748B),
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
     }
 }

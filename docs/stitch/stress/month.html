@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-nav .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header -->
+<header class="sticky top-0 z-10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center p-4 justify-between max-w-md mx-auto">
+<button class="text-slate-900 dark:text-slate-100 flex size-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold leading-tight flex-1 text-center">压力详情</h1>
+<button class="text-slate-900 dark:text-slate-100 flex size-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+</header>
+<main class="flex-1 max-w-md mx-auto w-full pb-24">
+<!-- Navigation Segmented Control -->
+<div class="px-4 py-4">
+<div class="flex h-11 items-center justify-center rounded-xl bg-slate-200/50 dark:bg-slate-800 p-1">
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 text-slate-500 dark:text-slate-400 text-sm font-medium transition-all has-[:checked]:bg-white dark:has-[:checked]:bg-slate-700 has-[:checked]:text-primary has-[:checked]:shadow-sm">
+<span>日</span>
+<input class="hidden" name="timeframe" type="radio" value="日"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 text-slate-500 dark:text-slate-400 text-sm font-medium transition-all has-[:checked]:bg-white dark:has-[:checked]:bg-slate-700 has-[:checked]:text-primary has-[:checked]:shadow-sm">
+<span>周</span>
+<input class="hidden" name="timeframe" type="radio" value="周"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 text-slate-500 dark:text-slate-400 text-sm font-medium transition-all has-[:checked]:bg-white dark:has-[:checked]:bg-slate-700 has-[:checked]:text-primary has-[:checked]:shadow-sm">
+<span>月</span>
+<input checked="" class="hidden" name="timeframe" type="radio" value="月"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 text-slate-500 dark:text-slate-400 text-sm font-medium transition-all has-[:checked]:bg-white dark:has-[:checked]:bg-slate-700 has-[:checked]:text-primary has-[:checked]:shadow-sm">
+<span>年</span>
+<input class="hidden" name="timeframe" type="radio" value="年"/>
+</label>
+</div>
+</div>
+<!-- Top Summary Cards -->
+<div class="flex gap-4 px-4 mb-6">
+<div class="flex-1 flex flex-col gap-1 rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">本月平均压力</p>
+<div class="flex items-baseline gap-1">
+<span class="text-3xl font-bold text-primary">42</span>
+<span class="text-slate-400 text-xs">/100</span>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-1 rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">达标天数</p>
+<div class="flex items-baseline gap-1">
+<span class="text-3xl font-bold text-slate-900 dark:text-slate-100">25</span>
+<span class="text-slate-400 text-xs">/31 days</span>
+</div>
+</div>
+</div>
+<!-- Calendar View -->
+<section class="px-4 mb-6">
+<div class="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-bold text-slate-900 dark:text-slate-100">2023年10月</h3>
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-slate-400 text-sm">chevron_left</span>
+<span class="material-symbols-outlined text-slate-400 text-sm">chevron_right</span>
+</div>
+</div>
+<div class="grid grid-cols-7 gap-y-4 text-center">
+<!-- Weekdays -->
+<div class="text-[10px] font-bold text-slate-400 uppercase">一</div>
+<div class="text-[10px] font-bold text-slate-400 uppercase">二</div>
+<div class="text-[10px] font-bold text-slate-400 uppercase">三</div>
+<div class="text-[10px] font-bold text-slate-400 uppercase">四</div>
+<div class="text-[10px] font-bold text-slate-400 uppercase">五</div>
+<div class="text-[10px] font-bold text-slate-400 uppercase">六</div>
+<div class="text-[10px] font-bold text-slate-400 uppercase">日</div>
+<!-- Days (Sample for October 2023) -->
+<!-- Empty slots -->
+<div class="h-8"></div><div class="h-8"></div><div class="h-8"></div><div class="h-8"></div><div class="h-8"></div>
+<!-- Calendar Days -->
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">1</span>
+<div class="size-2 rounded-full bg-emerald-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">2</span>
+<div class="size-2 rounded-full bg-emerald-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">3</span>
+<div class="size-2 rounded-full bg-blue-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">4</span>
+<div class="size-2 rounded-full bg-amber-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">5</span>
+<div class="size-2 rounded-full bg-emerald-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">6</span>
+<div class="size-2 rounded-full bg-orange-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">7</span>
+<div class="size-2 rounded-full bg-blue-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">8</span>
+<div class="size-2 rounded-full bg-emerald-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">9</span>
+<div class="size-2 rounded-full bg-emerald-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="text-xs text-slate-500">10</span>
+<div class="size-2 rounded-full bg-amber-400"></div>
+</div>
+<div class="flex flex-col items-center justify-center gap-1 bg-primary/10 rounded-lg py-1 border border-primary/20">
+<span class="text-xs font-bold text-primary">11</span>
+<div class="size-2 rounded-full bg-blue-400"></div>
+</div>
+<!-- Row continues... simplified for display -->
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">12</span><div class="size-2 rounded-full bg-emerald-400"></div></div>
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">13</span><div class="size-2 rounded-full bg-blue-400"></div></div>
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">14</span><div class="size-2 rounded-full bg-blue-400"></div></div>
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">15</span><div class="size-2 rounded-full bg-emerald-400"></div></div>
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">16</span><div class="size-2 rounded-full bg-emerald-400"></div></div>
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">17</span><div class="size-2 rounded-full bg-amber-400"></div></div>
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">18</span><div class="size-2 rounded-full bg-blue-400"></div></div>
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">19</span><div class="size-2 rounded-full bg-emerald-400"></div></div>
+<div class="flex flex-col items-center justify-center gap-1"><span class="text-xs text-slate-500">20</span><div class="size-2 rounded-full bg-orange-400"></div></div>
+</div>
+<!-- Legend -->
+<div class="flex justify-between items-center mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-1.5">
+<div class="size-2 rounded-full bg-emerald-400"></div>
+<span class="text-[10px] text-slate-400">极低</span>
+</div>
+<div class="flex items-center gap-1.5">
+<div class="size-2 rounded-full bg-blue-400"></div>
+<span class="text-[10px] text-slate-400">正常</span>
+</div>
+<div class="flex items-center gap-1.5">
+<div class="size-2 rounded-full bg-amber-400"></div>
+<span class="text-[10px] text-slate-400">中等</span>
+</div>
+<div class="flex items-center gap-1.5">
+<div class="size-2 rounded-full bg-orange-400"></div>
+<span class="text-[10px] text-slate-400">偏高</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Monthly Analysis -->
+<section class="px-4 mb-6">
+<h3 class="text-lg font-bold mb-3">月度分析</h3>
+<div class="bg-primary/5 dark:bg-primary/10 border border-primary/10 dark:border-primary/20 rounded-2xl p-4">
+<div class="flex items-start gap-3">
+<div class="bg-primary/20 p-2 rounded-lg shrink-0">
+<span class="material-symbols-outlined text-primary">insights</span>
+</div>
+<div>
+<p class="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                            本月您的压力水平保持在良好范围内。第2周工作压力稍有上升，但通过周末的冥想练习得到了有效缓解。建议下个月继续保持规律的作息。
+                        </p>
+</div>
+</div>
+</div>
+</section>
+<!-- Extreme Records -->
+<section class="px-4 space-y-3">
+<div class="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="bg-orange-100 dark:bg-orange-900/30 p-2 rounded-lg">
+<span class="material-symbols-outlined text-orange-500">trending_up</span>
+</div>
+<div>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium">最高记录</p>
+<p class="text-sm text-slate-400">10月18日</p>
+</div>
+</div>
+<p class="text-xl font-bold text-slate-900 dark:text-slate-100">82</p>
+</div>
+<div class="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-lg">
+<span class="material-symbols-outlined text-emerald-500">trending_down</span>
+</div>
+<div>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium">最低记录</p>
+<p class="text-sm text-slate-400">10月05日</p>
+</div>
+</div>
+<p class="text-xl font-bold text-slate-900 dark:text-slate-100">12</p>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-background-dark/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-6 pb-6 pt-2 z-20">
+<div class="flex justify-between items-center max-w-md mx-auto">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">首页</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary active-nav" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+<span class="text-[10px] font-medium">洞察</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">exercise</span>
+<span class="text-[10px] font-medium">练习</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">我的</span>
+</a>
+</div>
+</nav>
+</body></html>

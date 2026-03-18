@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "system-ui", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-bar { transition: height 0.3s ease; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full max-w-md mx-auto flex-col bg-white dark:bg-slate-900 shadow-xl overflow-x-hidden">
+<!-- Header -->
+<header class="flex items-center bg-white dark:bg-slate-900 p-4 sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
+<button class="text-slate-900 dark:text-slate-100 flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight flex-1 text-center">压力详情</h2>
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">
+<span class="material-symbols-outlined text-slate-900 dark:text-slate-100">more_horiz</span>
+</button>
+</header>
+<!-- Navigation Segmented Control -->
+<div class="flex px-4 py-4 bg-white dark:bg-slate-900">
+<div class="flex h-11 flex-1 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 text-slate-500 dark:text-slate-400 text-sm font-medium">
+<span>日</span>
+<input class="hidden" name="timeframe" type="radio" value="日"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 text-slate-500 dark:text-slate-400 text-sm font-medium">
+<span>周</span>
+<input class="hidden" name="timeframe" type="radio" value="周"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 text-slate-500 dark:text-slate-400 text-sm font-medium">
+<span>月</span>
+<input class="hidden" name="timeframe" type="radio" value="月"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 bg-white dark:bg-slate-700 shadow-sm text-primary font-bold text-sm">
+<span>年</span>
+<input checked="" class="hidden" name="timeframe" type="radio" value="年"/>
+</label>
+</div>
+</div>
+<!-- Yearly Stats Cards -->
+<div class="flex gap-4 p-4">
+<div class="flex flex-1 flex-col gap-2 rounded-xl p-5 border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800/50">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">年度平均值</p>
+<div class="flex items-baseline gap-1">
+<p class="text-slate-900 dark:text-slate-100 text-2xl font-bold">40</p>
+<p class="text-emerald-500 text-sm font-bold">(良好)</p>
+</div>
+</div>
+<div class="flex flex-1 flex-col gap-2 rounded-xl p-5 border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800/50">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">高压月份</p>
+<p class="text-slate-900 dark:text-slate-100 text-2xl font-bold">7月</p>
+</div>
+</div>
+<!-- Yearly Trend Chart -->
+<div class="px-4 py-2">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold mb-4">年度压力趋势</h3>
+<div class="bg-white dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800 rounded-xl p-4">
+<div class="flex items-end justify-between h-40 gap-1">
+<!-- Bars -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 45%;"></div>
+<span class="text-[10px] text-slate-400">1月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 38%;"></div>
+<span class="text-[10px] text-slate-400">2月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 52%;"></div>
+<span class="text-[10px] text-slate-400">3月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 48%;"></div>
+<span class="text-[10px] text-slate-400">4月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 60%;"></div>
+<span class="text-[10px] text-slate-400">5月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 75%;"></div>
+<span class="text-[10px] text-slate-400">6月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary rounded-t-sm chart-bar" style="height: 90%;"></div>
+<span class="text-[10px] text-primary font-bold">7月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 65%;"></div>
+<span class="text-[10px] text-slate-400">8月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 50%;"></div>
+<span class="text-[10px] text-slate-400">9月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 42%;"></div>
+<span class="text-[10px] text-slate-400">10月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 35%;"></div>
+<span class="text-[10px] text-slate-400">11月</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 30%;"></div>
+<span class="text-[10px] text-slate-400">12月</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Yearly Milestone Section -->
+<div class="px-4 py-6">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold mb-4">年度里程碑</h3>
+<div class="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary to-blue-600 p-6 text-white shadow-lg">
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-white/90">workspace_premium</span>
+<span class="text-sm font-semibold text-white/90">管理成效卓越</span>
+</div>
+<p class="text-lg font-bold mb-2">今年你成功应对了 85% 的高压时刻</p>
+<p class="text-sm text-white/80 leading-relaxed">
+                        相比去年，你的平均压力水平下降了 12%。在 7 月份的高峰期，你通过坚持每日冥想有效地控制了焦虑情绪，展现了极强的心理韧性。
+                    </p>
+</div>
+<!-- Abstract background pattern -->
+<div class="absolute top-0 right-0 -mr-8 -mt-8 size-32 rounded-full bg-white/10 blur-2xl"></div>
+<div class="absolute bottom-0 left-0 -ml-8 -mb-8 size-24 rounded-full bg-white/10 blur-xl"></div>
+</div>
+</div>
+<!-- Long-term Advice Section -->
+<div class="px-4 pb-24">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold mb-4">长期健康建议</h3>
+<div class="space-y-3">
+<div class="flex items-start gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+<div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+<span class="material-symbols-outlined">calendar_month</span>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 dark:text-slate-100">季节性压力预警</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 mt-1">根据往年数据，建议在 6 月份提前安排休假，以应对即将到来的 7 月高压期。</p>
+</div>
+</div>
+<div class="flex items-start gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+<div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+<span class="material-symbols-outlined">self_care</span>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 dark:text-slate-100">建立应对机制</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 mt-1">在压力开始上升时，尝试深呼吸练习。即使每天只需 5 分钟，也能显著改善您的年度压力基准。</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Nav Bar -->
+<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md flex border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-6 pt-3">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">首页</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-[1]">bar_chart</span>
+<span class="text-[10px] font-bold">洞察</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">exercise</span>
+<span class="text-[10px] font-medium">练习</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">我的</span>
+</a>
+</nav>
+</div>
+</body></html>

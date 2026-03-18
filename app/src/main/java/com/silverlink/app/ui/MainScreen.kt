@@ -77,6 +77,14 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
     var showEmergencyContacts by remember { mutableStateOf(false) }
     var moodAnalysisPeriod by remember { mutableStateOf<String?>(null) }
     var showMedicationHistory by remember { mutableStateOf(false) }
+    var showHeartRateDetail by remember { mutableStateOf(false) }
+    var showActivityDetail by remember { mutableStateOf(false) }
+    var showSleepDetail by remember { mutableStateOf(false) }
+    var showBloodPressureDetail by remember { mutableStateOf(false) }
+    var showBloodOxygenDetail by remember { mutableStateOf(false) }
+    var showStressDetail by remember { mutableStateOf(false) }
+    var showWeightDetail by remember { mutableStateOf(false) }
+    var showFullReport by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -251,10 +259,50 @@ private fun ElderMainScreen(modifier: Modifier = Modifier) {
                         com.silverlink.app.ui.history.MedicationHistoryScreen(
                             onNavigateBack = { showMedicationHistory = false }
                         )
+                    } else if (showHeartRateDetail) {
+                        com.silverlink.app.ui.history.HeartRateDetailScreen(
+                            onNavigateBack = { showHeartRateDetail = false }
+                        )
+                    } else if (showActivityDetail) {
+                        com.silverlink.app.ui.history.ActivityDetailScreen(
+                            onNavigateBack = { showActivityDetail = false }
+                        )
+                    } else if (showSleepDetail) {
+                        com.silverlink.app.ui.history.SleepDetailScreen(
+                            onNavigateBack = { showSleepDetail = false }
+                        )
+                    } else if (showBloodPressureDetail) {
+                        com.silverlink.app.ui.history.BloodPressureDetailScreen(
+                            onNavigateBack = { showBloodPressureDetail = false }
+                        )
+                    } else if (showBloodOxygenDetail) {
+                        com.silverlink.app.ui.history.BloodOxygenDetailScreen(
+                            onNavigateBack = { showBloodOxygenDetail = false }
+                        )
+                    } else if (showStressDetail) {
+                        com.silverlink.app.ui.history.StressDetailScreen(
+                            onNavigateBack = { showStressDetail = false }
+                        )
+                    } else if (showWeightDetail) {
+                        com.silverlink.app.ui.history.WeightDetailScreen(
+                            onNavigateBack = { showWeightDetail = false }
+                        )
+                    } else if (showFullReport) {
+                        com.silverlink.app.ui.history.FullReportScreen(
+                            onNavigateBack = { showFullReport = false }
+                        )
                     } else {
                         HistoryScreen(
                             onNavigateToMedicationHistory = { showMedicationHistory = true },
-                            onNavigateToMoodAnalysis = { moodAnalysisPeriod = "day" }
+                            onNavigateToMoodAnalysis = { moodAnalysisPeriod = "day" },
+                            onNavigateToHeartRateDetail = { showHeartRateDetail = true },
+                            onNavigateToActivityDetail = { showActivityDetail = true },
+                            onNavigateToSleepDetail = { showSleepDetail = true },
+                            onNavigateToBloodPressureDetail = { showBloodPressureDetail = true },
+                            onNavigateToBloodOxygenDetail = { showBloodOxygenDetail = true },
+                            onNavigateToStressDetail = { showStressDetail = true },
+                            onNavigateToWeightDetail = { showWeightDetail = true },
+                            onNavigateToFullReport = { showFullReport = true }
                         )
                     }
                 }

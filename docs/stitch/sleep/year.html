@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-gradient {
+            background: linear-gradient(180deg, rgba(0,123,255,0.2) 0%, rgba(0,123,255,0) 100%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-md mx-auto bg-white dark:bg-slate-900 min-h-screen flex flex-col shadow-xl">
+<!-- Header -->
+<div class="flex items-center p-4 justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-10">
+<div class="text-slate-900 dark:text-white flex size-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-tight flex-1 text-center">睡眠分析</h2>
+<div class="flex size-10 items-center justify-end">
+<button class="flex items-center justify-center rounded-full text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined">share</span>
+</button>
+</div>
+</div>
+<!-- Tabs -->
+<div class="px-4">
+<div class="flex border-b border-slate-100 dark:border-slate-800 justify-between">
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-400 pb-3 pt-2 flex-1 hover:text-primary transition-colors" href="#">
+<p class="text-sm font-bold">日</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-400 pb-3 pt-2 flex-1 hover:text-primary transition-colors" href="#">
+<p class="text-sm font-bold">周</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-400 pb-3 pt-2 flex-1 hover:text-primary transition-colors" href="#">
+<p class="text-sm font-bold">月</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-primary text-primary pb-3 pt-2 flex-1" href="#">
+<p class="text-sm font-bold">年</p>
+</a>
+</div>
+</div>
+<!-- Content Area -->
+<div class="flex-1 overflow-y-auto pb-24">
+<!-- Summary Cards -->
+<div class="grid grid-cols-2 gap-3 p-4">
+<div class="flex flex-col gap-2 rounded-xl p-5 border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">年度平均时长</p>
+<p class="text-slate-900 dark:text-white text-xl font-bold">7小时 20分</p>
+<div class="flex items-center gap-1 text-emerald-600 text-sm font-bold">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span>+5%</span>
+</div>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-5 border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">年度总评分</p>
+<p class="text-slate-900 dark:text-white text-xl font-bold">85分</p>
+<div class="flex items-center gap-1 text-rose-600 text-sm font-bold">
+<span class="material-symbols-outlined text-sm">trending_down</span>
+<span>-2%</span>
+</div>
+</div>
+</div>
+<!-- Chart Section -->
+<div class="px-4 py-2">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-slate-900 dark:text-white text-base font-bold">年度睡眠趋势 (2023)</h3>
+<span class="text-xs text-slate-400">平均 7.2h</span>
+</div>
+<div class="relative h-48 w-full bg-slate-50 dark:bg-slate-800/30 rounded-xl overflow-hidden p-4 flex items-end justify-between gap-1">
+<!-- Simple Bar Chart Mockup -->
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 60%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 45%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 70%"></div>
+<div class="bg-primary/40 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 85%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 65%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 50%"></div>
+<div class="bg-primary w-full rounded-t-sm transition-all" style="height: 90%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 75%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 60%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 80%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 55%"></div>
+<div class="bg-primary/20 w-full rounded-t-sm transition-all hover:bg-primary" style="height: 65%"></div>
+</div>
+<div class="flex justify-between px-1 mt-2">
+<span class="text-[10px] text-slate-400">1月</span>
+<span class="text-[10px] text-slate-400">4月</span>
+<span class="text-[10px] text-slate-900 dark:text-white font-bold">7月</span>
+<span class="text-[10px] text-slate-400">10月</span>
+<span class="text-[10px] text-slate-400">12月</span>
+</div>
+</div>
+<!-- Achievement Section -->
+<div class="px-4 py-4">
+<h3 class="text-slate-900 dark:text-white text-base font-bold mb-3">年度成就</h3>
+<div class="bg-primary/5 dark:bg-primary/10 rounded-xl p-4 flex items-center gap-4 border border-primary/10">
+<div class="bg-primary/20 p-3 rounded-full text-primary">
+<span class="material-symbols-outlined">workspace_premium</span>
+</div>
+<div>
+<p class="text-slate-900 dark:text-white font-bold">睡眠最规律的月份</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm">7月份表现最佳，平均就寝时间波动仅 15 分钟。</p>
+</div>
+</div>
+</div>
+<!-- Health Insights -->
+<div class="px-4 py-2">
+<h3 class="text-slate-900 dark:text-white text-base font-bold mb-3">年度健康洞察</h3>
+<div class="space-y-3">
+<div class="flex gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+<span class="material-symbols-outlined text-primary">lightbulb</span>
+<div>
+<p class="text-sm font-bold mb-1">季节性影响</p>
+<p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">您的冬、夏季睡眠时长差异明显。建议在冬季增加 30 分钟的日照时间以稳定生物钟。</p>
+</div>
+</div>
+<div class="flex gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+<span class="material-symbols-outlined text-amber-500">warning</span>
+<div>
+<p class="text-sm font-bold mb-1">周末补偿性睡眠</p>
+<p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">数据显示您在 2023 年存在较明显的“社交时差”，周末平均比工作日多睡 2.5 小时。</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation -->
+<div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 pb-6 pt-2 px-6 flex justify-between items-center z-20">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="text-[10px] font-medium">记录</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">bar_chart</span>
+<span class="text-[10px] font-medium">分析</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">explore</span>
+<span class="text-[10px] font-medium">发现</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">我的</span>
+</a>
+</div>
+</div>
+</body></html>

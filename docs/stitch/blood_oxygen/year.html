@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>血氧详情 - 年视图</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .chart-bar { transition: height 0.3s ease; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<header class="sticky top-0 z-50 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center justify-between px-4 h-16">
+<button class="flex items-center justify-center size-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold tracking-tight">血氧详情</h1>
+<button class="flex items-center justify-center size-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined">share</span>
+</button>
+</div>
+<nav class="flex px-4">
+<a class="flex-1 py-3 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 border-b-2 border-transparent" href="#">日</a>
+<a class="flex-1 py-3 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 border-b-2 border-transparent" href="#">周</a>
+<a class="flex-1 py-3 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 border-b-2 border-transparent" href="#">月</a>
+<a class="flex-1 py-3 text-center text-sm font-semibold text-primary border-b-2 border-primary" href="#">年</a>
+</nav>
+</header>
+<main class="flex-1 overflow-y-auto pb-24">
+<div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">2023 平均血氧</p>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-bold">98%</span>
+<span class="text-xs font-bold text-emerald-500 flex items-center">
+<span class="material-symbols-outlined text-sm">trending_up</span>+0.5%
+                    </span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">最低纪录月份</p>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-bold">11月 (94%)</span>
+<span class="text-xs font-bold text-rose-500 flex items-center">
+<span class="material-symbols-outlined text-sm">trending_down</span>-2.0%
+                    </span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">年度健康状态</p>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">良好</span>
+<span class="text-xs font-medium text-slate-400">稳定</span>
+</div>
+</div>
+</div>
+<section class="px-4 py-2">
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+<h3 class="text-base font-bold mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">bar_chart</span>
+                    年度血氧趋势 (1月 - 12月)
+                </h3>
+<div class="h-48 flex items-end justify-between gap-1 mt-4">
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 96%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">1月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 98%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">2月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 97%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">3月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 95%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">4月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 98%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">5月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 99%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">6月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 97%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">7月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 96%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">8月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 98%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">9月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 97%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">10月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/60 rounded-t-sm chart-bar" style="height: 94%;"></div>
+<span class="text-[10px] mt-2 text-slate-900 font-bold">11月</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-primary/20 rounded-t-sm chart-bar" style="height: 97%;"></div>
+<span class="text-[10px] mt-2 text-slate-400">12月</span>
+</div>
+</div>
+</div>
+</section>
+<section class="px-4 py-4">
+<h3 class="text-lg font-bold mb-3">年度里程碑</h3>
+<div class="space-y-3">
+<div class="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+<div class="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined">verified</span>
+</div>
+<div>
+<p class="font-bold text-sm">全年血氧水平稳定</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">您的年度平均血氧饱和度维持在 98%，属于优秀水平。这表明您的心肺功能在过去一年中表现非常稳定。</p>
+</div>
+</div>
+<div class="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+<div class="size-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 shrink-0">
+<span class="material-symbols-outlined">warning</span>
+</div>
+<div>
+<p class="font-bold text-sm">11月季节性波动</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">在11月观察到轻微下降（94%），可能与当时气温骤降或呼吸道状况有关。建议在寒冷季节注意保暖。</p>
+</div>
+</div>
+</div>
+</section>
+<section class="px-4 py-4 mb-4">
+<div class="bg-primary/5 dark:bg-primary/10 rounded-xl p-5 border border-primary/20">
+<h3 class="text-base font-bold text-primary mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined">lightbulb</span>
+                    长期洞察
+                </h3>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    根据过去12个月的数据分析，您的血氧在白天活动期间表现优异。在睡眠期间偶有轻微波动，这在正常成年人中属于常见现象。建议在下一年继续保持规律的户外有氧运动，以增强血液携氧能力。
+                </p>
+<button class="mt-4 text-primary text-sm font-bold flex items-center">
+                    查看完整年度健康报告
+                    <span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</section>
+</main>
+<footer class="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 safe-area-bottom">
+<div class="flex justify-around items-center py-2">
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-1">favorite</span>
+<span class="text-[10px] font-medium">健康</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">monitoring</span>
+<span class="text-[10px] font-medium">运动</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">explore</span>
+<span class="text-[10px] font-medium">发现</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">我的</span>
+</a>
+</div>
+</footer>
+</body></html>

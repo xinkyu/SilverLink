@@ -104,36 +104,11 @@ fun MedicationHistoryScreen(
                 .background(Color.White)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Segmented Control
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .background(Color(0xFFF1F5F9), RoundedCornerShape(50))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                val tabs = listOf(TimeRange.DAY to "日", TimeRange.WEEK to "周", TimeRange.MONTH to "月", TimeRange.YEAR to "年")
-                tabs.forEach { (range, tabName) ->
-                    val isSelected = selectedRange == range
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(50))
-                            .background(if (isSelected) Color.White else Color.Transparent)
-                            .clickable { viewModel.setTimeRange(range) }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = tabName,
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) Color(0xFF0F1923) else Color(0xFF64748B)
-                        )
-                    }
-                }
-            }
+            com.silverlink.app.ui.components.RangeTabs(
+                selectedRange = selectedRange,
+                onRangeSelected = { viewModel.setTimeRange(it) },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            )
 
             when (selectedRange) {
                 TimeRange.DAY -> DailyView(selectedDate, currentDateText, viewModel, medicationStatuses, medicationSummary)

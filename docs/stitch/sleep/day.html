@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sleep Insights - HealthTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .pie-segment-deep { stroke: #007bff; }
+        .pie-segment-light { stroke: #66b2ff; }
+        .pie-segment-rem { stroke: #b2d8ff; }
+        .pie-segment-awake { stroke: #e0e0e0; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-white dark:bg-slate-900 shadow-xl overflow-x-hidden">
+<!-- Header -->
+<div class="flex items-center bg-white dark:bg-slate-900 p-4 pb-2 justify-between sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
+<div class="text-slate-900 dark:text-slate-100 flex size-12 shrink-0 items-center justify-start">
+<span class="material-symbols-outlined cursor-pointer">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center">Sleep Analysis</h2>
+<div class="flex w-12 items-center justify-end">
+<button class="flex cursor-pointer items-center justify-center rounded-xl h-12 bg-transparent text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined">calendar_today</span>
+</button>
+</div>
+</div>
+<!-- Segmented Control -->
+<div class="px-4 py-3">
+<div class="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-full">
+<button class="flex-1 py-2 text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-700 rounded-full shadow-sm">日</button>
+<button class="flex-1 py-2 text-sm font-medium text-slate-500 dark:text-slate-400">周</button>
+<button class="flex-1 py-2 text-sm font-medium text-slate-500 dark:text-slate-400">月</button>
+<button class="flex-1 py-2 text-sm font-medium text-slate-500 dark:text-slate-400">年</button>
+</div>
+</div>
+<!-- Main Content -->
+<div class="flex flex-col p-4 gap-6 pb-24 pt-2">
+<!-- Summary Stats -->
+<div class="flex flex-col items-center py-6 bg-primary/5 dark:bg-primary/10 rounded-xl">
+<span class="material-symbols-outlined text-primary text-4xl mb-2">dark_mode</span>
+<h1 class="text-slate-900 dark:text-slate-100 tracking-tight text-4xl font-bold leading-tight">7h 45m</h1>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1">Total Duration (Last Night)</p>
+<div class="flex gap-4 mt-4">
+<div class="flex flex-col items-center">
+<span class="text-xs text-slate-400 uppercase font-bold">Efficiency</span>
+<span class="text-primary font-bold">92%</span>
+</div>
+<div class="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
+<div class="flex flex-col items-center">
+<span class="text-xs text-slate-400 uppercase font-bold">Debt</span>
+<span class="text-red-500 font-bold">-15m</span>
+</div>
+</div>
+</div>
+<!-- Sleep Stages Chart -->
+<div class="flex flex-col gap-4">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold">Sleep Stages</h3>
+<div class="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl">
+<!-- Circular Progress/Pie representation using SVG -->
+<div class="relative flex items-center justify-center">
+<svg class="w-32 h-32 transform -rotate-90">
+<!-- Background Circle -->
+<circle class="text-slate-200 dark:text-slate-700" cx="64" cy="64" fill="transparent" r="54" stroke="currentColor" stroke-width="12"></circle>
+<!-- Deep Sleep (25%) -->
+<circle class="pie-segment-deep" cx="64" cy="64" fill="transparent" r="54" stroke-dasharray="339" stroke-dashoffset="254" stroke-linecap="round" stroke-width="12"></circle>
+<!-- Light Sleep (50%) - conceptual offset -->
+<circle class="pie-segment-light" cx="64" cy="64" fill="transparent" r="54" stroke-dasharray="339" stroke-dashoffset="169" stroke-linecap="round" stroke-width="12" style="transform: rotate(90deg); transform-origin: center;"></circle>
+<!-- REM (20%) -->
+<circle class="pie-segment-rem" cx="64" cy="64" fill="transparent" r="54" stroke-dasharray="339" stroke-dashoffset="271" stroke-linecap="round" stroke-width="12" style="transform: rotate(270deg); transform-origin: center;"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-2xl font-bold text-slate-900 dark:text-slate-100">88</span>
+<span class="text-[10px] text-slate-400 uppercase font-bold">Score</span>
+</div>
+</div>
+<div class="flex flex-col gap-2 flex-1 ml-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="size-3 rounded-full bg-primary"></div>
+<span class="text-sm font-medium">Deep</span>
+</div>
+<span class="text-sm text-slate-500">1h 56m</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="size-3 rounded-full bg-[#66b2ff]"></div>
+<span class="text-sm font-medium">Light</span>
+</div>
+<span class="text-sm text-slate-500">3h 52m</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="size-3 rounded-full bg-[#b2d8ff]"></div>
+<span class="text-sm font-medium">REM</span>
+</div>
+<span class="text-sm text-slate-500">1h 33m</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="size-3 rounded-full bg-slate-200"></div>
+<span class="text-sm font-medium">Awake</span>
+</div>
+<span class="text-sm text-slate-500">24m</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Quality Score History -->
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold">Sleep Score History</h3>
+<span class="text-xs text-primary font-bold cursor-pointer">Last 7 Days</span>
+</div>
+<div class="flex items-end justify-between h-32 px-2 pb-4 pt-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+<div class="flex flex-col items-center gap-2 flex-1">
+<div class="w-full max-w-[12px] bg-slate-200 dark:bg-slate-700 rounded-t-full" style="height: 70%;"></div>
+<span class="text-[10px] font-bold text-slate-400">Mon</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1">
+<div class="w-full max-w-[12px] bg-slate-200 dark:bg-slate-700 rounded-t-full" style="height: 85%;"></div>
+<span class="text-[10px] font-bold text-slate-400">Tue</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1">
+<div class="w-full max-w-[12px] bg-slate-200 dark:bg-slate-700 rounded-t-full" style="height: 60%;"></div>
+<span class="text-[10px] font-bold text-slate-400">Wed</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1">
+<div class="w-full max-w-[12px] bg-primary rounded-t-full" style="height: 90%;"></div>
+<span class="text-[10px] font-bold text-primary">Thu</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1">
+<div class="w-full max-w-[12px] bg-slate-200 dark:bg-slate-700 rounded-t-full" style="height: 75%;"></div>
+<span class="text-[10px] font-bold text-slate-400">Fri</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1">
+<div class="w-full max-w-[12px] bg-slate-200 dark:bg-slate-700 rounded-t-full" style="height: 40%;"></div>
+<span class="text-[10px] font-bold text-slate-400">Sat</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1">
+<div class="w-full max-w-[12px] bg-slate-200 dark:bg-slate-700 rounded-t-full" style="height: 80%;"></div>
+<span class="text-[10px] font-bold text-slate-400">Sun</span>
+</div>
+</div>
+</div>
+<!-- Insights Card -->
+<div class="bg-primary/10 border border-primary/20 p-4 rounded-xl flex gap-3">
+<span class="material-symbols-outlined text-primary">lightbulb</span>
+<div class="flex flex-col gap-1">
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100">Consistency is Key</p>
+<p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                        You went to bed 30 minutes later than your average. Try setting a wind-down alarm for 10:00 PM tonight.
+                    </p>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation Bar -->
+<div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md flex border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4 pt-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">home</span>
+<p class="text-[10px] font-medium leading-normal tracking-tight">Home</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bedtime</span>
+<p class="text-[10px] font-medium leading-normal tracking-tight">Sleep</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">monitoring</span>
+<p class="text-[10px] font-medium leading-normal tracking-tight">Activity</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">person</span>
+<p class="text-[10px] font-medium leading-normal tracking-tight">Profile</p>
+</a>
+</div>
+</div>
+</body></html>

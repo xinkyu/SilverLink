@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007bff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<title>Health Metrics - Blood Oxygen</title>
+<style>
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-md mx-auto bg-white dark:bg-slate-900 min-h-screen flex flex-col shadow-xl">
+<!-- Header -->
+<header class="flex items-center justify-between p-4 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-10">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold tracking-tight">Blood Oxygen (血氧)</h1>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">share</span>
+</button>
+</header>
+<main class="flex-1 px-4 pb-24">
+<!-- Time Segmented Control -->
+<section class="mt-2 mb-4">
+<div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-full flex items-center">
+<button class="flex-1 py-2 text-sm font-bold bg-white dark:bg-slate-700 shadow-sm rounded-full text-slate-900 dark:text-white transition-all">日</button>
+<button class="flex-1 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">周</button>
+<button class="flex-1 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">月</button>
+<button class="flex-1 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">年</button>
+</div>
+</section>
+<!-- Hero Card: Latest SpO2 -->
+<section class="mt-4">
+<div class="bg-primary/10 dark:bg-primary/20 rounded-xl p-6 border border-primary/20">
+<div class="flex justify-between items-start mb-2">
+<p class="text-primary font-semibold text-sm uppercase tracking-wider">Latest SpO2</p>
+<span class="material-symbols-outlined text-primary">blood_pressure</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-5xl font-bold text-slate-900 dark:text-white">98</span>
+<span class="text-2xl font-medium text-slate-500">%</span>
+</div>
+<div class="mt-4 flex items-center gap-2">
+<div class="flex items-center text-emerald-600 dark:text-emerald-400 text-sm font-bold bg-emerald-100 dark:bg-emerald-900/30 px-2 py-1 rounded-full">
+<span class="material-symbols-outlined text-sm mr-1">trending_up</span>
+                            +1%
+                        </div>
+<span class="text-slate-500 dark:text-slate-400 text-sm">Measured 12 mins ago</span>
+</div>
+</div>
+</section>
+<!-- Status Indicator Section -->
+<section class="mt-6 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-500/20"></div>
+<div>
+<p class="font-bold text-slate-900 dark:text-white">Normal Status</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Oxygen levels are within range</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-400">info</span>
+</section>
+<!-- Chart Section: Sleep Oxygen Stability -->
+<section class="mt-8">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-lg font-bold">Sleep Oxygen Stability</h3>
+<div class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Last Night
+                    </div>
+</div>
+<div class="bg-white dark:bg-slate-800/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+<div class="mb-6">
+<p class="text-slate-500 dark:text-slate-400 text-sm">Average stability</p>
+<p class="text-3xl font-bold text-slate-900 dark:text-white">Avg 96%</p>
+</div>
+<!-- SVG Chart -->
+<div class="relative h-48 w-full">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 400 150">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#007bff" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#007bff" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<!-- Background area -->
+<path d="M0,100 Q50,80 100,90 T200,60 T300,110 T400,80 V150 H0 Z" fill="url(#chartGradient)"></path>
+<!-- Line -->
+<path d="M0,100 Q50,80 100,90 T200,60 T300,110 T400,80" fill="none" stroke="#007bff" stroke-linecap="round" stroke-width="3"></path>
+<!-- Reference points -->
+<circle cx="200" cy="60" fill="#007bff" r="4"></circle>
+<circle cx="100" cy="90" fill="#007bff" r="4"></circle>
+</svg>
+<!-- Timeline labels -->
+<div class="flex justify-between mt-4">
+<span class="text-[10px] font-bold text-slate-400">22:00</span>
+<span class="text-[10px] font-bold text-slate-400">00:00</span>
+<span class="text-[10px] font-bold text-slate-400">02:00</span>
+<span class="text-[10px] font-bold text-slate-400">04:00</span>
+<span class="text-[10px] font-bold text-slate-400">06:00</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Insight Section -->
+<section class="mt-8 grid grid-cols-2 gap-4">
+<div class="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
+<p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Lowest SpO2</p>
+<p class="text-xl font-bold text-slate-900 dark:text-white">92%</p>
+</div>
+<div class="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
+<p class="text-xs text-slate-500 dark:text-slate-400 mb-1">Respiration Rate</p>
+<p class="text-xl font-bold text-slate-900 dark:text-white">14 brpm</p>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-100 dark:border-slate-800 px-6 py-3 flex justify-between items-center z-20">
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-1">monitor_heart</span>
+<span class="text-[10px] font-bold">Summary</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-bold">Sharing</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">explore</span>
+<span class="text-[10px] font-bold">Browse</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="text-[10px] font-bold">Profile</span>
+</a>
+</nav>
+</div>
+</body></html>

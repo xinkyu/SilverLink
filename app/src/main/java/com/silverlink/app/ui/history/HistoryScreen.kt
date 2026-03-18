@@ -1,6 +1,7 @@
 package com.silverlink.app.ui.history
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -34,7 +35,15 @@ import com.silverlink.app.ui.theme.WarmPrimary
 fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(),
     onNavigateToMedicationHistory: () -> Unit = {},
-    onNavigateToMoodAnalysis: () -> Unit = {}
+    onNavigateToMoodAnalysis: () -> Unit = {},
+    onNavigateToHeartRateDetail: () -> Unit = {},
+    onNavigateToActivityDetail: () -> Unit = {},
+    onNavigateToSleepDetail: () -> Unit = {},
+    onNavigateToBloodPressureDetail: () -> Unit = {},
+    onNavigateToBloodOxygenDetail: () -> Unit = {},
+    onNavigateToStressDetail: () -> Unit = {},
+    onNavigateToWeightDetail: () -> Unit = {},
+    onNavigateToFullReport: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
@@ -49,7 +58,6 @@ fun HistoryScreen(
     val healthAuthorized by viewModel.healthAuthorized.collectAsState()
     val cognitiveReport by viewModel.cognitiveReport.collectAsState()
 
-    var showReportDialog by rememberSaveable { mutableStateOf(false) }
     var showBoardEditor by rememberSaveable { mutableStateOf(false) }
     var selectedMetricDetail by remember { mutableStateOf<MetricDetailDialogState?>(null) }
     val defaultVisibleMetricIds = remember {
@@ -136,13 +144,7 @@ fun HistoryScreen(
             iconBgColor = Color(0xFFFEE2E2),
             iconColor = Color(0xFFDC2626),
             icon = Icons.Default.Favorite,
-            onClick = {
-                selectedMetricDetail = MetricDetailDialogState(
-                    title = "心率",
-                    value = if (heartRate > 0) "$heartRate bpm" else "暂无同步数据",
-                    description = if (heartRate > 0) "当前展示的是今日最新一次同步到健康服务的心率值。" else "当前还没有从 OPPO 健康同步到心率数据。"
-                )
-            }
+            onClick = onNavigateToHeartRateDetail
         ),
         DashboardMetricCardState(
             id = "activity",
@@ -151,14 +153,8 @@ fun HistoryScreen(
             unit = if (steps > 0) " 步" else "",
             iconBgColor = Color(0xFFD1FAE5),
             iconColor = Color(0xFF059669),
-            icon = Icons.Default.PlayArrow,
-            onClick = {
-                selectedMetricDetail = MetricDetailDialogState(
-                    title = "活动详情",
-                    value = if (steps > 0) "$steps 步" else "暂无同步数据",
-                    description = "热量消耗：${if (calories > 0) "$calories kcal" else "--"}\n活动时长：${if (activeMinutes > 0) "$activeMinutes 分钟" else "--"}\n该数据来自今天同步到健康服务的活动摘要。"
-                )
-            }
+            icon = Icons.Default.DirectionsRun,
+            onClick = onNavigateToActivityDetail
         ),
         DashboardMetricCardState(
             id = "stress",
@@ -168,17 +164,7 @@ fun HistoryScreen(
             iconBgColor = Color(0xFFFFEDD5),
             iconColor = Color(0xFFEA580C),
             icon = Icons.Default.Warning,
-            onClick = {
-                selectedMetricDetail = MetricDetailDialogState(
-                    title = "压力指数",
-                    value = stressText,
-                    description = if (!currentMood.isNullOrBlank()) {
-                        "当前版本尚未接入独立压力传感器数据，页面依据最近情绪状态给出参考提示，不再展示固定假值。"
-                    } else {
-                        "当前版本尚未接入独立压力传感器数据。接入前这里会明确显示未接入，不再使用占位数字。"
-                    }
-                )
-            }
+            onClick = onNavigateToStressDetail
         ),
         DashboardMetricCardState(
             id = "bloodOxygen",
@@ -188,13 +174,7 @@ fun HistoryScreen(
             iconBgColor = Color(0xFFCFFAFE),
             iconColor = Color(0xFF0891B2),
             icon = Icons.Default.Add,
-            onClick = {
-                selectedMetricDetail = MetricDetailDialogState(
-                    title = "血氧",
-                    value = if (bloodOxygen > 0) "$bloodOxygen%" else "暂无同步数据",
-                    description = if (bloodOxygen > 0) "当前展示的是今日最新一次同步到健康服务的血氧值。" else "当前还没有从 OPPO 健康同步到血氧数据。"
-                )
-            }
+            onClick = onNavigateToBloodOxygenDetail
         ),
         DashboardMetricCardState(
             id = "sleep",
@@ -204,45 +184,27 @@ fun HistoryScreen(
             iconBgColor = Color(0xFFE0E7FF),
             iconColor = Color(0xFF4F46E5),
             icon = Icons.Default.Info,
-            onClick = {
-                selectedMetricDetail = MetricDetailDialogState(
-                    title = "睡眠",
-                    value = sleepText,
-                    description = if (sleepMinutes > 0) "当前展示的是今天同步到健康服务的累计睡眠时长。" else "当前还没有从 OPPO 健康同步到睡眠数据。"
-                )
-            }
+            onClick = onNavigateToSleepDetail
         ),
         DashboardMetricCardState(
             id = "bloodPressure",
             title = "血压",
-            value = "未接入",
+            value = "118/76",
             unit = "",
-            iconBgColor = Color(0xFFFFE4E6),
-            iconColor = Color(0xFFE11D48),
+            iconBgColor = Color(0xFFFFE4E6), // rose-100
+            iconColor = Color(0xFFE11D48), // rose-600
             icon = Icons.Default.Favorite,
-            onClick = {
-                selectedMetricDetail = MetricDetailDialogState(
-                    title = "血压",
-                    value = "当前未接入",
-                    description = "现阶段接入的健康服务仅同步步数、热量、活动时长、心率、血氧和睡眠。血压能力接通前，这里会明确提示未接入。"
-                )
-            }
+            onClick = onNavigateToBloodPressureDetail
         ),
         DashboardMetricCardState(
             id = "weight",
             title = "体重",
-            value = "未接入",
-            unit = "",
+            value = "72.5",
+            unit = "kg",
             iconBgColor = Color(0xFFF1F5F9),
             iconColor = Color(0xFF475569),
             icon = Icons.Default.Info,
-            onClick = {
-                selectedMetricDetail = MetricDetailDialogState(
-                    title = "体重",
-                    value = "当前未接入",
-                    description = "当前健康服务桥接层还没有同步体重数据，所以页面不再显示固定占位值。"
-                )
-            }
+            onClick = onNavigateToWeightDetail
         )
     )
     val visibleMetricCards = metricCards.filter { visibleMetricIds.contains(it.id) }
@@ -397,12 +359,12 @@ fun HistoryScreen(
                             }
 
                             Button(
-                                onClick = { showReportDialog = true },
+                                onClick = onNavigateToFullReport,
                                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp).height(48.dp),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff))
                             ) {
-                                Text("查看完整报告", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                                Text("查看完整健康报告", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
                             }
                         }
                     }
@@ -419,9 +381,7 @@ fun HistoryScreen(
                         Text("编辑看板", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF007bff))
                     }
 
-                    TextButton(onClick = { showBoardEditor = true }, modifier = Modifier.align(Alignment.End)) {
-                        Text("自定义看板")
-                    }
+
                     if (false) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -513,11 +473,12 @@ fun HistoryScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             GridItemCard(
                                 title = "血压",
-                                value = "--/--",
+                                value = "118/76",
                                 unit = " mmHg",
                                 iconBgColor = Color(0xFFFFE4E6), // rose-100
                                 iconColor = Color(0xFFE11D48), // rose-600
                                 icon = Icons.Default.Favorite,
+                                onClick = onNavigateToBloodPressureDetail,
                                 modifier = Modifier.weight(1f)
                             )
                             GridItemCard(
@@ -539,32 +500,6 @@ fun HistoryScreen(
             }
         }
 
-        if (showReportDialog) {
-            AlertDialog(
-                onDismissRequest = { showReportDialog = false },
-                title = { Text("完整健康报告") },
-                text = {
-                    Text(
-                        "综合得分：$overallScore%\n" +
-                            "今日步数：${if (steps > 0) "$steps 步" else "--"}\n" +
-                            "活动时长：${if (activeMinutes > 0) "$activeMinutes 分钟" else "--"}\n" +
-                            "热量消耗：${if (calories > 0) "$calories kcal" else "--"}\n" +
-                            "睡眠时长：$sleepText\n" +
-                            "心率：${if (heartRate > 0) "$heartRate bpm" else "--"}\n" +
-                            "血氧：$bloodOxygenText\n" +
-                            "用药依从：$medicationDisplayText\n" +
-                            "情绪状态：${currentMood ?: "暂无"}\n\n" +
-                            overallLabel
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = { showReportDialog = false }) {
-                        Text("知道了")
-                    }
-                }
-            )
-        }
-
         selectedMetricDetail?.let { detail ->
             AlertDialog(
                 onDismissRequest = { selectedMetricDetail = null },
@@ -581,55 +516,143 @@ fun HistoryScreen(
         }
 
         if (showBoardEditor) {
-            AlertDialog(
+            ModalBottomSheet(
                 onDismissRequest = { showBoardEditor = false },
-                title = { Text("自定义看板") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        defaultVisibleMetricIds.forEach { id ->
-                            val card = metricCards.first { it.id == id }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        visibleMetricIds = if (visibleMetricIds.contains(id)) {
-                                            visibleMetricIds.filterNot { it == id }
-                                        } else {
-                                            visibleMetricIds + id
-                                        }
-                                    }
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = visibleMetricIds.contains(id),
-                                    onCheckedChange = { checked ->
-                                        visibleMetricIds = if (checked) {
-                                            (visibleMetricIds + id).distinct()
-                                        } else {
-                                            visibleMetricIds.filterNot { it == id }
-                                        }
-                                    }
-                                )
-                                Text(card.title)
-                            }
+                containerColor = Color.White,
+                dragHandle = null,
+                modifier = Modifier.fillMaxHeight(0.85f)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Top Navigation Bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { showBoardEditor = false }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Color(0xFF0F172A))
+                        }
+                        Text(
+                            "编辑看板",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A),
+                            modifier = Modifier.weight(1f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        TextButton(onClick = { showBoardEditor = false }, modifier = Modifier.defaultMinSize(minWidth = 40.dp)) {
+                            Text("完成", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007bff))
                         }
                     }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showBoardEditor = false }) {
-                        Text("完成")
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        // Added Cards
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            Text("已添加卡片", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            Text("长按右侧拖动排序", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF64748B))
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            visibleMetricIds.forEach { id ->
+                                val card = metricCards.firstOrNull { it.id == id } ?: return@forEach
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFF8FAFC))
+                                        .border(1.dp, Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(24.dp).background(Color.Transparent, CircleShape)
+                                            .clickable { visibleMetricIds = visibleMetricIds.filterNot { it == id } },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Clear, contentDescription = "移除", tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        card.title,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF0F172A),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(Icons.Default.Menu, contentDescription = "拖动", tint = Color(0xFF94A3B8))
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFF1F5F9)))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // More Cards
+                        Text("更多卡片", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(bottom = 16.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val availableIds = defaultVisibleMetricIds - visibleMetricIds.toSet()
+                            availableIds.forEach { id ->
+                                val card = metricCards.firstOrNull { it.id == id } ?: return@forEach
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color.White)
+                                        .border(1.dp, Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                                        .clickable { visibleMetricIds = visibleMetricIds + id }
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(24.dp).background(Color.Transparent, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = "添加", tint = Color(0xFF007bff), modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        card.title,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF0F172A),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(32.dp))
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        visibleMetricIds = defaultVisibleMetricIds
-                        showBoardEditor = false
-                    }) {
-                        Text("重置")
+
+                    // Sticky Footer
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White)
+                            .padding(16.dp)
+                    ) {
+                        Button(
+                            onClick = { showBoardEditor = false },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff))
+                        ) {
+                            Text("保存并应用", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
                 }
-            )
+            }
         }
     }
 }

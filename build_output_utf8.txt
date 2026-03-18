@@ -1,0 +1,94 @@
+﻿> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :oppo-sdk-bridge:preBuild UP-TO-DATE
+> Task :oppo-sdk-bridge:preDebugBuild UP-TO-DATE
+> Task :oppo-sdk-bridge:writeDebugAarMetadata UP-TO-DATE
+> Task :shared:preBuild UP-TO-DATE
+> Task :shared:preDebugBuild UP-TO-DATE
+> Task :shared:writeDebugAarMetadata UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :oppo-sdk-bridge:generateDebugResValues UP-TO-DATE
+> Task :oppo-sdk-bridge:generateDebugResources UP-TO-DATE
+> Task :oppo-sdk-bridge:packageDebugResources UP-TO-DATE
+> Task :shared:generateDebugResValues UP-TO-DATE
+> Task :shared:generateDebugResources UP-TO-DATE
+> Task :shared:packageDebugResources UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :oppo-sdk-bridge:extractDeepLinksDebug UP-TO-DATE
+> Task :oppo-sdk-bridge:processDebugManifest UP-TO-DATE
+> Task :shared:extractDeepLinksDebug UP-TO-DATE
+> Task :shared:processDebugManifest UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :oppo-sdk-bridge:compileDebugLibraryResources UP-TO-DATE
+> Task :oppo-sdk-bridge:parseDebugLocalResources UP-TO-DATE
+> Task :oppo-sdk-bridge:generateDebugRFile UP-TO-DATE
+> Task :shared:compileDebugLibraryResources UP-TO-DATE
+> Task :shared:parseDebugLocalResources UP-TO-DATE
+> Task :shared:generateDebugRFile UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :oppo-sdk-bridge:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:compileDebugKotlin UP-TO-DATE
+> Task :shared:javaPreCompileDebug UP-TO-DATE
+> Task :shared:compileDebugJavaWithJavac NO-SOURCE
+> Task :shared:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :oppo-sdk-bridge:compileDebugKotlin UP-TO-DATE
+> Task :oppo-sdk-bridge:javaPreCompileDebug UP-TO-DATE
+> Task :oppo-sdk-bridge:compileDebugJavaWithJavac NO-SOURCE
+> Task :oppo-sdk-bridge:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:kspDebugKotlin UP-TO-DATE
+> Task :wear:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :wear:preBuild UP-TO-DATE
+> Task :wear:preDebugBuild UP-TO-DATE
+> Task :wear:checkDebugAarMetadata UP-TO-DATE
+> Task :wear:generateDebugResValues UP-TO-DATE
+> Task :wear:mapDebugSourceSetPaths UP-TO-DATE
+> Task :wear:generateDebugResources UP-TO-DATE
+> Task :wear:mergeDebugResources UP-TO-DATE
+> Task :wear:packageDebugResources UP-TO-DATE
+> Task :wear:parseDebugLocalResources UP-TO-DATE
+> Task :wear:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :wear:extractDeepLinksDebug UP-TO-DATE
+> Task :wear:processDebugMainManifest UP-TO-DATE
+> Task :wear:processDebugManifest UP-TO-DATE
+> Task :wear:processDebugManifestForPackage UP-TO-DATE
+> Task :wear:processDebugResources UP-TO-DATE
+> Task :wear:compileDebugKotlin UP-TO-DATE
+
+> Task :app:compileDebugKotlin FAILED
+.\gradlew.bat : e: file:///E:/SilverLink/app/src/main/java/com/silverlink/app/ui/MainScreen.kt:259:25 Unresolved 
+reference 'HeartRateDetailScreen'.
+所在位置 行:1 字符: 1
++ .\gradlew.bat compileDebugKotlin > build_output.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (e: file:///E:/S...eDetailScreen'.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKo
+tlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 5s
+54 actionable tasks: 1 executed, 53 up-to-date
