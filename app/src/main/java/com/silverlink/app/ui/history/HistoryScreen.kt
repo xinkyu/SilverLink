@@ -51,6 +51,7 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(),
     onNavigateToMedicationHistory: () -> Unit = {},
     onNavigateToMoodAnalysis: () -> Unit = {},
+    onNavigateToCognitiveAssessment: (() -> Unit)? = null,
     onNavigateToHeartRateDetail: () -> Unit = {},
     onNavigateToActivityDetail: () -> Unit = {},
     onNavigateToSleepDetail: () -> Unit = {},
@@ -71,6 +72,10 @@ fun HistoryScreen(
     val healthError by viewModel.healthError.collectAsState()
     val healthAuthorized by viewModel.healthAuthorized.collectAsState()
     val cognitiveReport by viewModel.cognitiveReport.collectAsState()
+    val isPaired by viewModel.isPaired.collectAsState()
+    val isFamilyRole = viewModel.canEditHealthMetrics.not()
+    val subjectName = viewModel.subjectName
+    val canShowDashboard = !isFamilyRole || isPaired
 
     var showBoardEditor by rememberSaveable { mutableStateOf(false) }
     var showFullReport by rememberSaveable { mutableStateOf(false) }
@@ -154,13 +159,17 @@ fun HistoryScreen(
             iconColor = Color(0xFF9333EA),
             icon = HealthHistoryIcons.CognitiveAssessment,
             onClick = {
-                selectedMetricDetail = MetricDetailDialogState(
-                    title = "认知评估",
-                    value = if (cognitionText == "--") "暂无最近评估" else cognitionText,
-                    description = cognitiveReport?.let {
-                        "最近评估区间：${it.startDate} 至 ${it.endDate}\n正确题数：${it.correctAnswers}/${it.totalQuestions}\n平均响应时长：${it.averageResponseTimeMs / 1000} 秒\n趋势：${trendLabel(it.trend)}"
-                    } ?: "最近 7 天还没有同步到认知评估结果。"
-                )
+                if (onNavigateToCognitiveAssessment != null) {
+                    onNavigateToCognitiveAssessment()
+                } else {
+                    selectedMetricDetail = MetricDetailDialogState(
+                        title = "认知评估",
+                        value = if (cognitionText == "--") "暂无最近评估" else cognitionText,
+                        description = cognitiveReport?.let {
+                            "最近评估区间：${it.startDate} 至 ${it.endDate}\n正确题数：${it.correctAnswers}/${it.totalQuestions}\n平均响应时长：${it.averageResponseTimeMs / 1000} 秒\n趋势：${trendLabel(it.trend)}"
+                        } ?: "最近 7 天还没有同步到认知评估结果。"
+                    )
+                }
             }
         ),
         DashboardMetricCardState(
@@ -266,7 +275,7 @@ fun HistoryScreen(
             )
         }
     ) { innerPadding ->
-        if (showHealthPrivacyDialog) {
+        if (showHealthPrivacyDialog && !isFamilyRole) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissHealthPrivacy() },
                 title = { Text("健康服务隐私说明") },
@@ -299,7 +308,20 @@ fun HistoryScreen(
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    if (!healthAuthorized) {
+                    if (isFamilyRole && !isPaired) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("暂未配对长辈", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("请先完成配对，再查看健康记录与趋势。", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
+                        }
+                    }
+
+                    if (!isFamilyRole && !healthAuthorized) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -320,212 +342,227 @@ fun HistoryScreen(
                         }
                     }
 
-                    // Summary Card
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
-                    ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Column {
-                                    Text("今日健康摘要", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F1923))
-                                    Text("您的整体健康状况良好", fontSize = 14.sp, color = Color(0xFF64748B), modifier = Modifier.padding(top = 4.dp))
-                                }
-                                // Activity circular progress 
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp)) {
-                                    CircularProgressIndicator(
-                                        progress = { 1f },
-                                        color = Color(0xFFF1F5F9),
-                                        strokeWidth = 6.dp,
-                                        modifier = Modifier.fillMaxSize(),
-                                        trackColor = Color.Transparent,
-                                    )
-                                    CircularProgressIndicator(
-                                        progress = { (overallScore / 100f).coerceIn(0f, 1f) },
-                                        color = Color(0xFF007bff),
-                                        strokeWidth = 6.dp,
-                                        modifier = Modifier.fillMaxSize(),
-                                        trackColor = Color.Transparent,
-                                    )
-                                    Text("${overallScore}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                            
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(Color(0xFF007bff).copy(alpha = 0.05f))
-                                        .padding(12.dp)
+                    if (canShowDashboard) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Top
                                 ) {
-                                    Text("已消耗热量", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF007bff), letterSpacing = 1.sp)
-                                    Row(verticalAlignment = Alignment.Bottom) {
-                                        Text(if (calories > 0) "${calories}" else "--", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                        Text(" kcal", fontSize = 12.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp))
+                                    Column {
+                                        Text(
+                                            if (isFamilyRole) "${subjectName}今日健康摘要" else "今日健康摘要",
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0F1923)
+                                        )
+                                        Text(
+                                            if (isFamilyRole) "${subjectName}的整体健康状况概览" else "您的整体健康状况良好",
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF64748B),
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    }
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp)) {
+                                        CircularProgressIndicator(
+                                            progress = { 1f },
+                                            color = Color(0xFFF1F5F9),
+                                            strokeWidth = 6.dp,
+                                            modifier = Modifier.fillMaxSize(),
+                                            trackColor = Color.Transparent
+                                        )
+                                        CircularProgressIndicator(
+                                            progress = { (overallScore / 100f).coerceIn(0f, 1f) },
+                                            color = Color(0xFF007bff),
+                                            strokeWidth = 6.dp,
+                                            modifier = Modifier.fillMaxSize(),
+                                            trackColor = Color.Transparent
+                                        )
+                                        Text("${overallScore}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
-                                Column(
+                                
+                                Row(
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(Color(0xFF007bff).copy(alpha = 0.05f))
-                                        .padding(12.dp)
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Text("活跃时长", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF007bff), letterSpacing = 1.sp)
-                                    Row(verticalAlignment = Alignment.Bottom) {
-                                        Text(if (activeMinutes > 0) "${activeMinutes}" else "--", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                        Text(" min", fontSize = 12.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp))
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(Color(0xFF007bff).copy(alpha = 0.05f))
+                                            .padding(12.dp)
+                                    ) {
+                                        Text("已消耗热量", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF007bff), letterSpacing = 1.sp)
+                                        Row(verticalAlignment = Alignment.Bottom) {
+                                            Text(if (calories > 0) "$calories" else "--", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                            Text(" kcal", fontSize = 12.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp))
+                                        }
+                                    }
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(Color(0xFF007bff).copy(alpha = 0.05f))
+                                            .padding(12.dp)
+                                    ) {
+                                        Text("活跃时长", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF007bff), letterSpacing = 1.sp)
+                                        Row(verticalAlignment = Alignment.Bottom) {
+                                            Text(if (activeMinutes > 0) "$activeMinutes" else "--", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                            Text(" min", fontSize = 12.sp, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp))
+                                        }
                                     }
                                 }
+
+                                Button(
+                                    onClick = { showFullReport = true },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 16.dp)
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff))
+                                ) {
+                                    Text("查看完整健康报告", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                                }
                             }
+                        }
 
-                            Button(
-                                onClick = { showFullReport = true },
-                                modifier = Modifier.fillMaxWidth().padding(top = 16.dp).height(48.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff))
-                            ) {
-                                Text("查看完整健康报告", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showBoardEditor = true },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("数据概览", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F1923))
+                            Text("编辑看板", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF007bff))
+                        }
+
+
+                        if (false) {
+                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    GridItemCard(
+                                        title = "情绪分析",
+                                        value = currentMood ?: "平静",
+                                        unit = "",
+                                        iconBgColor = Color(0xFFFEF9C3),
+                                        iconColor = Color(0xFFCA8A04),
+                                        icon = Icons.Default.Face,
+                                        onClick = onNavigateToMoodAnalysis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    GridItemCard(
+                                        title = "用药记录",
+                                        value = if (medicationSummary?.takenCount == medicationSummary?.totalCount) "已按时服用" else adherenceText,
+                                        unit = "",
+                                        iconBgColor = Color(0xFFDBEAFE),
+                                        iconColor = Color(0xFF2563EB),
+                                        icon = Icons.Default.Check,
+                                        onClick = onNavigateToMedicationHistory,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    GridItemCard(
+                                        title = "认知评估",
+                                        value = if (cognitionText == "--") "未评估" else cognitionText,
+                                        unit = "",
+                                        iconBgColor = Color(0xFFF3E8FF),
+                                        iconColor = Color(0xFF9333EA),
+                                        icon = Icons.Default.Star,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    GridItemCard(
+                                        title = "心率",
+                                        value = "$heartRate",
+                                        unit = " bpm",
+                                        iconBgColor = Color(0xFFFEE2E2),
+                                        iconColor = Color(0xFFDC2626),
+                                        icon = Icons.Default.Favorite,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    GridItemCard(
+                                        title = "活动详情",
+                                        value = "$steps",
+                                        unit = " 步",
+                                        iconBgColor = Color(0xFFD1FAE5),
+                                        iconColor = Color(0xFF059669),
+                                        icon = Icons.Default.PlayArrow,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    GridItemCard(
+                                        title = "压力指数",
+                                        value = "34",
+                                        unit = " 中等",
+                                        iconBgColor = Color(0xFFFFEDD5),
+                                        iconColor = Color(0xFFEA580C),
+                                        icon = Icons.Default.Warning,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    GridItemCard(
+                                        title = "血氧",
+                                        value = "$bloodOxygen%",
+                                        unit = "",
+                                        iconBgColor = Color(0xFFCFFAFE),
+                                        iconColor = Color(0xFF0891B2),
+                                        icon = Icons.Default.Add,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    GridItemCard(
+                                        title = "睡眠",
+                                        value = "${sleepMinutes / 60}h ${sleepMinutes % 60}m",
+                                        unit = "",
+                                        iconBgColor = Color(0xFFE0E7FF),
+                                        iconColor = Color(0xFF4F46E5),
+                                        icon = Icons.Default.Info,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    GridItemCard(
+                                        title = "血压",
+                                        value = "118/76",
+                                        unit = " mmHg",
+                                        iconBgColor = Color(0xFFFFE4E6),
+                                        iconColor = Color(0xFFE11D48),
+                                        icon = Icons.Default.Favorite,
+                                        onClick = onNavigateToBloodPressureDetail,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    GridItemCard(
+                                        title = "体重",
+                                        value = "--.--",
+                                        unit = " kg",
+                                        iconBgColor = Color(0xFFF1F5F9),
+                                        iconColor = Color(0xFF475569),
+                                        icon = Icons.Default.Info,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                         }
+
+                        MetricGrid(metricCards = visibleMetricCards)
                     }
-
-                    // Data Grid Section
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showBoardEditor = true },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("数据概览", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F1923))
-                        Text("编辑看板", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF007bff))
-                    }
-
-
-                    if (false) {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            GridItemCard(
-                                title = "情绪分析",
-                                value = currentMood ?: "平静",
-                                unit = "",
-                                iconBgColor = Color(0xFFFEF9C3), // yellow-100
-                                iconColor = Color(0xFFCA8A04), // yellow-600
-                                icon = Icons.Default.Face,
-                                onClick = onNavigateToMoodAnalysis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            GridItemCard(
-                                title = "用药记录",
-                                value = if(medicationSummary?.takenCount == medicationSummary?.totalCount) "已按时服用" else adherenceText,
-                                unit = "",
-                                iconBgColor = Color(0xFFDBEAFE), // blue-100
-                                iconColor = Color(0xFF2563EB), // blue-600
-                                icon = Icons.Default.Check,
-                                onClick = onNavigateToMedicationHistory,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            GridItemCard(
-                                title = "认知评估",
-                                value = if(cognitionText == "--") "未评估" else cognitionText,
-                                unit = "",
-                                iconBgColor = Color(0xFFF3E8FF), // purple-100
-                                iconColor = Color(0xFF9333EA), // purple-600
-                                icon = Icons.Default.Star,
-                                modifier = Modifier.weight(1f)
-                            )
-                            GridItemCard(
-                                title = "心率",
-                                value = "$heartRate",
-                                unit = " bpm",
-                                iconBgColor = Color(0xFFFEE2E2), // red-100
-                                iconColor = Color(0xFFDC2626), // red-600
-                                icon = Icons.Default.Favorite,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            GridItemCard(
-                                title = "活动详情",
-                                value = "$steps",
-                                unit = " 步",
-                                iconBgColor = Color(0xFFD1FAE5), // emerald-100
-                                iconColor = Color(0xFF059669), // emerald-600
-                                icon = Icons.Default.PlayArrow,
-                                modifier = Modifier.weight(1f)
-                            )
-                            GridItemCard(
-                                title = "压力指数",
-                                value = "34",
-                                unit = " 中等",
-                                iconBgColor = Color(0xFFFFEDD5), // orange-100
-                                iconColor = Color(0xFFEA580C), // orange-600
-                                icon = Icons.Default.Warning,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            GridItemCard(
-                                title = "血氧",
-                                value = "$bloodOxygen%",
-                                unit = "",
-                                iconBgColor = Color(0xFFCFFAFE), // cyan-100
-                                iconColor = Color(0xFF0891B2), // cyan-600
-                                icon = Icons.Default.Add,
-                                modifier = Modifier.weight(1f)
-                            )
-                            GridItemCard(
-                                title = "睡眠",
-                                value = "${sleepMinutes / 60}h ${sleepMinutes % 60}m",
-                                unit = "",
-                                iconBgColor = Color(0xFFE0E7FF), // indigo-100
-                                iconColor = Color(0xFF4F46E5), // indigo-600
-                                icon = Icons.Default.Info,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            GridItemCard(
-                                title = "血压",
-                                value = "118/76",
-                                unit = " mmHg",
-                                iconBgColor = Color(0xFFFFE4E6), // rose-100
-                                iconColor = Color(0xFFE11D48), // rose-600
-                                icon = Icons.Default.Favorite,
-                                onClick = onNavigateToBloodPressureDetail,
-                                modifier = Modifier.weight(1f)
-                            )
-                            GridItemCard(
-                                title = "体重",
-                                value = "--.--",
-                                unit = " kg",
-                                iconBgColor = Color(0xFFF1F5F9), // slate-100
-                                iconColor = Color(0xFF475569), // slate-600
-                                icon = Icons.Default.Info,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        }
-                    }
-                    MetricGrid(metricCards = visibleMetricCards)
                     
                     Spacer(modifier = Modifier.height(32.dp))
                 }

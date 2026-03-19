@@ -34,6 +34,7 @@ exports.main = async (event) => {
 
     const {
       elderDeviceId,
+      familyDeviceId,
       medicationId,
       medicationName,
       dosage,
@@ -52,6 +53,20 @@ exports.main = async (event) => {
       return { success: false, message: "参数不完整" };
     }
 
+    if (familyDeviceId) {
+      const pairingCheck = await db
+        .collection("pairing_codes")
+        .where({
+          elderDeviceId,
+          familyDeviceId,
+        })
+        .get();
+
+      if (pairingCheck.data.length === 0) {
+        return { success: false, message: "未与该长辈配对", errorCode: "NOT_PAIRED" };
+      }
+    }
+
     // 使用中国时区 (GMT+8) 计算日期
     const now = new Date();
     const chinaOffset = 8 * 60 * 60 * 1000; // UTC+8
@@ -60,6 +75,7 @@ exports.main = async (event) => {
 
     await db.collection("medication_logs").add({
       elderDeviceId,
+      familyDeviceId: familyDeviceId || "",
       medicationId,
       medicationName,
       dosage: dosage || "",

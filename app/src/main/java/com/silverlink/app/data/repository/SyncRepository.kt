@@ -603,6 +603,26 @@ class SyncRepository(private val context: Context) {
             Result.failure(e)
         }
     }
+
+    suspend fun sendAlertForPairedElder(
+        alertType: String,
+        message: String,
+        elderName: String = userPrefs.userConfig.value.elderName
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val elderDeviceId = cloudBase.getPairedElderDeviceId(currentDeviceId).getOrNull()
+                ?: return@withContext Result.failure(Exception("未找到已配对的长辈"))
+            cloudBase.sendAlert(
+                elderDeviceId = elderDeviceId,
+                alertType = alertType,
+                message = message,
+                elderName = elderName
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "发送家人提醒失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
     
     // ==================== 认知评估相关 ====================
     

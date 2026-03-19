@@ -511,7 +511,7 @@ private fun minutesOfDay(point: MoodTimePoint): Int {
 // ==================== D. 时间轴分布图 ====================
 
 enum class ChartType(val label: String) {
-    HEALTH("健康数据"),
+    HEALTH("概览"),
     MOOD("情绪"),
     MEDICATION("用药记录"),
     COGNITIVE("认知评估")
@@ -523,38 +523,49 @@ fun ChartTypeToggle(
     onTypeSelected: (ChartType) -> Unit,
     primaryColor: Color = MaterialTheme.colorScheme.primary
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFF1F5F9),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        ChartType.entries.forEach { type ->
-            val isSelected = selectedType == type
-            val backgroundColor by animateColorAsState(
-                targetValue = if (isSelected) primaryColor else Color.Transparent,
-                label = "bg"
-            )
-            val textColor by animateColorAsState(
-                targetValue = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                label = "text"
-            )
-            
-            Surface(
-                modifier = Modifier
-                    .padding(horizontal = 3.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable { onTypeSelected(type) },
-                color = backgroundColor,
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Text(
-                    text = type.label,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    color = textColor,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1,
-                    softWrap = false
+        Row(
+            modifier = Modifier.padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            ChartType.entries.forEach { type ->
+                val isSelected = selectedType == type
+                val backgroundColor by animateColorAsState(
+                    targetValue = if (isSelected) primaryColor else Color.Transparent,
+                    label = "bg"
                 )
+                val textColor by animateColorAsState(
+                    targetValue = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    label = "text"
+                )
+
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    onClick = { onTypeSelected(type) },
+                    color = backgroundColor,
+                    shape = RoundedCornerShape(16.dp),
+                    shadowElevation = if (isSelected) 2.dp else 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = type.label,
+                            color = textColor,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 2,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
         }
     }
@@ -842,6 +853,9 @@ fun MoodDistributionDonutChart(
 fun MoodAnalysisCard(
     analysis: String?,
     isLoading: Boolean,
+    title: String = "AI 情绪分析",
+    loadingText: String = "正在分析情绪备注…",
+    emptyText: String = "暂无可分析的情绪备注",
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -856,7 +870,7 @@ fun MoodAnalysisCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "AI 情绪分析",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -867,7 +881,7 @@ fun MoodAnalysisCard(
             when {
                 isLoading -> {
                     Text(
-                        text = "正在分析情绪备注…",
+                        text = loadingText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -876,7 +890,7 @@ fun MoodAnalysisCard(
                 }
                 analysis.isNullOrBlank() -> {
                     Text(
-                        text = "暂无可分析的情绪备注",
+                        text = emptyText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1336,6 +1350,9 @@ fun CognitiveReportCard(
 fun CognitiveAnalysisCard(
     analysis: String?,
     isLoading: Boolean,
+    title: String = "AI 认知分析",
+    loadingText: String = "正在分析认知表现…",
+    emptyText: String = "暂无可分析的认知数据",
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -1350,7 +1367,7 @@ fun CognitiveAnalysisCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "AI 认知分析",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -1361,7 +1378,7 @@ fun CognitiveAnalysisCard(
             when {
                 isLoading -> {
                     Text(
-                        text = "正在分析认知表现…",
+                        text = loadingText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1370,7 +1387,7 @@ fun CognitiveAnalysisCard(
                 }
                 analysis.isNullOrBlank() -> {
                     Text(
-                        text = "暂无可分析的认知数据",
+                        text = emptyText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

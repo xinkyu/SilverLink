@@ -94,6 +94,7 @@ fun WeightDetailScreen(
     val context = LocalContext.current
     val dashboard by viewModel.healthDashboardData.collectAsState()
     val targetWeightKg by viewModel.weightTargetKg.collectAsState()
+    val canEdit = viewModel.canEditHealthMetrics
     val measurements = dashboard?.weightTimeline.orEmpty().sortedByDescending { it.timestamp }
     val latest = measurements.firstOrNull()
     val previous = measurements.getOrNull(1)
@@ -114,13 +115,15 @@ fun WeightDetailScreen(
     Scaffold(
         containerColor = Color(0xFFF5F7F8),
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = Color(0xFF007BFF),
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "添加记录")
+            if (canEdit) {
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = Color(0xFF007BFF),
+                    contentColor = Color.White,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "添加记录")
+                }
             }
         },
         topBar = {
@@ -169,17 +172,18 @@ fun WeightDetailScreen(
                     latest = latest,
                     chartPoints = chartPoints,
                     targetWeightKg = targetWeightKg,
-                    onSetTargetClick = { showTargetDialog = true }
+                    canEdit = canEdit,
+                    onSetTargetClick = { if (canEdit) showTargetDialog = true }
                 )
             }
             recentHistoryItems(
                 measurements = measurements.take(5),
-                onDeleteClick = { pendingDeleteTimestamp = it.timestamp }
+                onDeleteClick = { if (canEdit) pendingDeleteTimestamp = it.timestamp }
             )
         }
     }
 
-    if (showAddDialog) {
+    if (showAddDialog && canEdit) {
         AddWeightRecordDialog(
             initialWeight = latest?.weightKg,
             bmiFactor = latest?.let { if (it.weightKg > 0f && it.bmi > 0f) it.bmi / it.weightKg else 0f } ?: 0f,
@@ -193,7 +197,7 @@ fun WeightDetailScreen(
         )
     }
 
-    if (showTargetDialog) {
+    if (showTargetDialog && canEdit) {
         SetWeightTargetDialog(
             initialWeight = targetWeightKg ?: latest?.weightKg,
             onDismiss = { showTargetDialog = false },
@@ -205,7 +209,7 @@ fun WeightDetailScreen(
         )
     }
 
-    pendingDeleteTimestamp?.let { timestamp ->
+    pendingDeleteTimestamp?.takeIf { canEdit }?.let { timestamp ->
         AlertDialog(
             onDismissRequest = { pendingDeleteTimestamp = null },
             title = { Text("删除记录") },
@@ -360,6 +364,7 @@ private fun GoalSection(
     latest: BodyMeasurementData?,
     chartPoints: List<BodyMeasurementData>,
     targetWeightKg: Float?,
+    canEdit: Boolean,
     onSetTargetClick: () -> Unit
 ) {
     val initial = chartPoints.firstOrNull()?.weightKg ?: latest?.weightKg ?: 0f
@@ -377,15 +382,17 @@ private fun GoalSection(
                     Text(target?.let { "目标体重: ${String.format(Locale.US, "%.1f", it)} kg" } ?: "目标体重: 未设置", fontSize = 14.sp, color = Color(0xFF475569))
                     Text(if (target == null) "设置后可查看当前进度" else "按最近记录自动计算完成度", fontSize = 12.sp, color = Color(0xFF94A3B8))
                 }
-                Button(
-                    onClick = onSetTargetClick,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF007BFF),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text(if (target == null) "设定目标" else "调整目标")
+                if (canEdit) {
+                    Button(
+                        onClick = onSetTargetClick,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF007BFF),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(if (target == null) "设定目标" else "调整目标")
+                    }
                 }
             }
 

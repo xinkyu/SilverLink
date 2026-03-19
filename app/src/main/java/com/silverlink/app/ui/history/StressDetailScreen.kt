@@ -22,8 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TrendingDown
@@ -256,24 +254,6 @@ private fun DaySection(data: StressUiData) {
                 }
             }
         }
-
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("快速放松练习", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(top = 8.dp))
-
-            ExerciseCard("盒式呼吸", "4 分钟", Icons.Default.SelfImprovement, Color(0xFF007bff), Color(0xFF007bff).copy(alpha = 0.1f))
-            ExerciseCard("全身扫描", "10 分钟", Icons.Default.SelfImprovement, Color(0xFF4F46E5), Color(0xFF4F46E5).copy(alpha = 0.1f))
-
-            Surface(color = Color(0xFF007bff).copy(alpha = 0.05f), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF007bff).copy(alpha = 0.1f))) {
-                Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Color(0xFF007bff))
-                    Column {
-                        Text("小贴士", color = Color(0xFF007bff), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("页面已经改成读取真实压力数据。当前建议以最近一次压力值和当天波动为参考，避免只看单点数值。", color = Color(0xFF334155), fontSize = 14.sp)
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -349,29 +329,6 @@ private fun YearSection(data: StressUiData) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("年度趋势分析", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(bottom = 16.dp))
                 YearlyStressChart(yearPoints)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExerciseCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, bgColor: Color) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color.White,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
-        modifier = Modifier.fillMaxWidth().clickable { }
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(48.dp).background(bgColor, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
-            }
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0F172A))
-                Text(subtitle, fontSize = 12.sp, color = Color(0xFF64748B))
-            }
-            Box(modifier = Modifier.size(40.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
             }
         }
     }

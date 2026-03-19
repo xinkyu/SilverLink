@@ -425,6 +425,8 @@ class UserPreferences(context: Context) {
         
         // 位置共享相关
         private const val KEY_LOCATION_SHARING_ENABLED = "location_sharing_enabled"
+        private const val KEY_FAMILY_GEOFENCE_SETTINGS = "family_geofence_settings"
+        private const val KEY_FAMILY_GEOFENCE_RUNTIME = "family_geofence_runtime"
         private const val KEY_OPPO_HEALTH_SDK_CONSENT = "oppo_health_sdk_consent"
         private const val KEY_MANUAL_WEIGHT_RECORDS = "manual_weight_records"
         private const val KEY_HIDDEN_WEIGHT_TIMESTAMPS = "hidden_weight_timestamps"
@@ -520,6 +522,96 @@ class UserPreferences(context: Context) {
      */
     fun setLocationSharingEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_LOCATION_SHARING_ENABLED, enabled).apply()
+    }
+
+    fun getFamilyGeofenceSettings(): FamilyGeofenceSettings {
+        val raw = prefs.getString(KEY_FAMILY_GEOFENCE_SETTINGS, null).orEmpty()
+        if (raw.isBlank()) {
+            return FamilyGeofenceSettings()
+        }
+
+        return runCatching {
+            val json = JSONObject(raw)
+            FamilyGeofenceSettings(
+                enabled = json.optBoolean("enabled", false),
+                centerLatitude = json.optDouble("centerLatitude").takeUnless { json.isNull("centerLatitude") },
+                centerLongitude = json.optDouble("centerLongitude").takeUnless { json.isNull("centerLongitude") },
+                radiusMeters = json.optDouble("radiusMeters", 300.0).toFloat(),
+                notifyOnExit = json.optBoolean("notifyOnExit", true),
+                notifyOnEnter = json.optBoolean("notifyOnEnter", false),
+                dwellMinutes = json.optInt("dwellMinutes", 5).coerceIn(3, 5),
+                quietHoursEnabled = json.optBoolean("quietHoursEnabled", false),
+                quietHoursStartHour = json.optInt("quietHoursStartHour", 22).coerceIn(0, 23),
+                quietHoursEndHour = json.optInt("quietHoursEndHour", 7).coerceIn(0, 23),
+                lowFrequencyEnabled = json.optBoolean("lowFrequencyEnabled", true),
+                reminderCooldownMinutes = json.optInt("reminderCooldownMinutes", 60).coerceAtLeast(15)
+            )
+        }.getOrDefault(FamilyGeofenceSettings())
+    }
+
+    fun setFamilyGeofenceSettings(settings: FamilyGeofenceSettings) {
+        val previous = getFamilyGeofenceSettings()
+        val json = JSONObject().apply {
+            put("enabled", settings.enabled)
+            put("centerLatitude", settings.centerLatitude)
+            put("centerLongitude", settings.centerLongitude)
+            put("radiusMeters", settings.radiusMeters.toDouble())
+            put("notifyOnExit", settings.notifyOnExit)
+            put("notifyOnEnter", settings.notifyOnEnter)
+            put("dwellMinutes", settings.dwellMinutes)
+            put("quietHoursEnabled", settings.quietHoursEnabled)
+            put("quietHoursStartHour", settings.quietHoursStartHour)
+            put("quietHoursEndHour", settings.quietHoursEndHour)
+            put("lowFrequencyEnabled", settings.lowFrequencyEnabled)
+            put("reminderCooldownMinutes", settings.reminderCooldownMinutes)
+        }
+        prefs.edit().putString(KEY_FAMILY_GEOFENCE_SETTINGS, json.toString()).apply()
+
+        val shapeChanged = previous.centerLatitude != settings.centerLatitude ||
+            previous.centerLongitude != settings.centerLongitude ||
+            previous.radiusMeters != settings.radiusMeters
+        if (!settings.enabled || !settings.hasCenter || shapeChanged) {
+            resetFamilyGeofenceRuntimeState()
+        }
+    }
+
+    fun getFamilyGeofenceRuntimeState(): FamilyGeofenceRuntimeState {
+        val raw = prefs.getString(KEY_FAMILY_GEOFENCE_RUNTIME, null).orEmpty()
+        if (raw.isBlank()) {
+            return FamilyGeofenceRuntimeState()
+        }
+
+        return runCatching {
+            val json = JSONObject(raw)
+            FamilyGeofenceRuntimeState(
+                currentStatus = GeofenceBoundaryStatus.valueOf(
+                    json.optString("currentStatus", GeofenceBoundaryStatus.UNKNOWN.name)
+                ),
+                pendingStatus = json.optString("pendingStatus")
+                    .takeIf { it.isNotBlank() }
+                    ?.let { GeofenceBoundaryStatus.valueOf(it) },
+                pendingSinceMillis = json.optLong("pendingSinceMillis", 0L),
+                lastStatusChangeMillis = json.optLong("lastStatusChangeMillis", 0L),
+                lastEnterAlertMillis = json.optLong("lastEnterAlertMillis", 0L),
+                lastExitAlertMillis = json.optLong("lastExitAlertMillis", 0L)
+            )
+        }.getOrDefault(FamilyGeofenceRuntimeState())
+    }
+
+    fun setFamilyGeofenceRuntimeState(state: FamilyGeofenceRuntimeState) {
+        val json = JSONObject().apply {
+            put("currentStatus", state.currentStatus.name)
+            put("pendingStatus", state.pendingStatus?.name)
+            put("pendingSinceMillis", state.pendingSinceMillis)
+            put("lastStatusChangeMillis", state.lastStatusChangeMillis)
+            put("lastEnterAlertMillis", state.lastEnterAlertMillis)
+            put("lastExitAlertMillis", state.lastExitAlertMillis)
+        }
+        prefs.edit().putString(KEY_FAMILY_GEOFENCE_RUNTIME, json.toString()).apply()
+    }
+
+    fun resetFamilyGeofenceRuntimeState() {
+        setFamilyGeofenceRuntimeState(FamilyGeofenceRuntimeState())
     }
 
     // ==================== OPPO健康SDK 合规同意 ====================

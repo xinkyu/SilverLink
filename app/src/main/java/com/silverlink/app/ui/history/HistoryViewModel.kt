@@ -5,11 +5,14 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.silverlink.app.BuildConfig
 import com.silverlink.app.data.local.AppDatabase
 import com.silverlink.app.data.local.UserPreferences
+import com.silverlink.app.data.local.UserRole
 import com.silverlink.app.data.local.entity.MedicationLogEntity
 import com.silverlink.app.data.local.entity.MoodLogEntity
 import com.silverlink.app.feature.health.HealthDebugLogger
+import com.silverlink.app.feature.health.HealthTrendPoint
 import com.silverlink.app.feature.health.OppoHealthDashboardData
 import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.data.remote.CognitiveReportData
@@ -28,6 +31,7 @@ import com.silverlink.app.ui.components.MoodTimePoint
 import com.silverlink.app.ui.components.TimeRange
 import com.silverlink.sdk.health.BloodPressureData
 import com.silverlink.sdk.health.BodyMeasurementData
+import com.silverlink.sdk.health.SleepSummaryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -177,12 +181,30 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
 
     private val _healthAuthorized = MutableStateFlow(false)
     val healthAuthorized: StateFlow<Boolean> = _healthAuthorized.asStateFlow()
+
+    private val _isPaired = MutableStateFlow(userPreferences.userConfig.value.role != UserRole.FAMILY)
+    val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
     
     private val _weightTargetKg = MutableStateFlow(userPreferences.getTargetWeightKg())
     val weightTargetKg: StateFlow<Float?> = _weightTargetKg.asStateFlow()
+
+    val canEditHealthMetrics: Boolean
+        get() = userPreferences.userConfig.value.role != UserRole.FAMILY
+
+    val subjectName: String
+        get() = if (userPreferences.userConfig.value.role == UserRole.FAMILY) {
+            userPreferences.userConfig.value.elderName.ifBlank { "长辈" }
+        } else {
+            "您"
+        }
+
+    private val isFamilyRole: Boolean
+        get() = userPreferences.userConfig.value.role == UserRole.FAMILY
     
     init {
-        if (!userPreferences.isOppoHealthSdkConsentGranted()) {
+        if (isFamilyRole) {
+            loadHealthData()
+        } else if (!userPreferences.isOppoHealthSdkConsentGranted()) {
             _showHealthPrivacyDialog.value = true
         } else {
             loadHealthData()
@@ -201,6 +223,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun requestHealthAuthorization(activity: Activity) {
+        if (!canEditHealthMetrics) return
+
         viewModelScope.launch {
             Log.i(HealthDebugLogger.TAG_AUTH, "HistoryViewModel.requestHealthAuthorization clicked")
             _isHealthLoading.value = true
@@ -224,6 +248,19 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun loadHealthData(date: Date = _selectedDate.value) {
+        if (isFamilyRole) {
+            val mockData = if (_isPaired.value && BuildConfig.FORCE_MOCK_HEALTH_DATA) {
+                buildMockFamilyHealthDashboard(date)
+            } else {
+                null
+            }
+            _isHealthLoading.value = false
+            _healthError.value = null
+            _healthAuthorized.value = mockData != null
+            _healthDashboardData.value = mockData
+            return
+        }
+
         if (!userPreferences.isOppoHealthSdkConsentGranted()) return
 
         viewModelScope.launch {
@@ -366,6 +403,15 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private fun getAnalysisCacheKey(range: TimeRange, startDate: String): String {
         return "${range.name}_$startDate"
     }
+
+    private fun daysForSelectedRange(): Int {
+        return when (_selectedRange.value) {
+            TimeRange.DAY -> 1
+            TimeRange.WEEK -> 7
+            TimeRange.MONTH -> 30
+            TimeRange.YEAR -> 365
+        }
+    }
     
     /**
      * 检查缓存是否有效
@@ -439,6 +485,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         } else {
             _moodAnalysis.value = null
         }
+
+        viewModelScope.launch {
+            fetchCognitiveReport(daysForSelectedRange())
+        }
     }
     
     /**
@@ -451,23 +501,59 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         endDate: String
     ) {
         val range = _selectedRange.value
-        
+        val isFamily = userPreferences.userConfig.value.role == UserRole.FAMILY
+
         // 从云端拉取数据
-        val moodResult = syncRepository.getSelfMoodLogs(days = daysForQuery)
-        val medicationResult = if (range == TimeRange.DAY) {
-            syncRepository.getSelfMedicationLogs(date = dateStr)
+        val moodResult = if (isFamily) {
+            syncRepository.getElderMoodLogs(days = daysForQuery)
         } else {
-            syncRepository.getSelfMedicationLogs(date = null)
+            syncRepository.getSelfMoodLogs(days = daysForQuery)
         }
-        val medicationListResult = syncRepository.getSelfMedicationsList()
+        val medicationResult = if (isFamily) {
+            if (range == TimeRange.DAY) syncRepository.getElderMedicationLogs(date = dateStr)
+            else syncRepository.getElderMedicationLogs(date = null)
+        } else {
+            if (range == TimeRange.DAY) syncRepository.getSelfMedicationLogs(date = dateStr)
+            else syncRepository.getSelfMedicationLogs(date = null)
+        }
+        val medicationListResult = if (isFamily) {
+            syncRepository.getElderMedicationsList()
+        } else {
+            syncRepository.getSelfMedicationsList()
+        }
         val localMedicationLogs = getLocalMedicationLogs(startDate, endDate, range)
+
+        if (isFamily && medicationResult.isFailure && moodResult.isFailure) {
+            val errorMessage = medicationResult.exceptionOrNull()?.message ?: moodResult.exceptionOrNull()?.message.orEmpty()
+            if (errorMessage.contains("未找到已配对")) {
+                _isPaired.value = false
+                cachedMoodLogs = CachedData(emptyList())
+                cachedMedicationLogs = CachedData(emptyList())
+                cachedMedications = CachedData(emptyList())
+                _healthDashboardData.value = null
+                _healthAuthorized.value = false
+                _moodPoints.value = emptyList()
+                _medicationStatuses.value = emptyList()
+                _medicationSummary.value = null
+                _currentMood.value = null
+                _latestTime.value = null
+                _cognitiveReport.value = null
+                return
+            }
+        } else if (isFamily) {
+            _isPaired.value = true
+        }
 
         // 更新缓存
         val moodLogs = moodResult.getOrDefault(emptyList())
-        val medLogs = mergeMedicationLogs(
-            remoteLogs = medicationResult.getOrDefault(emptyList()),
-            localLogs = localMedicationLogs
-        )
+        val medLogs = if (isFamily) {
+            medicationResult.getOrDefault(emptyList())
+        } else {
+            mergeMedicationLogs(
+                remoteLogs = medicationResult.getOrDefault(emptyList()),
+                localLogs = localMedicationLogs
+            )
+        }
         val medications = medicationListResult.getOrDefault(emptyList())
         
         cachedMoodLogs = CachedData(moodLogs)
@@ -489,7 +575,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         }
         
         // 加载认知评估报告
-        fetchCognitiveReport()
+        fetchCognitiveReport(daysForSelectedRange())
+        if (isFamilyRole) {
+            loadHealthData(_selectedDate.value)
+        }
     }
     
     /**
@@ -539,10 +628,14 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             .sortedWith(compareByDescending<MedicationLogData> { it.date }.thenBy { it.scheduledTime })
     }
 
-    private suspend fun fetchCognitiveReport() {
+    private suspend fun fetchCognitiveReport(days: Int) {
         _isCognitiveLoading.value = true
         try {
-            val result = syncRepository.getSelfCognitiveReport(days = 7)
+            val result = if (userPreferences.userConfig.value.role == UserRole.FAMILY) {
+                syncRepository.getCognitiveReport(days = days)
+            } else {
+                syncRepository.getSelfCognitiveReport(days = days)
+            }
             result.onSuccess { report ->
                 _cognitiveReport.value = report
             }.onFailure { e ->
@@ -553,6 +646,145 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         } finally {
             _isCognitiveLoading.value = false
         }
+    }
+
+    private fun buildMockFamilyHealthDashboard(date: Date): OppoHealthDashboardData {
+        val zone = TimeZone.getTimeZone("Asia/Shanghai")
+        val dayStart = Calendar.getInstance(zone).apply {
+            time = date
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val seed = dayStart.get(Calendar.YEAR) * 1000 + dayStart.get(Calendar.DAY_OF_YEAR)
+
+        fun value(base: Int, span: Int, factor: Int): Int {
+            return base + (seed * factor % span)
+        }
+
+        fun dayMillis(daysAgo: Int, hourOfDay: Int = 0): Long {
+            return Calendar.getInstance(zone).apply {
+                timeInMillis = dayStart.timeInMillis
+                add(Calendar.DAY_OF_YEAR, -daysAgo)
+                set(Calendar.HOUR_OF_DAY, hourOfDay)
+            }.timeInMillis
+        }
+
+        val heartRateTimeline = (0 until 24 step 2).map { hour ->
+            HealthTrendPoint(
+                timestamp = dayMillis(0, hour),
+                value = 62 + ((seed + hour * 3) % 22)
+            )
+        }
+        val bloodOxygenTimeline = (0 until 24 step 4).map { hour ->
+            HealthTrendPoint(
+                timestamp = dayMillis(0, hour),
+                value = 95 + ((seed + hour) % 4)
+            )
+        }
+        val pressureTimeline = (0 until 24 step 4).map { hour ->
+            HealthTrendPoint(
+                timestamp = dayMillis(0, hour),
+                value = 26 + ((seed + hour * 2) % 30)
+            )
+        }
+        val activityTimeline = (0 until 24 step 3).map { hour ->
+            HealthTrendPoint(
+                timestamp = dayMillis(0, hour),
+                value = 300 + ((seed + hour * 73) % 1200)
+            )
+        }
+        val heartRateDailySummary = (6 downTo 0).map { daysAgo ->
+            HealthTrendPoint(
+                timestamp = dayMillis(daysAgo, 8),
+                value = 64 + ((seed + daysAgo * 5) % 16)
+            )
+        }
+        val activityDailySummary = (6 downTo 0).map { daysAgo ->
+            HealthTrendPoint(
+                timestamp = dayMillis(daysAgo, 20),
+                value = 4800 + ((seed + daysAgo * 631) % 3200)
+            )
+        }
+        val bloodOxygenDailySummary = (6 downTo 0).map { daysAgo ->
+            HealthTrendPoint(
+                timestamp = dayMillis(daysAgo, 9),
+                value = 95 + ((seed + daysAgo) % 4)
+            )
+        }
+        val pressureDailySummary = (6 downTo 0).map { daysAgo ->
+            HealthTrendPoint(
+                timestamp = dayMillis(daysAgo, 21),
+                value = 28 + ((seed + daysAgo * 4) % 28)
+            )
+        }
+        val sleepDailySummary = (6 downTo 0).map { daysAgo ->
+            val totalMinutes = 395 + ((seed + daysAgo * 17) % 95)
+            val deepMinutes = (totalMinutes * 0.23f).toInt()
+            val remMinutes = (totalMinutes * 0.21f).toInt()
+            val awakeMinutes = 18 + ((seed + daysAgo * 3) % 18)
+            val lightMinutes = (totalMinutes - deepMinutes - remMinutes - awakeMinutes).coerceAtLeast(0)
+            SleepSummaryPoint(
+                timestamp = dayMillis(daysAgo, 7),
+                totalMinutes = totalMinutes,
+                deepSleepMinutes = deepMinutes,
+                lightSleepMinutes = lightMinutes,
+                remMinutes = remMinutes,
+                awakeMinutes = awakeMinutes,
+                score = 78 + ((seed + daysAgo * 7) % 14)
+            )
+        }
+        val bloodPressureTimeline = (6 downTo 0).map { daysAgo ->
+            BloodPressureData(
+                timestamp = dayMillis(daysAgo, 8),
+                systolic = 116 + ((seed + daysAgo * 2) % 10),
+                diastolic = 72 + ((seed + daysAgo * 3) % 8)
+            )
+        }
+        val weightTimeline = (11 downTo 0).map { weeksAgo ->
+            val weightKg = 61.8f + (((seed + weeksAgo * 5) % 18) - 9) * 0.2f
+            BodyMeasurementData(
+                timestamp = dayMillis(weeksAgo * 7, 7),
+                weightKg = weightKg,
+                bmi = weightKg / (1.63f * 1.63f)
+            )
+        }
+
+        val latestSleep = sleepDailySummary.lastOrNull()
+        val latestBloodPressure = bloodPressureTimeline.lastOrNull()
+        val latestWeight = weightTimeline.lastOrNull()
+
+        return OppoHealthDashboardData(
+            steps = value(base = 5200, span = 2600, factor = 11),
+            calories = value(base = 1450, span = 520, factor = 7),
+            distanceMeters = value(base = 3200, span = 2100, factor = 5),
+            moveMinutes = value(base = 42, span = 36, factor = 3),
+            latestHeartRate = heartRateTimeline.lastOrNull()?.value ?: 0,
+            bloodOxygen = bloodOxygenTimeline.lastOrNull()?.value ?: 0,
+            sleepMinutes = latestSleep?.totalMinutes ?: 0,
+            sleepScore = latestSleep?.score ?: 0,
+            sleepDeepMinutes = latestSleep?.deepSleepMinutes ?: 0,
+            sleepLightMinutes = latestSleep?.lightSleepMinutes ?: 0,
+            sleepRemMinutes = latestSleep?.remMinutes ?: 0,
+            sleepAwakeMinutes = latestSleep?.awakeMinutes ?: 0,
+            latestPressure = pressureTimeline.lastOrNull()?.value ?: 0,
+            latestBloodPressureSystolic = latestBloodPressure?.systolic ?: 0,
+            latestBloodPressureDiastolic = latestBloodPressure?.diastolic ?: 0,
+            latestWeightKg = latestWeight?.weightKg ?: 0f,
+            latestBodyMassIndex = latestWeight?.bmi ?: 0f,
+            heartRateTimeline = heartRateTimeline,
+            bloodOxygenTimeline = bloodOxygenTimeline,
+            pressureTimeline = pressureTimeline,
+            activityTimeline = activityTimeline,
+            heartRateDailySummary = heartRateDailySummary,
+            activityDailySummary = activityDailySummary,
+            bloodOxygenDailySummary = bloodOxygenDailySummary,
+            pressureDailySummary = pressureDailySummary,
+            sleepDailySummary = sleepDailySummary,
+            bloodPressureTimeline = bloodPressureTimeline,
+            weightTimeline = weightTimeline
+        )
     }
     
     private fun getDateRange(): Pair<String, String> {

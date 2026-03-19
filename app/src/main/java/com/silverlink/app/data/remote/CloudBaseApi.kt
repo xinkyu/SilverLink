@@ -226,6 +226,7 @@ data class VerifyPairingRequest(
 @Serializable
 data class MedicationLogRequest(
     val elderDeviceId: String,
+    val familyDeviceId: String? = null,
     val medicationId: Int,
     val medicationName: String,
     val dosage: String,

@@ -640,8 +640,7 @@ fun MedicationItem(
                     Surface(
                         onClick = { if (!isTaken) onToggleTime(time) },
                         color = bgColor,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.clickable { if (!isTaken) onToggleTime(time) }
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

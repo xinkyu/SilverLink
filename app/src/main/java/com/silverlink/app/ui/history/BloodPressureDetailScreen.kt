@@ -81,6 +81,7 @@ fun BloodPressureDetailScreen(
 ) {
     val context = LocalContext.current
     val dashboardData by viewModel.healthDashboardData.collectAsState()
+    val canEdit = viewModel.canEditHealthMetrics
     val readings = dashboardData?.bloodPressureTimeline.orEmpty().sortedByDescending { it.timestamp }
     val latest = readings.firstOrNull()
     val chartReadings = readings.take(4).reversed()
@@ -119,13 +120,15 @@ fun BloodPressureDetailScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = Color(0xFF007BFF),
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "新增血压记录")
+            if (canEdit) {
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = Color(0xFF007BFF),
+                    contentColor = Color.White,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "新增血压记录")
+                }
             }
         }
     ) { innerPadding ->
@@ -156,12 +159,12 @@ fun BloodPressureDetailScreen(
             }
             recentHistoryItems(
                 readings = readings.take(5),
-                onDeleteClick = { pendingDeleteTimestamp = it.timestamp }
+                onDeleteClick = { if (canEdit) pendingDeleteTimestamp = it.timestamp }
             )
         }
     }
 
-    if (showAddDialog) {
+    if (showAddDialog && canEdit) {
         AddBloodPressureRecordDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { systolic, diastolic ->
@@ -176,7 +179,7 @@ fun BloodPressureDetailScreen(
         )
     }
 
-    pendingDeleteTimestamp?.let { timestamp ->
+    pendingDeleteTimestamp?.takeIf { canEdit }?.let { timestamp ->
         AlertDialog(
             onDismissRequest = { pendingDeleteTimestamp = null },
             title = { Text("删除记录") },

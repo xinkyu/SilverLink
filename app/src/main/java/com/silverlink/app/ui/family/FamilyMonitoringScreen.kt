@@ -92,6 +92,8 @@ fun FamilyMonitoringScreen(
     val selectedMoodPoint by viewModel.selectedMoodPoint.collectAsState()
     val moodAnalysis by viewModel.moodAnalysis.collectAsState()
     val isAnalyzing by viewModel.isAnalyzing.collectAsState()
+    val overviewAnalysis by viewModel.overviewAnalysis.collectAsState()
+    val isOverviewAnalyzing by viewModel.isOverviewAnalyzing.collectAsState()
     val addMedicationState by viewModel.addMedicationState.collectAsState()
     
     var showAddDialog by remember { mutableStateOf(false) }
@@ -111,7 +113,7 @@ fun FamilyMonitoringScreen(
     
     // 启动位置轮询
     LaunchedEffect(isPaired) {
-        if (isPaired) {
+        if (isPaired && viewModel.showLocationSection) {
             viewModel.startLocationPolling()
         }
     }
@@ -132,11 +134,7 @@ fun FamilyMonitoringScreen(
                 MaterialTheme.colorScheme.background
             )
         } else {
-            listOf(
-                Color(0xFFF0F4FF),
-                Color(0xFFE8F0FF),
-                Color(0xFFE0EAFF)
-            )
+            listOf(Color.White, Color.White)
         }
     )
     
@@ -145,13 +143,13 @@ fun FamilyMonitoringScreen(
     Scaffold(
         topBar = {
             HealthTopBar(
-                title = "长辈健康",
+                title = viewModel.pageTitle,
                 onRefresh = { viewModel.refresh() },
                 primaryColor = familyPrimary
             )
         },
         floatingActionButton = {
-            if (isPaired) {
+            if (viewModel.isFamilyRole && isPaired) {
                 FloatingActionButton(
                     onClick = { showAddDialog = true },
                     containerColor = familyPrimary,
@@ -180,7 +178,7 @@ fun FamilyMonitoringScreen(
                             CircularProgressIndicator(color = familyPrimary)
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "正在获取长辈健康数据...",
+                                if (viewModel.isFamilyRole) "正在获取长辈健康数据..." else "正在获取健康概览...",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -214,12 +212,14 @@ fun FamilyMonitoringScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             
                             // 警报横幅（如果有未读警报）
-                            alerts.forEach { alert ->
-                                AlertBanner(
-                                    alert = alert,
-                                    onDismiss = { viewModel.dismissAlert(alert.id) }
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
+                            if (viewModel.showAlertsSection) {
+                                alerts.forEach { alert ->
+                                    AlertBanner(
+                                        alert = alert,
+                                        onDismiss = { viewModel.dismissAlert(alert.id) }
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
                             }
                             
                             // 时间范围选择器
@@ -235,45 +235,42 @@ fun FamilyMonitoringScreen(
                             HeroStatusDisplay(
                                 currentMood = currentMood,
                                 latestTime = latestTime,
-                                titlePrefix = "长辈"
+                                titlePrefix = viewModel.heroTitlePrefix
                             )
                             
-                            // 位置卡片
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            LocationCard(
-                                location = elderLocation,
-                                isLoading = isLocationLoading,
-                                onRefresh = { viewModel.refreshLocation() },
-                                onViewMap = if (elderLocation != null) {
-                                    {
-                                        val lat = elderLocation?.latitude ?: 0.0
-                                        val lng = elderLocation?.longitude ?: 0.0
-                                        
-                                        // 先弹个提示，确认点击有效
-                                        android.widget.Toast.makeText(context, "正在打开地图...", android.widget.Toast.LENGTH_SHORT).show()
-                                        
-                                        // 方案1: 通用 Geo Intent (系统会自动弹出高德/百度/腾讯等已安装的地图)
-                                        // 格式: geo:latitude,longitude?q=latitude,longitude(Label)
-                                        val geoUri = android.net.Uri.parse("geo:$lat,$lng?q=$lat,$lng(长辈位置)")
-                                        val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, geoUri)
-                                        mapIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        
-                                        try {
-                                            context.startActivity(mapIntent)
-                                        } catch (e: Exception) {
-                                            // 方案2: 如果没有地图App，强制打开浏览器看网页版
-                                            val webUri = android.net.Uri.parse("https://uri.amap.com/marker?position=$lng,$lat&name=长辈位置")
-                                            val webIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, webUri)
-                                            webIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            if (viewModel.showLocationSection) {
+                                val context = androidx.compose.ui.platform.LocalContext.current
+                                LocationCard(
+                                    location = elderLocation,
+                                    isLoading = isLocationLoading,
+                                    onRefresh = { viewModel.refreshLocation() },
+                                    onViewMap = if (elderLocation != null) {
+                                        {
+                                            val lat = elderLocation?.latitude ?: 0.0
+                                            val lng = elderLocation?.longitude ?: 0.0
+
+                                            android.widget.Toast.makeText(context, "正在打开地图...", android.widget.Toast.LENGTH_SHORT).show()
+
+                                            val geoUri = android.net.Uri.parse("geo:$lat,$lng?q=$lat,$lng(长辈位置)")
+                                            val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, geoUri)
+                                            mapIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+
                                             try {
-                                                context.startActivity(webIntent)
-                                            } catch (e2: Exception) {
-                                                android.widget.Toast.makeText(context, "没有可用的地图或浏览器应用", android.widget.Toast.LENGTH_SHORT).show()
+                                                context.startActivity(mapIntent)
+                                            } catch (e: Exception) {
+                                                val webUri = android.net.Uri.parse("https://uri.amap.com/marker?position=$lng,$lat&name=长辈位置")
+                                                val webIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, webUri)
+                                                webIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                try {
+                                                    context.startActivity(webIntent)
+                                                } catch (e2: Exception) {
+                                                    android.widget.Toast.makeText(context, "没有可用的地图或浏览器应用", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
                                             }
                                         }
-                                    }
-                                } else null
-                            )
+                                    } else null
+                                )
+                            }
                             
                             // 图表类型切换
                             ChartTypeToggle(
@@ -281,6 +278,20 @@ fun FamilyMonitoringScreen(
                                 onTypeSelected = { viewModel.setChartType(it) },
                                 primaryColor = familyPrimary
                             )
+
+                            AnimatedVisibility(
+                                visible = chartType == ChartType.HEALTH,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                MoodAnalysisCard(
+                                    analysis = overviewAnalysis,
+                                    isLoading = isOverviewAnalyzing,
+                                    title = "AI 概览说明",
+                                    loadingText = "正在整理概览并生成建议…",
+                                    emptyText = "暂无可分析的概览数据"
+                                )
+                            }
                             
                             // 情绪图表
                             AnimatedVisibility(
@@ -381,7 +392,7 @@ fun FamilyMonitoringScreen(
                                 }
                             }
                             
-                            Spacer(modifier = Modifier.height(80.dp)) // FAB空间
+                            Spacer(modifier = Modifier.height(if (viewModel.isFamilyRole) 80.dp else 24.dp))
                         }
                     }
                 }
@@ -392,8 +403,8 @@ fun FamilyMonitoringScreen(
     // 添加药品对话框
     if (showAddDialog) {
         MedicationFormDialog(
-            title = "为长辈添加药品",
-            subtitle = "添加的药品将同步到长辈设备",
+            title = viewModel.medicationDialogTitle,
+            subtitle = viewModel.medicationDialogSubtitle,
             isLoading = addMedicationState is LoadingState.Loading,
             errorMessage = (addMedicationState as? LoadingState.Error)?.message,
             confirmButtonText = "添加",

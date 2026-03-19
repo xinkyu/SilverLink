@@ -289,8 +289,19 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
             val date = dateFormat.format(java.util.Date())
             val inserted = withContext(Dispatchers.IO) {
-                val existingCount = historyDao.getMedicationLogCount(date, medication.id, time)
-                if (existingCount > 0) return@withContext false
+                val existingLogs = historyDao.getMedicationLogsByDate(date)
+                val alreadyTaken = existingLogs.any { log ->
+                    log.status == "taken" &&
+                        log.scheduledTime == time &&
+                        (
+                            log.medicationId == medication.id ||
+                                (
+                                    log.medicationName.trim() == medication.name.trim() &&
+                                        log.dosage.trim() == medication.dosage.trim()
+                                    )
+                            )
+                }
+                if (alreadyTaken) return@withContext false
 
                 val logEntity = MedicationLogEntity(
                     medicationId = medication.id,
@@ -326,12 +337,12 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 val currentMeds = dao.getAllMedications().first()
                 val medIdByNameDosage = currentMeds.associateBy { "${it.name.trim()}__${it.dosage.trim()}" }
                 val normalizedLogs = logs.map { log ->
-                    if (log.medicationId > 0) {
-                        log
-                    } else {
-                        val key = "${log.medicationName.trim()}__${log.dosage.trim()}"
-                        val mappedId = medIdByNameDosage[key]?.id ?: 0
-                        if (mappedId > 0) log.copy(medicationId = mappedId) else log
+                    val key = "${log.medicationName.trim()}__${log.dosage.trim()}"
+                    val mappedMedication = medIdByNameDosage[key]
+                    when {
+                        mappedMedication == null -> log
+                        log.medicationId == mappedMedication.id -> log
+                        else -> log.copy(medicationId = mappedMedication.id)
                     }
                 }
                 val map = normalizedLogs
@@ -373,12 +384,12 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 val weeklyLogs = historyDao.getMedicationLogsByDateRange(dateWeekAgoFormat, dateTodayFormat)
                 val medIdByNameDosage = currentMeds.associateBy { "${it.name.trim()}__${it.dosage.trim()}" }
                 val normalizedWeeklyLogs = weeklyLogs.map { log ->
-                    if (log.medicationId > 0) {
-                        log
-                    } else {
-                        val key = "${log.medicationName.trim()}__${log.dosage.trim()}"
-                        val mappedId = medIdByNameDosage[key]?.id ?: 0
-                        if (mappedId > 0) log.copy(medicationId = mappedId) else log
+                    val key = "${log.medicationName.trim()}__${log.dosage.trim()}"
+                    val mappedMedication = medIdByNameDosage[key]
+                    when {
+                        mappedMedication == null -> log
+                        log.medicationId == mappedMedication.id -> log
+                        else -> log.copy(medicationId = mappedMedication.id)
                     }
                 }
                 val uniqueWeeklyLogs = normalizedWeeklyLogs
