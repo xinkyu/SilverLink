@@ -1123,6 +1123,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (text.isBlank()) return
 
         val ttsRate = getTtsRateForEmotion(emotion)
+        val latestClonedVoiceId = userPrefs.userConfig.value.clonedVoiceId.trim()
+        ttsService.setClonedVoiceId(latestClonedVoiceId)
         val dialect = userPrefs.userConfig.value.dialect
         // 获取方言名称用于 instruction（如 "四川话"、"广东话"）
         val dialectName = if (dialect != com.silverlink.app.data.local.Dialect.NONE) {

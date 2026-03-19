@@ -37,13 +37,24 @@ Thumbs.db
 # Heap dumps
 *.hprof
 
-# Build logs
+# Build logs and outputs
 build_log*.txt
+build_output*.txt
+build_error*.txt
+/out.txt
 
 # Node modules (cloud functions)
 **/node_modules/
 
-build_output.txt
+# Generated html previews
+/day.html
+/week.html
+/month.html
+/year.html
+
+# Stitch generated assets
+/docs/stitch/
+
 docs/银龄守护 - 第十九届全国大学生软件创新大赛-项目计划书1.0.0.pdf
 docs/CLOUD_DEPLOYMENT_GUIDE.md
 

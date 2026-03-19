@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -441,6 +442,8 @@ private fun MemoryCenterSheet(
     onRagConfigChanged: (RagConfig) -> Unit,
     onRagDebugEnabledChanged: (Boolean) -> Unit
 ) {
+    var selectedProfile by remember { mutableStateOf<UserProfileMemoryEntity?>(null) }
+
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
@@ -462,8 +465,15 @@ private fun MemoryCenterSheet(
                 value = memoryInputText,
                 onValueChange = onMemoryInputChanged,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("新增一条长期记忆，例如：我孙子叫小明") },
-                maxLines = 2
+                placeholder = { Text("添加一条长期记忆") },
+                maxLines = 2,
+                shape = RoundedCornerShape(20.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                )
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(
@@ -479,167 +489,86 @@ private fun MemoryCenterSheet(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text("RAG 策略", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("TopK: ${ragConfig.topK}")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = {
-                        onRagConfigChanged(ragConfig.copy(topK = (ragConfig.topK - 1).coerceAtLeast(1)))
-                    }) { Text("-1") }
-                    TextButton(onClick = {
-                        onRagConfigChanged(ragConfig.copy(topK = (ragConfig.topK + 1).coerceAtMost(8)))
-                    }) { Text("+1") }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("启用语义相似")
-                Switch(
-                    checked = ragConfig.enableSemanticSimilarity,
-                    onCheckedChange = { enabled ->
-                        onRagConfigChanged(ragConfig.copy(enableSemanticSimilarity = enabled))
-                    }
-                )
-            }
-
-            Text("重要性权重: ${"%.2f".format(ragConfig.weightImportance)}")
-            Slider(
-                value = ragConfig.weightImportance,
-                onValueChange = { onRagConfigChanged(ragConfig.copy(weightImportance = it)) },
-                valueRange = 0.05f..0.9f
-            )
-
-            Text("关键词重叠权重: ${"%.2f".format(ragConfig.weightTokenOverlap)}")
-            Slider(
-                value = ragConfig.weightTokenOverlap,
-                onValueChange = { onRagConfigChanged(ragConfig.copy(weightTokenOverlap = it)) },
-                valueRange = 0.05f..0.9f
-            )
-
-            Text("语义权重: ${"%.2f".format(ragConfig.weightSemantic)}")
-            Slider(
-                value = ragConfig.weightSemantic,
-                onValueChange = { onRagConfigChanged(ragConfig.copy(weightSemantic = it)) },
-                valueRange = 0f..0.6f,
-                enabled = ragConfig.enableSemanticSimilarity
-            )
-
-            Text("时效权重: ${"%.2f".format(ragConfig.weightRecency)}")
-            Slider(
-                value = ragConfig.weightRecency,
-                onValueChange = { onRagConfigChanged(ragConfig.copy(weightRecency = it)) },
-                valueRange = 0f..0.6f
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("调试模式")
-                Switch(checked = ragDebugEnabled, onCheckedChange = onRagDebugEnabledChanged)
-            }
-
-            if (ragDebugEnabled) {
-                val snapshot = ragDebugSnapshot
-                if (snapshot == null || snapshot.selected.isEmpty()) {
-                    Text("暂无命中调试数据，请先发起一轮对话。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    Text(
-                        text = "最近Query: ${snapshot.query}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    snapshot.selected.forEach { hit ->
-                        Text(
-                            text = "#${hit.memoryId} score=${"%.3f".format(hit.finalScore)} 重要性=${"%.2f".format(hit.partImportance)} 重叠=${"%.2f".format(hit.partOverlap)} 语义=${"%.2f".format(hit.partSemantic)} 时效=${"%.2f".format(hit.partRecency)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = hit.content,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text("结构化画像", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            if (profileMemories.isEmpty()) {
-                Text("暂无结构化画像", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
         }
 
-        if (profileMemories.isNotEmpty()) {
-            items(profileMemories, key = { it.key }) { profile ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${profile.key}: ${profile.value}",
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    IconButton(onClick = { onDeleteProfile(profile.key) }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "删除画像")
+        item {
+            MemoryCenterCard(title = "结构化画像") {
+                if (profileMemories.isEmpty()) {
+                    Text("暂时还没有结构化画像。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    profileMemories.forEachIndexed { index, profile ->
+                        if (index > 0) {
+                            HorizontalDivider()
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedProfile = profile }
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 8.dp)
+                            ) {
+                                Text(
+                                    text = profile.key,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = profile.value,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "点击查看详情",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            IconButton(onClick = { onDeleteProfile(profile.key) }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "删除画像")
+                            }
+                        }
                     }
                 }
             }
         }
 
         item {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text("长期记忆", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            if (memoryRecords.isEmpty()) {
-                Text("暂无长期记忆", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-
-        if (memoryRecords.isNotEmpty()) {
-            items(memoryRecords, key = { it.id }) { memory ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = memory.content,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    IconButton(onClick = { onDeleteMemory(memory.id) }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "删除记忆")
+            MemoryCenterCard(title = "长期记忆") {
+                if (memoryRecords.isEmpty()) {
+                    Text("暂时还没有长期记忆。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    memoryRecords.forEachIndexed { index, memory ->
+                        if (index > 0) {
+                            HorizontalDivider()
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text = memory.content,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(top = 8.dp, end = 8.dp),
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            IconButton(onClick = { onDeleteMemory(memory.id) }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "删除记忆")
+                            }
+                        }
                     }
                 }
             }
@@ -649,8 +578,45 @@ private fun MemoryCenterSheet(
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
+
+    selectedProfile?.let { profile ->
+        AlertDialog(
+            onDismissRequest = { selectedProfile = null },
+            title = { Text(profile.key) },
+            text = { Text(profile.value) },
+            confirmButton = {
+                TextButton(onClick = { selectedProfile = null }) {
+                    Text("关闭")
+                }
+            }
+        )
+    }
 }
 
+@Composable
+private fun MemoryCenterCard(
+    title: String,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Color(0xFF0F172A))
+            content()
+        }
+    }
+}
 @Composable
 fun ChatBubble(message: Message) {
     val isUser = message.role == "user"

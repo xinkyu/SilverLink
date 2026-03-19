@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.silverlink.app.data.local.UserPreferences
+import com.silverlink.app.data.local.UserRole
 import com.silverlink.app.data.remote.AlertData
 import com.silverlink.app.data.remote.MedicationData
 import com.silverlink.app.data.remote.MedicationLogData
@@ -78,6 +79,13 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     
     private val syncRepository = SyncRepository.getInstance(application)
     private val userPreferences = UserPreferences.getInstance(application)
+    val isFamilyRole: Boolean = userPreferences.userConfig.value.role == UserRole.FAMILY
+    val showLocationSection: Boolean = isFamilyRole
+    val showAlertsSection: Boolean = isFamilyRole
+    val pageTitle: String = if (isFamilyRole) "长辈健康" else "健康概览"
+    val heroTitlePrefix: String = if (isFamilyRole) "长辈" else "今日"
+    val medicationDialogTitle: String = if (isFamilyRole) "为长辈添加药品" else "添加药品"
+    val medicationDialogSubtitle: String = if (isFamilyRole) "添加的药品将同步到长辈设备" else "保存后会同步到当前设备"
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("Asia/Shanghai")
@@ -95,6 +103,7 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     
     // AI 分析结果缓存（按时间范围+日期缓存）
     private val analysisCache = mutableMapOf<String, String>()
+    private val overviewAnalysisCache = mutableMapOf<String, String>()
     
     // 后台刷新状态
     private val _isBackgroundRefreshing = MutableStateFlow(false)
@@ -105,7 +114,7 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     val loadingState: StateFlow<LoadingState> = _loadingState.asStateFlow()
     
     // 是否已配对
-    private val _isPaired = MutableStateFlow(false)
+    private val _isPaired = MutableStateFlow(!isFamilyRole)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
     
     // 时间范围
@@ -151,6 +160,12 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     // 情绪分析加载状态
     private val _isAnalyzing = MutableStateFlow(false)
     val isAnalyzing: StateFlow<Boolean> = _isAnalyzing.asStateFlow()
+
+    private val _overviewAnalysis = MutableStateFlow<String?>(null)
+    val overviewAnalysis: StateFlow<String?> = _overviewAnalysis.asStateFlow()
+
+    private val _isOverviewAnalyzing = MutableStateFlow(false)
+    val isOverviewAnalyzing: StateFlow<Boolean> = _isOverviewAnalyzing.asStateFlow()
     
     // 长辈名字
     private val _elderName = MutableStateFlow("")
@@ -197,7 +212,9 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     
     init {
         loadData()
-        startAlertPolling()
+        if (isFamilyRole) {
+            startAlertPolling()
+        }
     }
     
     fun setTimeRange(range: TimeRange) {
@@ -224,6 +241,7 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
      * 开始轮询警报（60秒一次）
      */
     private fun startAlertPolling() {
+        if (!isFamilyRole) return
         alertPollingJob?.cancel()
         alertPollingJob = viewModelScope.launch {
             while (true) {
@@ -238,7 +256,7 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
      * 获取长辈位置
      */
     private suspend fun fetchLocation() {
-        if (!isPaired.value) return
+        if (!isFamilyRole || !isPaired.value) return
         
         try {
             // 直接调用 Repository 方法，它会在内部处理配对ID的获取
@@ -275,6 +293,7 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
      * 获取未读警报
      */
     private suspend fun fetchAlerts() {
+        if (!isFamilyRole) return
         try {
             val result = syncRepository.getAlerts(unreadOnly = true)
             if (result.isSuccess) {
@@ -310,6 +329,7 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         cachedMedicationLogs = null
         cachedMedications = null
         analysisCache.clear()
+        overviewAnalysisCache.clear()
     }
     
     /**
@@ -318,11 +338,39 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     private fun getAnalysisCacheKey(range: TimeRange, startDate: String): String {
         return "${range.name}_$startDate"
     }
+
+    private fun daysForSelectedRange(): Int {
+        return when (_selectedRange.value) {
+            TimeRange.DAY -> 1
+            TimeRange.WEEK -> 7
+            TimeRange.MONTH -> 30
+            TimeRange.YEAR -> 365
+        }
+    }
+
+    private fun rangeLabel(range: TimeRange): String {
+        return when (range) {
+            TimeRange.DAY -> "今天"
+            TimeRange.WEEK -> "本周"
+            TimeRange.MONTH -> "本月"
+            TimeRange.YEAR -> "今年"
+        }
+    }
+
+    private fun analysisSubjectInstruction(): String {
+        return if (isFamilyRole) {
+            val elderName = userPreferences.userConfig.value.elderName.trim().ifBlank { "长辈" }
+            "全文使用“$elderName”称呼长辈，内容要先说明${elderName}当前情况与可能原因，再给家人具体可执行的陪伴建议，不使用“老人/老年人/长者”等词。"
+        } else {
+            "全文使用第二人称“您”表达，可适当使用“您可能”“您的情况”这样的说法，不使用“老人/老年人/长者”等词。"
+        }
+    }
     
     /**
      * 启动位置轮询（由 UI 调用）
      */
     fun startLocationPolling() {
+        if (!isFamilyRole) return
         // 实际上轮询已经在 startAlertPolling 中处理了
         // 这里我们可以立即触发一次刷新
         refreshLocation()
@@ -386,6 +434,17 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         
         val points = processMoodData(moodLogs, startDate, endDate, range)
         processMedicationData(medLogs, medications, startDate, endDate, range)
+
+        val overviewCacheKey = "overview_${getAnalysisCacheKey(range, startDate)}"
+        val cachedOverview = overviewAnalysisCache[overviewCacheKey]
+        if (cachedOverview != null) {
+            _overviewAnalysis.value = cachedOverview
+        } else {
+            viewModelScope.launch {
+                fetchCognitiveReport(daysForSelectedRange())
+                analyzeOverview(points, range, startDate)
+            }
+        }
         
         // 检查AI分析缓存
         if (range != TimeRange.DAY) {
@@ -416,17 +475,26 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         endDate: String
     ) {
         val range = _selectedRange.value
-        
-        // 获取服药记录
-        val medicationResult = if (range == TimeRange.DAY) {
-            syncRepository.getElderMedicationLogs(date = dateStr)
+
+        val medicationResult = if (isFamilyRole) {
+            if (range == TimeRange.DAY) syncRepository.getElderMedicationLogs(date = dateStr)
+            else syncRepository.getElderMedicationLogs(date = null)
         } else {
-            syncRepository.getElderMedicationLogs(date = null)
+            if (range == TimeRange.DAY) syncRepository.getSelfMedicationLogs(date = dateStr)
+            else syncRepository.getSelfMedicationLogs(date = null)
         }
-        val medicationListResult = syncRepository.getElderMedicationsList()
-        val moodResult = syncRepository.getElderMoodLogs(days = daysForQuery)
-        
-        if (medicationResult.isFailure && moodResult.isFailure) {
+        val medicationListResult = if (isFamilyRole) {
+            syncRepository.getElderMedicationsList()
+        } else {
+            syncRepository.getSelfMedicationsList()
+        }
+        val moodResult = if (isFamilyRole) {
+            syncRepository.getElderMoodLogs(days = daysForQuery)
+        } else {
+            syncRepository.getSelfMoodLogs(days = daysForQuery)
+        }
+
+        if (isFamilyRole && medicationResult.isFailure && moodResult.isFailure) {
             val errorMsg = medicationResult.exceptionOrNull()?.message ?: "未知错误"
             if (errorMsg.contains("未找到已配对")) {
                 _isPaired.value = false
@@ -465,7 +533,8 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
         }
         
         // 加载认知评估报告
-        fetchCognitiveReport()
+        fetchCognitiveReport(daysForSelectedRange())
+        analyzeOverview(points, range, startDate)
 
         _loadingState.value = LoadingState.Success()
     }
@@ -473,10 +542,14 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
     /**
      * 获取认知评估报告
      */
-    private suspend fun fetchCognitiveReport() {
+    private suspend fun fetchCognitiveReport(days: Int) {
         _isCognitiveLoading.value = true
         try {
-            val result = syncRepository.getCognitiveReport(days = 7)
+            val result = if (isFamilyRole) {
+                syncRepository.getCognitiveReport(days = days)
+            } else {
+                syncRepository.getSelfCognitiveReport(days = days)
+            }
             result.onSuccess { report ->
                 _cognitiveReport.value = report
                 if (report != null && report.totalQuestions > 0) {
@@ -515,13 +588,27 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
                 else -> "保持稳定"
             }
 
-            val prompt = """
+            val prompt = if (isFamilyRole) """
 你是一名养老照护助手。请基于以下认知评估统计，给出简短分析与建议。
 要求：
-1) 用1-2句总结表现（正确率/平均用时/趋势）。
-2) 给出1-2条日常关怀与训练建议（避免诊断，面向家人可执行）。
-3) 语气简洁温和。
-4) 全文使用“${elderName}”称呼长辈，不使用“老人/老年人/长者”等词。
+1) 用1-2句总结${elderName}最近的认知表现（正确率/平均用时/趋势），主语是${elderName}。
+2) 给出1-2条明确写给家人的日常关怀与训练建议，可直接执行，使用“建议家人/家属……”这类表达。
+3) 避免诊断，语气简洁温和。
+4) 全文围绕${elderName}展开，不使用第二人称“您”。
+
+统计数据：
+- 时间范围：${report.startDate} ~ ${report.endDate}
+- 总题数：${report.totalQuestions}
+- 答对：${report.correctAnswers}
+- 正确率：${ratePercent}%
+- 平均用时：${report.averageResponseTimeMs / 1000}秒
+- 趋势：$trendText
+""".trimIndent() else """
+你是一名养老照护助手。请基于以下认知评估统计，给出面向本人的简短说明与建议。
+要求：
+1) 用1-2句总结您最近的认知表现。
+2) 给出1-2条可直接执行的训练或生活建议（避免诊断）。
+3) ${analysisSubjectInstruction()}
 
 统计数据：
 - 时间范围：${report.startDate} ~ ${report.endDate}
@@ -551,6 +638,75 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
             _cognitiveAnalysis.value = "认知分析暂不可用，请稍后重试。"
         } finally {
             _isCognitiveAnalyzing.value = false
+        }
+    }
+
+    private suspend fun analyzeOverview(
+        points: List<MoodTimePoint>,
+        range: TimeRange,
+        startDate: String
+    ) {
+        if (RetrofitClient.getApiKey().isBlank()) {
+            _overviewAnalysis.value = "AI 功能未配置，请在 local.properties 填写 QWEN_API_KEY"
+            return
+        }
+
+        val cacheKey = "overview_${getAnalysisCacheKey(range, startDate)}"
+        overviewAnalysisCache[cacheKey]?.let {
+            _overviewAnalysis.value = it
+            return
+        }
+
+        _isOverviewAnalyzing.value = true
+        try {
+            val moodSummary = if (points.isEmpty()) {
+                "暂无情绪记录"
+            } else {
+                points.groupBy { it.mood.uppercase() }
+                    .entries
+                    .sortedByDescending { it.value.size }
+                    .joinToString(separator = "；") { (mood, logs) ->
+                        "${mood}:${logs.size}次"
+                    }
+            }
+            val medicationSummaryText = medicationSummary.value?.let {
+                "已完成 ${it.takenCount}/${it.totalCount} 次；漏服重点: ${
+                    it.missedByMedication.take(3).joinToString("；") { pair -> "${pair.first}${pair.second}次" }.ifBlank { "暂无" }
+                }"
+            } ?: "暂无用药记录"
+            val cognitiveSummaryText = cognitiveReport.value?.let {
+                "答对 ${it.correctAnswers}/${it.totalQuestions} 题；正确率 ${(it.correctRate * 100).toInt()}%；平均用时 ${it.averageResponseTimeMs / 1000} 秒；趋势 ${it.trend}"
+            } ?: "暂无认知评估记录"
+            val latestMoodText = currentMood.value?.let { "最近情绪 ${it}" } ?: "最近情绪暂无"
+            val prompt = """
+你是一名养老照护助手。请根据以下${rangeLabel(range)}健康概览数据，输出一段简短说明和建议。
+要求：
+1) 先用1-2句总结${rangeLabel(range)}整体情况。
+2) 再给出2-3条简短建议，避免诊断。
+3) ${analysisSubjectInstruction()}
+4) 语言自然，不要分很多小标题。
+
+数据：
+- ${latestMoodText}
+- 情绪汇总：$moodSummary
+- 用药汇总：$medicationSummaryText
+- 认知评估：$cognitiveSummaryText
+""".trimIndent()
+
+            val request = QwenRequest(
+                input = Input(messages = listOf(Message(role = "user", content = prompt)))
+            )
+            val response = RetrofitClient.api.chat(request)
+            val content = response.output.choices?.firstOrNull()?.message?.content
+                ?: response.output.text
+                ?: "暂无概览分析结果"
+            _overviewAnalysis.value = content
+            overviewAnalysisCache[cacheKey] = content
+        } catch (e: Exception) {
+            android.util.Log.e("FamilyMonitoringViewModel", "概览分析失败: ${e.message}")
+            _overviewAnalysis.value = "概览分析暂不可用，请稍后重试。"
+        } finally {
+            _isOverviewAnalyzing.value = false
         }
     }
     
@@ -683,13 +839,25 @@ class FamilyMonitoringViewModel(application: Application) : AndroidViewModel(app
                 }
             }
 
-            val prompt = """
-你是一名养老照护助手。请根据以下情绪备注，分析${rangeLabel}${elderName}主要情绪分布的可能原因，并给出简短的关怀建议。
+            val prompt = if (isFamilyRole) """
+你是一名养老照护助手。请根据以下情绪备注，向家人说明${rangeLabel}${elderName}的情绪情况、可能原因，并给出简短的关怀建议。
+要求：
+1) 先概括${elderName}这段时间的整体情绪状态，像在对家人做情况说明。
+2) 按情绪分类说明可能原因（比如愉悦/平静/不愉快/焦虑/生气等），原因推测不要涉及诊断。
+3) 如果备注里能看出思念家人、孤独、作息变化、身体不适或事件触发，要明确说出来。
+4) 最后给出1-3条面向家人可执行的建议，风格类似“你们可以多陪她聊聊近况”“可以主动安排视频通话”。
+5) 语言自然，有温度，不要写成医疗报告。
+6) ${analysisSubjectInstruction()}
+
+情绪备注：
+$notesSection
+""".trimIndent() else """
+你是一名养老照护助手。请根据以下情绪备注，分析${rangeLabel}您主要情绪分布的可能原因，并给出简短的关怀建议。
 要求：
 1) 按情绪分类输出原因分析（比如愉悦/平静/不愉快/焦虑/生气等）。
 2) 每个情绪给出1-2条原因推测（不要涉及诊断）。
-3) 最后给出1-2条总体关怀建议（面向家人可执行）。
-4) 全文使用“${elderName}”称呼长辈，不使用“老人/老年人/长者”等词。
+3) 最后给出1-2条总体建议，面向本人可执行。
+4) ${analysisSubjectInstruction()}
 
 情绪备注：
 $notesSection
@@ -889,8 +1057,10 @@ $notesSection
         loadData(forceRefresh = true)
         
         // 立即刷新位置
-        viewModelScope.launch {
-            fetchLocation()
+        if (isFamilyRole) {
+            viewModelScope.launch {
+                fetchLocation()
+            }
         }
     }
     
@@ -910,7 +1080,11 @@ $notesSection
             val normalizedTimes = normalizeTimes(times)
 
             // 先检查是否已存在同名同剂量药品，存在则合并时间并更新
-            val existing = syncRepository.getElderMedicationsList()
+            val existing = (if (isFamilyRole) {
+                syncRepository.getElderMedicationsList()
+            } else {
+                syncRepository.getSelfMedicationsList()
+            })
                 .getOrDefault(emptyList())
                 .firstOrNull {
                     it.name.trim() == name.trim() && it.dosage.trim() == dosage.trim()
@@ -922,17 +1096,33 @@ $notesSection
                     .sorted()
                     .joinToString(",")
 
-                syncRepository.updateMedicationTimesForPairedElder(
-                    name = name,
-                    dosage = dosage,
-                    times = mergedTimes
-                )
+                if (isFamilyRole) {
+                    syncRepository.updateMedicationTimesForPairedElder(
+                        name = name,
+                        dosage = dosage,
+                        times = mergedTimes
+                    )
+                } else {
+                    syncRepository.updateMedicationTimesForElder(
+                        name = name,
+                        dosage = dosage,
+                        times = mergedTimes
+                    )
+                }
             } else {
-                syncRepository.addMedicationForElder(
-                    name = name,
-                    dosage = dosage,
-                    times = normalizedTimes.joinToString(",")
-                )
+                if (isFamilyRole) {
+                    syncRepository.addMedicationForElder(
+                        name = name,
+                        dosage = dosage,
+                        times = normalizedTimes.joinToString(",")
+                    )
+                } else {
+                    syncRepository.addMedicationForSelf(
+                        name = name,
+                        dosage = dosage,
+                        times = normalizedTimes.joinToString(",")
+                    )
+                }
             }
 
             if (result.isSuccess) {

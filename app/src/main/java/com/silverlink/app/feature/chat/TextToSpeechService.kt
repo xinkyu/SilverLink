@@ -39,12 +39,12 @@ class TextToSpeechService {
     companion object {
         private const val TAG = "TextToSpeechService"
         private const val WS_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
-        // 复刻音色使用 cosyvoice-v3-plus 模型（支持方言指令）
-        private const val MODEL_CLONED = "cosyvoice-v3-plus"
-        // 系统音色使用 cosyvoice-v1 模型（兼容 longxiaochun 等预置音色）
-        private const val MODEL_SYSTEM = "cosyvoice-v1"
-        // 默认系统音色（当没有复刻音色时使用）
-        private const val DEFAULT_VOICE = "longxiaochun"
+        // 复刻音色统一使用 cosyvoice-v3.5-plus 模型
+        private const val MODEL_CLONED = "cosyvoice-v3.5-plus"
+        // 系统音色使用 cosyvoice-v2 模型
+        private const val MODEL_SYSTEM = "cosyvoice-v2"
+        // 默认系统音色：龙安亲（亲和活泼女）
+        private const val DEFAULT_VOICE = "longanqin"
         private const val FORMAT = "mp3"
         private const val SAMPLE_RATE = 22050
     }
@@ -73,14 +73,6 @@ class TextToSpeechService {
      */
     fun isUsingClonedVoice(): Boolean = clonedVoiceId.isNotBlank()
     
-    /**
-     * 获取当前应使用的模型
-     * 复刻音色需要 cosyvoice-v3-plus，系统音色使用 cosyvoice-v1
-     */
-    private fun getCurrentModel(): String {
-        return if (isUsingClonedVoice()) MODEL_CLONED else MODEL_SYSTEM
-    }
-
     private val wsClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -101,21 +93,54 @@ class TextToSpeechService {
         dialect: String = "",
         emotion: Emotion = Emotion.NEUTRAL
     ): Result<ByteArray> = withContext(Dispatchers.IO) {
-        try {
-            val instruction = buildInstruction(dialect, emotion)
-            val voiceId = getCurrentVoiceId()
-            Log.d(TAG, "Starting TTS synthesis: voice=$voiceId, rate=$rate, instruction=$instruction, text=${text.take(50)}...")
-            val audioData = performTtsSynthesis(text, rate, instruction, voiceId)
-            Log.d(TAG, "TTS synthesis completed, audio size: ${audioData.size} bytes")
-            if (audioData.isEmpty()) {
-                Result.failure(Exception("未收到音频数据"))
-            } else {
-                Result.success(audioData)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "TTS synthesis failed", e)
-            Result.failure(e)
+        val normalizedText = text.trim()
+        if (normalizedText.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("文本为空"))
         }
+
+        val voiceId = getCurrentVoiceId()
+        val requestChain = buildRequestChain(voiceId)
+
+        var lastError: Exception? = null
+        requestChain.forEachIndexed { index, requestConfig ->
+            val instruction = buildInstruction(
+                dialect = if (requestConfig.supportsDialectInstruction) dialect else "",
+                emotion = emotion,
+                supportsDialectInstruction = requestConfig.supportsDialectInstruction
+            )
+            try {
+                val stage = when (index) {
+                    0 -> "primary"
+                    1 -> "secondary"
+                    else -> "fallback"
+                }
+                Log.d(
+                    TAG,
+                    "Starting $stage TTS synthesis: model=${requestConfig.model}, voice=${requestConfig.voiceId}, rate=$rate, instruction=$instruction, text=${normalizedText.take(50)}..."
+                )
+                val audioData = performTtsSynthesis(
+                    inputText = normalizedText,
+                    rate = rate,
+                    instruction = instruction,
+                    requestConfig = requestConfig
+                )
+                Log.d(TAG, "TTS synthesis completed, audio size: ${audioData.size} bytes")
+                return@withContext if (audioData.isEmpty()) {
+                    Result.failure(Exception("未收到音频数据"))
+                } else {
+                    Result.success(audioData)
+                }
+            } catch (e: Exception) {
+                lastError = e
+                Log.e(
+                    TAG,
+                    "TTS synthesis failed for model=${requestConfig.model}, voice=${requestConfig.voiceId}",
+                    e
+                )
+            }
+        }
+
+        Result.failure(lastError ?: Exception("语音合成失败"))
     }
     
     /**
@@ -131,14 +156,18 @@ class TextToSpeechService {
      *            江西话、闽南话、宁夏话、山西话、陕西话、山东话、
      *            上海话、四川话、天津话、云南话
      */
-    private fun buildInstruction(dialect: String, emotion: Emotion): String {
+    private fun buildInstruction(
+        dialect: String,
+        emotion: Emotion,
+        supportsDialectInstruction: Boolean = isUsingClonedVoice()
+    ): String {
         Log.d(TAG, "buildInstruction called with dialect=$dialect, emotion=$emotion")
         
         val parts = mutableListOf<String>()
         
         // 方言指令（仅复刻音色支持）
         if (dialect.isNotBlank()) {
-            if (isUsingClonedVoice()) {
+            if (supportsDialectInstruction) {
                 // 格式：“请用<方言>表达”
                 parts.add("请用${dialect}表达")
             } else {
@@ -181,13 +210,16 @@ class TextToSpeechService {
         inputText: String, 
         rate: Double,
         instruction: String,
-        voiceId: String
+        requestConfig: VoiceRequestConfig
     ): ByteArray = suspendCancellableCoroutine { continuation ->
         val taskId = UUID.randomUUID().toString().replace("-", "") // API 建议 UUID，这里去掉横线试试，文档说可以带也可以不带
         val audioBuffer = ByteArrayOutputStream()
         val speechRate = rate
 
-        Log.d(TAG, "Creating WebSocket connection, taskId: $taskId, voice: $voiceId, instruction: $instruction")
+        Log.d(
+            TAG,
+            "Creating WebSocket connection, taskId: $taskId, model=${requestConfig.model}, voice=${requestConfig.voiceId}, instruction: $instruction"
+        )
 
         val request = Request.Builder()
             .url(WS_URL)
@@ -198,7 +230,13 @@ class TextToSpeechService {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "WebSocket opened, sending run-task")
                 // 发送 run-task 指令开启任务，包含待合成文本
-                val runTaskMessage = createRunTaskMessage(taskId, inputText, speechRate, instruction, voiceId)
+                val runTaskMessage = createRunTaskMessage(
+                    taskId = taskId,
+                    text = inputText,
+                    rate = speechRate,
+                    instruction = instruction,
+                    requestConfig = requestConfig
+                )
 
                 Log.d(TAG, "Sending: $runTaskMessage")
                 webSocket.send(runTaskMessage)
@@ -270,8 +308,13 @@ class TextToSpeechService {
         }
     }
 
-    private fun createRunTaskMessage(taskId: String, text: String, rate: Double, instruction: String, voiceId: String): String {
-        val model = getCurrentModel()
+    private fun createRunTaskMessage(
+        taskId: String,
+        text: String,
+        rate: Double,
+        instruction: String,
+        requestConfig: VoiceRequestConfig
+    ): String {
         return JSONObject().apply {
             put("header", JSONObject().apply {
                 put("action", "run-task")
@@ -282,11 +325,10 @@ class TextToSpeechService {
                 put("task_group", "audio")
                 put("task", "tts")
                 put("function", "SpeechSynthesizer")
-                put("model", model)
+                put("model", requestConfig.model)
                 put("parameters", JSONObject().apply {
                     put("text_type", "PlainText")
-                    // 使用复刻音色ID或默认系统音色
-                    put("voice", voiceId)
+                    put("voice", requestConfig.voiceId)
                     if (instruction.isNotBlank()) {
                         put("instruction", instruction)
                     }
@@ -306,6 +348,48 @@ class TextToSpeechService {
             })
         }.toString()
     }
+
+    private fun resolveVoiceRequest(voiceId: String): VoiceRequestConfig {
+        val normalizedVoiceId = voiceId.trim().ifBlank { DEFAULT_VOICE }
+        return when {
+            normalizedVoiceId == DEFAULT_VOICE -> VoiceRequestConfig(
+                model = MODEL_SYSTEM,
+                voiceId = DEFAULT_VOICE,
+                supportsDialectInstruction = false
+            )
+            normalizedVoiceId.startsWith("cosyvoice-v3.5-plus-voice-") -> VoiceRequestConfig(
+                model = MODEL_CLONED,
+                voiceId = normalizedVoiceId,
+                supportsDialectInstruction = true
+            )
+            else -> {
+                Log.w(TAG, "Unknown voice id format '$normalizedVoiceId', fallback to system voice")
+                VoiceRequestConfig(
+                    model = MODEL_SYSTEM,
+                    voiceId = DEFAULT_VOICE,
+                    supportsDialectInstruction = false
+                )
+            }
+        }
+    }
+
+    private fun buildRequestChain(voiceId: String): List<VoiceRequestConfig> {
+        val normalizedVoiceId = voiceId.trim().ifBlank { DEFAULT_VOICE }
+        if (normalizedVoiceId == DEFAULT_VOICE) {
+            return listOf(resolveVoiceRequest(DEFAULT_VOICE))
+        }
+
+        return listOf(
+            resolveVoiceRequest(normalizedVoiceId),
+            resolveVoiceRequest(DEFAULT_VOICE)
+        ).distinct()
+    }
+
+    private data class VoiceRequestConfig(
+        val model: String,
+        val voiceId: String,
+        val supportsDialectInstruction: Boolean
+    )
 
     private fun createContinueTaskMessage(taskId: String, text: String): String {
         return JSONObject().apply {

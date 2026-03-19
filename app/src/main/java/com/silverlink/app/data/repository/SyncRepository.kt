@@ -2,6 +2,9 @@ package com.silverlink.app.data.repository
 
 import android.content.Context
 import android.provider.Settings
+import com.silverlink.app.data.local.AppDatabase
+import com.silverlink.app.data.local.MemoryRecordEntity
+import com.silverlink.app.data.local.UserProfileMemoryEntity
 import com.silverlink.app.data.local.UserPreferences
 import com.silverlink.app.data.local.UserRole
 import com.silverlink.app.data.local.PairingInfo
@@ -22,6 +25,7 @@ class SyncRepository(private val context: Context) {
     
     private val cloudBase = CloudBaseService
     private val userPrefs = UserPreferences.getInstance(context)
+    private val memoryDao by lazy { AppDatabase.getInstance(context).memoryDao() }
     private val currentDeviceId: String by lazy {
         Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
     }
@@ -77,9 +81,9 @@ class SyncRepository(private val context: Context) {
             if (cloudResult.isSuccess) {
                 val pairingResult = cloudResult.getOrNull()
                 if (pairingResult != null) {
-                    // 云端验证成功，保存 elderProfile 和 dialect
-                    if (pairingResult.elderProfile.isNotBlank()) {
-                        userPrefs.setElderProfile(pairingResult.elderProfile)
+                    val profileBundle = extractProfileBundle(pairingResult.elderProfile)
+                    if (profileBundle.profile.isNotBlank()) {
+                        userPrefs.setElderProfile(profileBundle.profile)
                     }
                     if (pairingResult.assistantName.isNotBlank()) {
                         userPrefs.setAssistantName(pairingResult.assistantName)
@@ -94,6 +98,10 @@ class SyncRepository(private val context: Context) {
                         userPrefs.setClonedVoiceId(pairingResult.clonedVoiceId)
                         android.util.Log.d("SyncRepository", "从云端获取复刻音色ID: ${pairingResult.clonedVoiceId}")
                     }
+                    userPrefs.setMajorDiseaseInfo(
+                        profileBundle.hasMajorDisease,
+                        profileBundle.majorDiseaseDetails
+                    )
                     return@withContext Result.success(PairingInfo(
                         code = cleanCode,
                         elderName = pairingResult.elderName,
@@ -119,8 +127,175 @@ class SyncRepository(private val context: Context) {
     ): Result<Unit> = withContext(Dispatchers.IO) {
         // 保存本地
         userPrefs.completeElderActivation(elderName)
+        persistPairingProfileToMemory(elderName)
         Result.success(Unit)
     }
+
+    private suspend fun persistPairingProfileToMemory(elderName: String) {
+        val config = userPrefs.userConfig.value
+        val now = System.currentTimeMillis()
+        val cleanName = elderName.trim()
+        val cleanProfile = config.elderProfile.trim()
+        val cleanAssistantName = config.assistantName.trim()
+        val cleanDiseaseDetails = config.majorDiseaseDetails.trim()
+        val cleanDialect = config.dialect.displayName.takeIf { config.dialect != com.silverlink.app.data.local.Dialect.NONE }.orEmpty()
+        val cleanVoiceId = config.clonedVoiceId.trim()
+
+        if (cleanName.isNotBlank()) {
+            memoryDao.upsertUserProfileMemory(
+                UserProfileMemoryEntity(
+                    key = "elder_name",
+                    value = cleanName,
+                    confidence = 1.0f,
+                    updatedAt = now
+                )
+            )
+            upsertLongTermMemory(
+                content = "我的称呼是$cleanName。",
+                keywords = "称呼,姓名,老人信息",
+                importance = 0.95f,
+                createdAt = now
+            )
+        }
+
+        if (cleanProfile.isNotBlank()) {
+            memoryDao.upsertUserProfileMemory(
+                UserProfileMemoryEntity(
+                    key = "elder_profile",
+                    value = cleanProfile,
+                    confidence = 0.92f,
+                    updatedAt = now
+                )
+            )
+            upsertLongTermMemory(
+                content = "我的基本情况是：$cleanProfile",
+                keywords = "画像,老人信息,偏好,背景",
+                importance = 0.82f,
+                createdAt = now
+            )
+        }
+
+        memoryDao.upsertUserProfileMemory(
+            UserProfileMemoryEntity(
+                key = "major_disease_flag",
+                value = config.hasMajorDisease.toString(),
+                confidence = 0.96f,
+                updatedAt = now
+            )
+        )
+
+        if (cleanDiseaseDetails.isNotBlank()) {
+            memoryDao.upsertUserProfileMemory(
+                UserProfileMemoryEntity(
+                    key = "major_disease_details",
+                    value = cleanDiseaseDetails,
+                    confidence = 0.98f,
+                    updatedAt = now
+                )
+            )
+            upsertLongTermMemory(
+                content = "我需要重点关注的健康情况是：$cleanDiseaseDetails",
+                keywords = "疾病,健康,病史,照护",
+                importance = 0.98f,
+                createdAt = now
+            )
+        }
+
+        if (cleanAssistantName.isNotBlank()) {
+            memoryDao.upsertUserProfileMemory(
+                UserProfileMemoryEntity(
+                    key = "assistant_name",
+                    value = cleanAssistantName,
+                    confidence = 0.9f,
+                    updatedAt = now
+                )
+            )
+        }
+
+        if (cleanDialect.isNotBlank()) {
+            memoryDao.upsertUserProfileMemory(
+                UserProfileMemoryEntity(
+                    key = "preferred_dialect",
+                    value = cleanDialect,
+                    confidence = 0.88f,
+                    updatedAt = now
+                )
+            )
+        }
+
+        if (cleanVoiceId.isNotBlank()) {
+            memoryDao.upsertUserProfileMemory(
+                UserProfileMemoryEntity(
+                    key = "cloned_voice_id",
+                    value = cleanVoiceId,
+                    confidence = 1.0f,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    private suspend fun upsertLongTermMemory(
+        content: String,
+        keywords: String,
+        importance: Float,
+        createdAt: Long
+    ) {
+        val normalized = content.trim()
+        if (normalized.isBlank()) return
+
+        val existing = memoryDao.findLatestByExactContent(normalized)
+        if (existing == null) {
+            memoryDao.insertMemoryRecord(
+                MemoryRecordEntity(
+                    sourceConversationId = 0L,
+                    content = normalized,
+                    keywordsText = keywords,
+                    importance = importance,
+                    createdAt = createdAt,
+                    lastAccessAt = createdAt
+                )
+            )
+        } else {
+            memoryDao.updateMemoryRecord(
+                existing.copy(
+                    keywordsText = keywords,
+                    importance = maxOf(existing.importance, importance),
+                    lastAccessAt = createdAt
+                )
+            )
+        }
+    }
+
+    private fun extractProfileBundle(rawProfile: String): ProfileBundle {
+        val marker = "【重大疾病】"
+        if (!rawProfile.contains(marker)) {
+            return ProfileBundle(
+                profile = rawProfile.trim(),
+                hasMajorDisease = false,
+                majorDiseaseDetails = ""
+            )
+        }
+
+        val profilePart = rawProfile.substringBefore(marker)
+            .trim()
+            .trimEnd('。', '，', ',', '；', ';')
+        val diseasePart = rawProfile.substringAfter(marker)
+            .trim()
+            .trim('。', '，', ',', '；', ';', ' ')
+
+        return ProfileBundle(
+            profile = profilePart,
+            hasMajorDisease = diseasePart.isNotBlank(),
+            majorDiseaseDetails = diseasePart
+        )
+    }
+
+    private data class ProfileBundle(
+        val profile: String,
+        val hasMajorDisease: Boolean,
+        val majorDiseaseDetails: String
+    )
     
     // ==================== 服药记录同步 ====================
     
@@ -132,7 +307,8 @@ class SyncRepository(private val context: Context) {
         medicationName: String,
         dosage: String,
         scheduledTime: String,
-        status: String = "taken"
+        status: String = "taken",
+        date: String? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             cloudBase.addMedicationLog(
@@ -141,7 +317,8 @@ class SyncRepository(private val context: Context) {
                 medicationName = medicationName,
                 dosage = dosage,
                 scheduledTime = scheduledTime,
-                status = status
+                status = status,
+                date = date
             )
             Result.success(Unit)
         } catch (e: Exception) {
@@ -598,6 +775,26 @@ class SyncRepository(private val context: Context) {
             cloudBase.dismissAlert(alertId, currentDeviceId)
         } catch (e: Exception) {
             android.util.Log.e("SyncRepository", "标记警报已读失败: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendAlertForPairedElder(
+        alertType: String,
+        message: String,
+        elderName: String = userPrefs.userConfig.value.elderName
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val elderDeviceId = cloudBase.getPairedElderDeviceId(currentDeviceId).getOrNull()
+                ?: return@withContext Result.failure(Exception("未找到已配对的长辈"))
+            cloudBase.sendAlert(
+                elderDeviceId = elderDeviceId,
+                alertType = alertType,
+                message = message,
+                elderName = elderName
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "发送家人提醒失败: ${e.message}")
             Result.failure(e)
         }
     }

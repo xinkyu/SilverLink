@@ -48,7 +48,7 @@ class VoiceCloningService {
         const val RECOMMENDED_DURATION_SECONDS = 15
         
         // 驱动音色的语音合成模型
-        const val TARGET_MODEL = "cosyvoice-v3-plus"
+        const val TARGET_MODEL = "cosyvoice-v3.5-plus"
         
         // 轮询配置
         private const val POLL_INTERVAL_MS = 5000L  // 5秒

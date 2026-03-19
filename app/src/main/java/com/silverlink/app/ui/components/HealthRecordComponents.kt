@@ -1,4 +1,4 @@
-package com.silverlink.app.ui.components
+﻿package com.silverlink.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
@@ -82,7 +82,8 @@ data class MoodTimePoint(
     val time: String,       // "08:30"
     val mood: String,       // "HAPPY" | "NEUTRAL" | "SAD" etc.
     val note: String = "",  // 对话摘要
-    val timestamp: Long = 0
+    val timestamp: Long = 0,
+    val date: String = ""
 )
 
 /**
@@ -324,62 +325,31 @@ fun TimeRangeSelector(
             .padding(horizontal = 16.dp)
     ) {
         // Tab 切换
-        val tabs = TimeRange.entries.toList()
-        val selectedIndex = tabs.indexOf(selectedRange)
+        RangeTabs(selectedRange = selectedRange, onRangeSelected = onRangeSelected)
+        Spacer(modifier = Modifier.height(12.dp))
         
-        TabRow(
-            selectedTabIndex = selectedIndex,
-            containerColor = Color.Transparent,
-            contentColor = primaryColor,
-            indicator = { tabPositions ->
-                if (selectedIndex < tabPositions.size) {
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedIndex]),
-                        height = 3.dp,
-                        color = primaryColor
-                    )
-                }
-            },
-            divider = {}
-        ) {
-            tabs.forEachIndexed { index, range ->
-                Tab(
-                    selected = selectedIndex == index,
-                    onClick = { onRangeSelected(range) },
-                    text = {
-                        Text(
-                            text = range.label,
-                            fontWeight = if (selectedIndex == index) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = 16.sp
-                        )
-                    }
+        // 日期选择
+        if (selectedRange == TimeRange.DAY || selectedRange == TimeRange.WEEK) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { showDatePicker = true }
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = dateFormat.format(selectedDate),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = "选择日期",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
         
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // 日期选择
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { showDatePicker = true }
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = dateFormat.format(selectedDate),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium
-            )
-            Icon(
-                Icons.Default.ArrowDropDown,
-                contentDescription = "选择日期",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-    
     // 日期选择器对话框
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
@@ -405,6 +375,52 @@ fun TimeRangeSelector(
             }
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+    }
+}
+
+// ==================== RangeTabs ====================
+
+@Composable
+fun RangeTabs(
+    selectedRange: TimeRange,
+    onRangeSelected: (TimeRange) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tabs = listOf(
+        TimeRange.DAY to "日",
+        TimeRange.WEEK to "周",
+        TimeRange.MONTH to "月",
+        TimeRange.YEAR to "年"
+    )
+    Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFFF1F5F9), modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            tabs.forEach { (range, label) ->
+                val selected = range == selectedRange
+                Surface(
+                    onClick = { onRangeSelected(range) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (selected) Color.White else Color.Transparent,
+                    shadowElevation = if (selected) 2.dp else 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 14.sp,
+                            color = if (selected) Color(0xFF0F172A) else Color(0xFF64748B),
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -495,6 +511,7 @@ private fun minutesOfDay(point: MoodTimePoint): Int {
 // ==================== D. 时间轴分布图 ====================
 
 enum class ChartType(val label: String) {
+    HEALTH("概览"),
     MOOD("情绪"),
     MEDICATION("用药记录"),
     COGNITIVE("认知评估")
@@ -506,38 +523,49 @@ fun ChartTypeToggle(
     onTypeSelected: (ChartType) -> Unit,
     primaryColor: Color = MaterialTheme.colorScheme.primary
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFF1F5F9),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        ChartType.entries.forEach { type ->
-            val isSelected = selectedType == type
-            val backgroundColor by animateColorAsState(
-                targetValue = if (isSelected) primaryColor else Color.Transparent,
-                label = "bg"
-            )
-            val textColor by animateColorAsState(
-                targetValue = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                label = "text"
-            )
-            
-            Surface(
-                modifier = Modifier
-                    .padding(horizontal = 3.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable { onTypeSelected(type) },
-                color = backgroundColor,
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Text(
-                    text = type.label,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    color = textColor,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1,
-                    softWrap = false
+        Row(
+            modifier = Modifier.padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            ChartType.entries.forEach { type ->
+                val isSelected = selectedType == type
+                val backgroundColor by animateColorAsState(
+                    targetValue = if (isSelected) primaryColor else Color.Transparent,
+                    label = "bg"
                 )
+                val textColor by animateColorAsState(
+                    targetValue = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    label = "text"
+                )
+
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    onClick = { onTypeSelected(type) },
+                    color = backgroundColor,
+                    shape = RoundedCornerShape(16.dp),
+                    shadowElevation = if (isSelected) 2.dp else 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = type.label,
+                            color = textColor,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 2,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
         }
     }
@@ -825,6 +853,9 @@ fun MoodDistributionDonutChart(
 fun MoodAnalysisCard(
     analysis: String?,
     isLoading: Boolean,
+    title: String = "AI 情绪分析",
+    loadingText: String = "正在分析情绪备注…",
+    emptyText: String = "暂无可分析的情绪备注",
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -839,7 +870,7 @@ fun MoodAnalysisCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "AI 情绪分析",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -850,7 +881,7 @@ fun MoodAnalysisCard(
             when {
                 isLoading -> {
                     Text(
-                        text = "正在分析情绪备注…",
+                        text = loadingText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -859,7 +890,7 @@ fun MoodAnalysisCard(
                 }
                 analysis.isNullOrBlank() -> {
                     Text(
-                        text = "暂无可分析的情绪备注",
+                        text = emptyText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1319,6 +1350,9 @@ fun CognitiveReportCard(
 fun CognitiveAnalysisCard(
     analysis: String?,
     isLoading: Boolean,
+    title: String = "AI 认知分析",
+    loadingText: String = "正在分析认知表现…",
+    emptyText: String = "暂无可分析的认知数据",
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -1333,7 +1367,7 @@ fun CognitiveAnalysisCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "AI 认知分析",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -1344,7 +1378,7 @@ fun CognitiveAnalysisCard(
             when {
                 isLoading -> {
                     Text(
-                        text = "正在分析认知表现…",
+                        text = loadingText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1353,7 +1387,7 @@ fun CognitiveAnalysisCard(
                 }
                 analysis.isNullOrBlank() -> {
                     Text(
-                        text = "暂无可分析的认知数据",
+                        text = emptyText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

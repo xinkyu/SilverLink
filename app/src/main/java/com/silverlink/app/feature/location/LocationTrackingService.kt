@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Geocoder
+import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -18,11 +19,11 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import com.google.android.gms.location.*
 import com.silverlink.app.MainActivity
 import com.silverlink.app.R
 import com.silverlink.app.data.local.UserPreferences
-import com.silverlink.app.data.remote.CloudBaseService
 import kotlinx.coroutines.*
 import java.util.Locale
 
@@ -45,6 +46,9 @@ class LocationTrackingService : Service() {
         private const val LOCATION_UPDATE_INTERVAL_MS = 5 * 60 * 1000L
         // 最快更新间隔：2分钟（防止过于频繁）
         private const val LOCATION_FASTEST_INTERVAL_MS = 2 * 60 * 1000L
+        private const val SINGLE_FIX_TIMEOUT_MS = 15_000L
+        private const val BOOTSTRAP_RETRY_INTERVAL_MS = 30_000L
+        private const val BOOTSTRAP_WINDOW_MS = 10 * 60 * 1000L
         
         /**
          * 启动位置追踪服务
@@ -94,6 +98,9 @@ class LocationTrackingService : Service() {
     private lateinit var userPreferences: UserPreferences
     private lateinit var syncRepository: com.silverlink.app.data.repository.SyncRepository
     private var locationCallback: LocationCallback? = null
+    private var bootstrapRetryJob: Job? = null
+    private var hasUploadedLocation = false
+    private var serviceStartedAtMs = 0L
     
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
@@ -120,6 +127,8 @@ class LocationTrackingService : Service() {
         userPreferences = UserPreferences.getInstance(applicationContext)
         syncRepository = com.silverlink.app.data.repository.SyncRepository.getInstance(applicationContext)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        serviceStartedAtMs = System.currentTimeMillis()
+        hasUploadedLocation = false
         
         // 开始位置追踪
         startLocationUpdates()
@@ -167,9 +176,18 @@ class LocationTrackingService : Service() {
             stopSelf()
             return
         }
+
+        Log.d(
+            TAG,
+            "startLocationUpdates, locationEnabled=${isLocationEnabled()}, backgroundPermission=${hasBackgroundLocationPermission(this)}, sharingEnabled=${userPreferences.isLocationSharingEnabled()}"
+        )
+
+        if (!isLocationEnabled()) {
+            Log.w(TAG, "系统定位开关未开启，等待用户开启后再获取位置")
+        }
         
         val locationRequest = LocationRequest.Builder(
-            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+            Priority.PRIORITY_HIGH_ACCURACY,
             LOCATION_UPDATE_INTERVAL_MS
         )
             .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL_MS)
@@ -181,7 +199,7 @@ class LocationTrackingService : Service() {
                 result.lastLocation?.let { location ->
                     Log.d(TAG, "位置更新: lat=${location.latitude}, lng=${location.longitude}, accuracy=${location.accuracy}")
                     uploadLocation(location.latitude, location.longitude, location.accuracy)
-                }
+                } ?: Log.w(TAG, "requestLocationUpdates 收到空位置结果")
             }
         }
         
@@ -195,6 +213,7 @@ class LocationTrackingService : Service() {
         
         // 立即获取一次位置并上传
         getImmediateLocation()
+        startBootstrapRetries()
     }
     
     /**
@@ -203,9 +222,13 @@ class LocationTrackingService : Service() {
      */
     @SuppressLint("MissingPermission")
     private fun getImmediateLocation() {
+        if (!isLocationEnabled()) {
+            Log.w(TAG, "getImmediateLocation 跳过：系统定位未开启")
+            return
+        }
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
             if (location != null) {
-                Log.d(TAG, "初始位置(lastLocation): lat=${location.latitude}, lng=${location.longitude}")
+                Log.d(TAG, "初始位置(lastLocation): lat=${location.latitude}, lng=${location.longitude}, accuracy=${location.accuracy}")
                 uploadLocation(location.latitude, location.longitude, location.accuracy)
             } else {
                 // lastLocation 为空，强制请求当前位置
@@ -226,6 +249,11 @@ class LocationTrackingService : Service() {
     private fun forceGetCurrentLocation(retryCount: Int = 0) {
         val maxRetries = 3
         val retryDelayMs = 5000L // 5秒后重试
+
+        if (!isLocationEnabled()) {
+            Log.w(TAG, "forceGetCurrentLocation 跳过：系统定位未开启")
+            return
+        }
         
         val locationRequest = CurrentLocationRequest.Builder()
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
@@ -236,31 +264,103 @@ class LocationTrackingService : Service() {
         fusedLocationClient.getCurrentLocation(locationRequest, null)
             .addOnSuccessListener { location ->
                 if (location != null) {
-                    Log.d(TAG, "强制获取位置成功: lat=${location.latitude}, lng=${location.longitude}")
+                    Log.d(TAG, "强制获取位置成功: lat=${location.latitude}, lng=${location.longitude}, accuracy=${location.accuracy}")
                     uploadLocation(location.latitude, location.longitude, location.accuracy)
                 } else {
-                    if (retryCount < maxRetries) {
-                        Log.w(TAG, "强制获取位置返回null，${retryDelayMs / 1000}秒后重试 (${retryCount + 1}/$maxRetries)")
-                        serviceScope.launch {
-                            delay(retryDelayMs)
-                            forceGetCurrentLocation(retryCount + 1)
-                        }
-                    } else {
-                        Log.w(TAG, "强制获取位置失败，已达到最大重试次数，等待定期更新")
-                    }
+                    Log.w(TAG, "强制获取位置返回null，尝试单次高精度订阅 (${retryCount + 1}/$maxRetries)")
+                    requestSingleHighAccuracyUpdate(retryCount, maxRetries, retryDelayMs)
                 }
             }
             .addOnFailureListener { e ->
-                if (retryCount < maxRetries) {
-                    Log.e(TAG, "强制获取位置失败: ${e.message}，${retryDelayMs / 1000}秒后重试 (${retryCount + 1}/$maxRetries)")
-                    serviceScope.launch {
-                        delay(retryDelayMs)
-                        forceGetCurrentLocation(retryCount + 1)
-                    }
+                Log.e(TAG, "强制获取位置失败: ${e.message}，转为单次高精度订阅", e)
+                requestSingleHighAccuracyUpdate(retryCount, maxRetries, retryDelayMs)
+            }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestSingleHighAccuracyUpdate(
+        retryCount: Int,
+        maxRetries: Int,
+        retryDelayMs: Long
+    ) {
+        var completed = false
+        val singleRequest = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            1_000L
+        )
+            .setWaitForAccurateLocation(true)
+            .setMinUpdateIntervalMillis(0L)
+            .setMaxUpdateDelayMillis(0L)
+            .setMaxUpdates(1)
+            .build()
+
+        var callback: LocationCallback? = null
+        callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                if (completed) return
+                completed = true
+                val location = result.lastLocation
+                if (location != null) {
+                    Log.d(TAG, "单次高精度订阅成功: lat=${location.latitude}, lng=${location.longitude}, accuracy=${location.accuracy}")
+                    uploadLocation(location.latitude, location.longitude, location.accuracy)
                 } else {
-                    Log.e(TAG, "强制获取位置失败，已达到最大重试次数: ${e.message}")
+                    Log.w(TAG, "单次高精度订阅返回空位置")
+                    scheduleLocationRetry(retryCount, maxRetries, retryDelayMs)
+                }
+                callback?.let { fusedLocationClient.removeLocationUpdates(it) }
+            }
+        }
+
+        fusedLocationClient.requestLocationUpdates(
+            singleRequest,
+            callback,
+            Looper.getMainLooper()
+        )
+
+        serviceScope.launch {
+            delay(SINGLE_FIX_TIMEOUT_MS)
+            if (!completed) {
+                completed = true
+            callback?.let {
+                fusedLocationClient.removeLocationUpdates(it)
+                Log.w(TAG, "单次高精度订阅超时 (${SINGLE_FIX_TIMEOUT_MS / 1000}s)")
+                scheduleLocationRetry(retryCount, maxRetries, retryDelayMs)
+            }
+            }
+        }
+    }
+
+    private fun scheduleLocationRetry(
+        retryCount: Int,
+        maxRetries: Int,
+        retryDelayMs: Long
+    ) {
+        if (retryCount >= maxRetries) {
+            Log.w(TAG, "定位仍未获取成功，已达到最大重试次数，等待下一轮常规定位")
+            return
+        }
+        serviceScope.launch {
+            delay(retryDelayMs)
+            forceGetCurrentLocation(retryCount + 1)
+        }
+    }
+
+    private fun startBootstrapRetries() {
+        bootstrapRetryJob?.cancel()
+        bootstrapRetryJob = serviceScope.launch {
+            while (isActive && !hasUploadedLocation) {
+                val elapsed = System.currentTimeMillis() - serviceStartedAtMs
+                if (elapsed >= BOOTSTRAP_WINDOW_MS) {
+                    Log.w(TAG, "首定位兜底结束，${BOOTSTRAP_WINDOW_MS / 1000}s 内仍未上传成功，转为常规定位")
+                    break
+                }
+                delay(BOOTSTRAP_RETRY_INTERVAL_MS)
+                if (!hasUploadedLocation && isLocationEnabled()) {
+                    Log.d(TAG, "首定位仍未成功，执行兜底重试")
+                    forceGetCurrentLocation()
                 }
             }
+        }
     }
     
     /**
@@ -288,6 +388,9 @@ class LocationTrackingService : Service() {
                 )
                 
                 if (result.isSuccess) {
+                    hasUploadedLocation = true
+                    bootstrapRetryJob?.cancel()
+                    bootstrapRetryJob = null
                     Log.d(TAG, "位置上传成功: $address")
                 } else {
                     Log.e(TAG, "位置上传失败: ${result.exceptionOrNull()?.message}")
@@ -339,6 +442,11 @@ class LocationTrackingService : Service() {
     private fun getCurrentDeviceId(): String {
         return Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
     }
+
+    private fun isLocationEnabled(): Boolean {
+        val locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+        return LocationManagerCompat.isLocationEnabled(locationManager)
+    }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
@@ -353,6 +461,7 @@ class LocationTrackingService : Service() {
         locationCallback?.let {
             fusedLocationClient.removeLocationUpdates(it)
         }
+        bootstrapRetryJob?.cancel()
         
         // 取消所有协程
         serviceScope.cancel()

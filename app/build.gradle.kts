@@ -15,6 +15,16 @@ if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
 
+val releaseStoreFilePath = localProperties.getProperty("RELEASE_STORE_FILE", "").trim()
+val releaseStorePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD", "").trim()
+val releaseKeyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS", "").trim()
+val releaseKeyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD", "").trim()
+val forceMockHealthData = localProperties.getProperty("FORCE_MOCK_HEALTH_DATA", "true").trim().toBoolean()
+val hasReleaseSigning = releaseStoreFilePath.isNotEmpty() &&
+    releaseStorePassword.isNotEmpty() &&
+    releaseKeyAlias.isNotEmpty() &&
+    releaseKeyPassword.isNotEmpty()
+
 android {
     namespace = "com.silverlink.app"
     compileSdk = 34
@@ -34,6 +44,7 @@ android {
         // Build config fields for API keys (read from local.properties)
         buildConfigField("String", "QWEN_API_KEY", "\"${localProperties.getProperty("QWEN_API_KEY", "")}\"")
         buildConfigField("String", "CLOUDBASE_URL", "\"${localProperties.getProperty("CLOUDBASE_URL", "")}\"")
+        buildConfigField("boolean", "FORCE_MOCK_HEALTH_DATA", forceMockHealthData.toString())
     }
     
     buildFeatures {
@@ -41,13 +52,32 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseStoreFilePath.isNotEmpty()) {
+                storeFile = file(releaseStoreFilePath)
+            }
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+
     buildTypes {
+        debug {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

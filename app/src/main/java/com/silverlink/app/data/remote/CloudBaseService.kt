@@ -175,7 +175,8 @@ object CloudBaseService {
         medicationName: String,
         dosage: String,
         scheduledTime: String,
-        status: String
+        status: String,
+        date: String? = null
     ): Result<Unit> {
         return try {
             val response = api.addMedicationLog(
@@ -185,7 +186,8 @@ object CloudBaseService {
                     medicationName = medicationName,
                     dosage = dosage,
                     scheduledTime = scheduledTime,
-                    status = status
+                    status = status,
+                    date = date
                 )
             )
             if (response.success) {

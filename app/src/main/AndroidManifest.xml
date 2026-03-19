@@ -23,6 +23,12 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
+    <queries>
+        <package android:name="com.heytap.health" />
+        <package android:name="com.heytap.market" />
+        <package android:name="com.oppo.market" />
+    </queries>
+
     <!-- Fall Detection Permissions -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
