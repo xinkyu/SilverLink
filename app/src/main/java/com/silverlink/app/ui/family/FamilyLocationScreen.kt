@@ -415,7 +415,10 @@ private fun FenceSetupCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
                 Button(onClick = onUseCurrentLocation) {
                     androidx.compose.material3.Icon(
                         imageVector = Icons.Default.LocationOn,
@@ -424,6 +427,7 @@ private fun FenceSetupCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("设为当前位置")
                 }
+                Spacer(modifier = Modifier.width(12.dp))
                 Button(onClick = onSave) {
                     Text("保存")
                 }

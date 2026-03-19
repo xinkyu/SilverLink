@@ -22,7 +22,7 @@ enum class UserRole {
 
 /**
  * 方言类型
- * 使用 CosyVoice cosyvoice-v3-plus 模型支持的方言
+ * 使用 CosyVoice cosyvoice-v3.5-plus 模型支持的方言
  */
 enum class Dialect(
     val displayName: String,
