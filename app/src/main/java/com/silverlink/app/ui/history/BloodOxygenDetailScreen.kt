@@ -2,6 +2,7 @@ package com.silverlink.app.ui.history
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,16 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,15 +40,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -63,9 +60,24 @@ import com.silverlink.app.feature.health.HealthTrendPoint
 import com.silverlink.app.feature.health.OppoHealthDashboardData
 import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.ui.components.TimeRange
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.YearMonth
+import java.time.ZoneId
+
+private data class WeekBloodOxygenEntry(
+    val date: LocalDate,
+    val value: Int?,
+    val isFuture: Boolean
+)
+
+private data class MonthBloodOxygenCell(
+    val date: LocalDate?,
+    val value: Int?,
+    val isFuture: Boolean
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,16 +86,29 @@ fun BloodOxygenDetailScreen(
     viewModel: HistoryViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val healthDashboardData by viewModel.healthDashboardData.collectAsState()
+    val zone = ZoneId.systemDefault()
+    val dashboard by viewModel.healthDashboardData.collectAsState()
     var selectedRange by rememberSaveable { mutableStateOf(TimeRange.DAY) }
-    val dayPoints = healthDashboardData?.bloodOxygenTimeline.orEmpty().sortedBy { it.timestamp }
+    val dayPoints = dashboard?.bloodOxygenTimeline.orEmpty().sortedBy { it.timestamp }
     val rangePoints by produceState(
         initialValue = emptyList<HealthTrendPoint>(),
         selectedRange,
-        healthDashboardData
+        dashboard
     ) {
         value = when (selectedRange) {
             TimeRange.DAY -> dayPoints
+            TimeRange.WEEK -> {
+                val window = currentWeekWindow(zone)
+                OppoHealthSdkManager.getBloodOxygenSummary(context, window.start, window.end)
+                    .getOrDefault(emptyList())
+                    .sortedBy { it.timestamp }
+            }
+            TimeRange.MONTH -> {
+                val window = currentMonthWindow(zone)
+                OppoHealthSdkManager.getBloodOxygenSummary(context, window.start, window.end)
+                    .getOrDefault(emptyList())
+                    .sortedBy { it.timestamp }
+            }
             else -> {
                 val window = currentTimeWindow(selectedRange)
                 OppoHealthSdkManager.getBloodOxygenSummary(context, window.start, window.end)
@@ -93,6 +118,10 @@ fun BloodOxygenDetailScreen(
         }
     }
 
+    val weekEntries = remember(rangePoints, zone) { buildWeekEntries(rangePoints, zone) }
+    val monthPoints = remember(rangePoints, zone) { currentMonthPoints(rangePoints, zone) }
+    val monthCells = remember(rangePoints, zone) { buildMonthCells(rangePoints, zone) }
+
     Scaffold(
         containerColor = Color(0xFFF5F7F8),
         topBar = {
@@ -101,17 +130,6 @@ fun BloodOxygenDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    val actionIcon = when (selectedRange) {
-                        TimeRange.DAY, TimeRange.WEEK -> Icons.Default.IosShare
-                        TimeRange.MONTH -> Icons.Default.CalendarToday
-                        TimeRange.YEAR -> Icons.Default.Settings
-                        else -> Icons.Default.IosShare
-                    }
-                    IconButton(onClick = {}) {
-                        Icon(actionIcon, contentDescription = null)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -126,10 +144,7 @@ fun BloodOxygenDetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                BloodOxygenRangeTabs(
-                    selectedRange = selectedRange,
-                    onRangeSelected = { selectedRange = it }
-                )
+                BloodOxygenTabs(selectedRange = selectedRange, onRangeSelected = { selectedRange = it })
             }
             item {
                 SourceCard(
@@ -143,10 +158,10 @@ fun BloodOxygenDetailScreen(
             }
             item {
                 when (selectedRange) {
-                    TimeRange.DAY -> BloodOxygenDaySection(healthDashboardData, rangePoints)
-                    TimeRange.WEEK -> BloodOxygenRangeSection(points = lastDays(rangePoints, 7), isMonth = false)
-                    TimeRange.MONTH -> BloodOxygenRangeSection(points = lastDays(rangePoints, 30), isMonth = true)
-                    TimeRange.YEAR -> BloodOxygenYearSection(points = rangePoints)
+                    TimeRange.DAY -> BloodOxygenDaySection(dashboard, dayPoints)
+                    TimeRange.WEEK -> BloodOxygenWeekSection(weekEntries)
+                    TimeRange.MONTH -> BloodOxygenMonthSection(monthPoints, monthCells, zone)
+                    TimeRange.YEAR -> BloodOxygenYearSectionEnhanced(rangePoints)
                 }
             }
         }
@@ -154,7 +169,7 @@ fun BloodOxygenDetailScreen(
 }
 
 @Composable
-private fun BloodOxygenRangeTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> Unit) {
+private fun BloodOxygenTabs(selectedRange: TimeRange, onRangeSelected: (TimeRange) -> Unit) {
     val tabs = listOf(
         TimeRange.DAY to "日",
         TimeRange.WEEK to "周",
@@ -175,10 +190,7 @@ private fun BloodOxygenRangeTabs(selectedRange: TimeRange, onRangeSelected: (Tim
                     color = if (selected) Color.White else Color.Transparent,
                     shadowElevation = if (selected) 2.dp else 0.dp
                 ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                         Text(
                             text = label,
                             fontSize = 14.sp,
@@ -223,133 +235,78 @@ private fun SourceCard(title: String, body: String) {
 
 @Composable
 private fun BloodOxygenDaySection(data: OppoHealthDashboardData?, points: List<HealthTrendPoint>) {
+    val zone = ZoneId.systemDefault()
+    val chartPoints = remember(points, zone) { buildHourlyBloodOxygenPoints(points, zone) }
     val latest = data?.bloodOxygen?.takeIf { it > 0 } ?: points.lastOrNull()?.value ?: 0
-    val average = averageTrend(points)
-    val minValue = minTrend(points)
-    val normalCount = points.count { it.value >= 95 }
-    val lowCount = points.count { it.value in 90..94 }
-    val warnCount = points.count { it.value < 90 }
-    val total = points.size.coerceAtLeast(1)
-
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 32.dp, horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(48.dp))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("${latest}%", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                Text("最新血氧饱和度", color = Color(0xFF64748B), fontSize = 14.sp)
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("今日均值", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8))
-                        Text("${average}%", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
-                    }
-                    Box(modifier = Modifier.width(1.dp).height(32.dp).background(Color(0xFFE2E8F0)))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("最低值", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8))
-                        Text("${minValue}%", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B))
-                    }
-                }
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(Modifier.weight(1f), "当前血氧", "${latest}%", "", Icons.Default.Favorite, Color(0xFF10B981))
+            MetricCard(Modifier.weight(1f), "今日均值", "${averageTrend(points)}%", "", Icons.Default.TrendingUp, Color(0xFF0EA5E9))
         }
-
-        SectionCard("今日血氧趋势图") {
-            if (points.isEmpty()) {
+        SectionCard("今日血氧趋势") {
+            if (chartPoints.isEmpty()) {
                 EmptySectionText()
             } else {
-                BloodOxygenLineChart(points)
+                BloodOxygenLineChart(chartPoints)
             }
         }
-
-        SectionCard("血氧分布") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(120.dp)) {
-                    CircularProgressIndicator(
-                        progress = { 1f },
-                        color = Color(0xFFE2E8F0),
-                        strokeWidth = 12.dp,
-                        modifier = Modifier.fillMaxSize(),
-                        trackColor = Color.Transparent,
-                        strokeCap = StrokeCap.Round
-                    )
-                    CircularProgressIndicator(
-                        progress = { normalCount.toFloat() / total.toFloat() },
-                        color = Color(0xFF10B981),
-                        strokeWidth = 12.dp,
-                        modifier = Modifier.fillMaxSize(),
-                        trackColor = Color.Transparent,
-                        strokeCap = StrokeCap.Round
-                    )
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(bloodOxygenStatus(latest), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                        Text("状态", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8))
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(24.dp))
-
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
-                    StageLegend("正常 (>=95%)", "${normalCount * 100 / total}%", Color(0xFF10B981))
-                    StageLegend("偏低 (90-94%)", "${lowCount * 100 / total}%", Color(0xFFF59E0B))
-                    StageLegend("预警 (<90%)", "${warnCount * 100 / total}%", Color(0xFFEF4444))
-                }
-            }
-        }
-
         InsightCard(
             title = "血氧提示",
             body = if (points.isEmpty()) {
                 "今天还没有读取到血氧时间线。"
             } else {
                 "今日血氧范围 ${minTrend(points)}% - ${maxTrend(points)}%，分布统计来自真实采样。"
-            },
-            highlight = true
+            }
         )
     }
 }
 
 @Composable
-private fun BloodOxygenRangeSection(points: List<HealthTrendPoint>, isMonth: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard(Modifier.weight(1f), if (isMonth) "月平均" else "周平均", "${averageTrend(points)}%", "", Icons.Default.TrendingUp, Color(0xFF10B981))
-            MetricCard(
-                Modifier.weight(1f),
-                if (isMonth) "异常天数" else "异常次数",
-                points.count { it.value < 95 }.toString(),
-                "",
-                Icons.Default.Warning,
-                Color(0xFFF59E0B)
+private fun BloodOxygenWeekSection(entries: List<WeekBloodOxygenEntry>) {
+    val actualPoints = entries.mapNotNull { entry ->
+        entry.value?.let {
+            HealthTrendPoint(
+                timestamp = entry.date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                value = it
             )
         }
-
-        SectionCard(if (isMonth) "月度血氧概览" else "周度血氧趋势", formatRangeLabel(points)) {
-            if (points.isEmpty()) {
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(Modifier.weight(1f), "周平均", "${averageTrend(actualPoints)}%", "", Icons.Default.TrendingUp, Color(0xFF10B981))
+            MetricCard(Modifier.weight(1f), "异常次数", actualPoints.count { it.value < 95 }.toString(), "", Icons.Default.Warning, Color(0xFFF59E0B))
+        }
+        SectionCard("本周血氧", formatWeekLabel(ZoneId.systemDefault())) {
+            if (entries.none { it.value != null }) {
                 EmptySectionText()
             } else {
-                BloodOxygenSummaryChart(points, showGrid = !isMonth)
+                BloodOxygenWeekChart(entries)
             }
         }
-
-        if (isMonth) {
-            SectionCard("每日血氧热力图") {
-                BloodOxygenMonthGrid(points)
-            }
-        }
-
         InsightCard(
             title = "趋势分析",
-            body = if (points.isEmpty()) {
-                "当前时间范围没有真实血氧汇总。"
-            } else {
-                "周月视图中的均值、异常计数和图表均由真实血氧汇总生成。"
-            },
-            highlight = false
+            body = "周视图按本周一到周日展示，未来日期不显示数据，点击对应节点会显示当天血氧。"
+        )
+    }
+}
+
+@Composable
+private fun BloodOxygenMonthSection(
+    points: List<HealthTrendPoint>,
+    cells: List<MonthBloodOxygenCell>,
+    zone: ZoneId
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(Modifier.weight(1f), "月平均", "${averageTrend(points)}%", "", Icons.Default.TrendingUp, Color(0xFF10B981))
+            MetricCard(Modifier.weight(1f), "异常天数", points.count { it.value < 95 }.toString(), "", Icons.Default.Warning, Color(0xFFF59E0B))
+        }
+        SectionCard("每日血氧热力图", formatMonthLabel(zone)) {
+            BloodOxygenMonthGrid(cells)
+        }
+        InsightCard(
+            title = "热力说明",
+            body = "自然月按日历排布，未来日期和无数据日期显示为浅灰色，并在下方给出颜色标注。"
         )
     }
 }
@@ -365,7 +322,29 @@ private fun BloodOxygenYearSection(points: List<HealthTrendPoint>) {
                 "最低月份",
                 monthLabelFromIndex(values.indices.minByOrNull { values[it] } ?: 0),
                 "",
-                Icons.Default.CalendarToday,
+                Icons.Default.Warning,
+                Color(0xFFF59E0B)
+            )
+        }
+        InsightCard(
+            title = "年度趋势",
+            body = if (points.isEmpty()) "最近 12 个月没有读取到真实血氧汇总。" else "年度统计按真实月均血氧生成。"
+        )
+    }
+}
+
+@Composable
+private fun BloodOxygenYearSectionEnhanced(points: List<HealthTrendPoint>) {
+    val values = monthlyAverageValues(points)
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCard(Modifier.weight(1f), "年均血氧", "${averageTrend(points)}%", "", Icons.Default.Favorite, Color(0xFF10B981))
+            MetricCard(
+                Modifier.weight(1f),
+                "最低月份",
+                monthLabelFromIndex(values.indices.minByOrNull { values[it] } ?: 0),
+                "",
+                Icons.Default.Warning,
                 Color(0xFFF59E0B)
             )
         }
@@ -378,129 +357,8 @@ private fun BloodOxygenYearSection(points: List<HealthTrendPoint>) {
         }
         InsightCard(
             title = "年度趋势",
-            body = if (points.isEmpty()) {
-                "最近 12 个月没有读取到真实血氧汇总。"
-            } else {
-                "年度折线按真实月均血氧绘制，低点月份为 ${monthLabelFromIndex(values.indices.minByOrNull { values[it] } ?: 0)}。"
-            },
-            highlight = false
+            body = if (points.isEmpty()) "最近 12 个月没有读取到真实血氧汇总。" else "年度统计按真实月均血氧生成。"
         )
-    }
-}
-
-@Composable
-private fun StageLegend(label: String, value: String, color: Color) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(modifier = Modifier.size(12.dp).background(color, CircleShape))
-            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0F172A))
-        }
-        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
-    }
-}
-
-@Composable
-private fun BloodOxygenLineChart(points: List<HealthTrendPoint>) {
-    Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 16.dp)) {
-            val minValue = 85f
-            val maxValue = 100f
-            val stepX = size.width / (points.size - 1).coerceAtLeast(1)
-            val linePath = Path()
-
-            drawLine(Color(0xFFE2E8F0), Offset(0f, 0f), Offset(size.width, 0f), 2f)
-            drawLine(Color(0xFFE2E8F0), Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2f)
-            drawLine(
-                Color(0xFFEF4444),
-                Offset(0f, size.height - ((90f - minValue) / (maxValue - minValue)) * size.height),
-                Offset(size.width, size.height - ((90f - minValue) / (maxValue - minValue)) * size.height),
-                2f,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-            )
-
-            points.forEachIndexed { index, point ->
-                val x = stepX * index
-                val ratio = (point.value - minValue) / (maxValue - minValue)
-                val y = size.height - ratio * size.height
-                if (index == 0) {
-                    linePath.moveTo(x, y)
-                } else {
-                    linePath.lineTo(x, y)
-                }
-            }
-            drawPath(linePath, color = Color(0xFF10B981), style = Stroke(width = 6f, cap = StrokeCap.Round))
-
-            points.forEachIndexed { index, point ->
-                val x = stepX * index
-                val ratio = (point.value - minValue) / (maxValue - minValue)
-                val y = size.height - ratio * size.height
-                drawCircle(Color.White, radius = 9f, center = Offset(x, y))
-                drawCircle(Color(0xFF10B981), radius = 6f, center = Offset(x, y))
-            }
-        }
-    }
-}
-
-@Composable
-private fun BloodOxygenSummaryChart(points: List<HealthTrendPoint>, showGrid: Boolean) {
-    Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 16.dp)) {
-            val minValue = 85f
-            val maxValue = 100f
-            val stepX = size.width / (points.size - 1).coerceAtLeast(1)
-            val linePath = Path()
-
-            if (showGrid) {
-                drawLine(Color(0xFFE2E8F0), Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2f)
-            }
-
-            points.forEachIndexed { index, point ->
-                val x = stepX * index
-                val ratio = (point.value - minValue) / (maxValue - minValue)
-                val y = size.height - ratio * size.height
-                if (index == 0) {
-                    linePath.moveTo(x, y)
-                } else {
-                    linePath.lineTo(x, y)
-                }
-                drawCircle(Color.White, radius = 8f, center = Offset(x, y))
-                drawCircle(Color(0xFF10B981), radius = 5f, center = Offset(x, y))
-            }
-            drawPath(linePath, color = Color(0xFF10B981), style = Stroke(width = 6f, cap = StrokeCap.Round))
-        }
-    }
-}
-
-@Composable
-private fun BloodOxygenMonthGrid(points: List<HealthTrendPoint>) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        lastDays(points, 30).chunked(7).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { point ->
-                    val color = when {
-                        point.value < 90 -> Color(0xFFEF4444)
-                        point.value < 95 -> Color(0xFFF59E0B)
-                        else -> Color(0xFF10B981)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .background(color, RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = SimpleDateFormat("d", Locale.CHINA).format(Date(point.timestamp)),
-                            color = Color.White,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-                repeat((7 - row.size).coerceAtLeast(0)) {
-                    Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
-                }
-            }
-        }
     }
 }
 
@@ -508,32 +366,245 @@ private fun BloodOxygenMonthGrid(points: List<HealthTrendPoint>) {
 private fun BloodOxygenYearChart(values: List<Int>) {
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-                val minValue = 85f
-                val maxValue = (values.maxOrNull() ?: 100).toFloat().coerceAtLeast(minValue + 1f)
+            Canvas(modifier = Modifier.fillMaxWidth().height(180.dp)) {
+                val minValue = (values.minOrNull() ?: 0).coerceAtMost(90)
+                val maxValue = (values.maxOrNull() ?: 0).coerceAtLeast(minValue + 1)
                 val stepX = size.width / (values.size - 1).coerceAtLeast(1)
                 val linePath = Path()
                 values.forEachIndexed { index, value ->
                     val x = stepX * index
-                    val ratio = (value - minValue) / (maxValue - minValue)
-                    val y = size.height - ratio * size.height
-                    if (index == 0) {
-                        linePath.moveTo(x, y)
-                    } else {
-                        linePath.lineTo(x, y)
-                    }
-                    drawCircle(Color.White, radius = 12f, center = Offset(x, y))
-                    drawCircle(Color(0xFF10B981), radius = 8f, center = Offset(x, y))
+                    val ratio = (value - minValue).toFloat() / (maxValue - minValue).toFloat()
+                    val y = size.height - ratio * (size.height - 20.dp.toPx()) - 10.dp.toPx()
+                    if (index == 0) linePath.moveTo(x, y) else linePath.lineTo(x, y)
                 }
-                drawPath(linePath, color = Color(0xFF10B981), style = Stroke(width = 6f, cap = StrokeCap.Round))
+                drawPath(linePath, color = Color(0xFF10B981), style = Stroke(width = 5f, cap = StrokeCap.Round))
+                values.forEachIndexed { index, value ->
+                    val x = stepX * index
+                    val ratio = (value - minValue).toFloat() / (maxValue - minValue).toFloat()
+                    val y = size.height - ratio * (size.height - 20.dp.toPx()) - 10.dp.toPx()
+                    drawCircle(Color.White, radius = 10f, center = Offset(x, y))
+                    drawCircle(Color(0xFF10B981), radius = 5.5f, center = Offset(x, y))
+                }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 listOf("1月", "3月", "5月", "7月", "9月", "11月").forEach {
                     Text(it, fontSize = 10.sp, color = Color(0xFF94A3B8))
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BloodOxygenLineChart(points: List<HealthTrendPoint>) {
+    val zone = ZoneId.systemDefault()
+    var selectedIndex by remember(points) {
+        mutableStateOf(points.lastIndex.coerceAtLeast(0))
+    }
+    val selected = points.getOrNull(selectedIndex)
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        selected?.let { point ->
+            val time = Instant.ofEpochMilli(point.timestamp).atZone(zone).toLocalTime()
+            Text(
+                text = "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')} ${point.value}%",
+                fontSize = 13.sp,
+                color = Color(0xFF475569)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+        ) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp, vertical = 16.dp)
+            ) {
+                val minValue = 85f
+                val maxValue = 100f
+                val stepX = size.width / (points.size - 1).coerceAtLeast(1)
+                val linePath = Path()
+
+                points.forEachIndexed { index, point ->
+                    val x = stepX * index
+                    val ratio = (point.value - minValue) / (maxValue - minValue)
+                    val y = size.height - ratio * size.height
+                    if (index == 0) linePath.moveTo(x, y) else linePath.lineTo(x, y)
+                }
+
+                drawPath(linePath, color = Color(0xFF10B981), style = Stroke(width = 6f, cap = StrokeCap.Round))
+                points.forEachIndexed { index, point ->
+                    val x = stepX * index
+                    val ratio = (point.value - minValue) / (maxValue - minValue)
+                    val y = size.height - ratio * size.height
+                    drawCircle(Color.White, radius = if (index == selectedIndex) 9f else 8f, center = Offset(x, y))
+                    drawCircle(
+                        color = if (index == selectedIndex) Color(0xFF059669) else Color(0xFF10B981),
+                        radius = if (index == selectedIndex) 6f else 5f,
+                        center = Offset(x, y)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                points.forEachIndexed { index, _ ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { selectedIndex = index }
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            points.forEachIndexed { index, point ->
+                val showLabel = when {
+                    points.size <= 5 -> true
+                    index == 0 || index == points.lastIndex -> true
+                    index % (points.size / 3).coerceAtLeast(1) == 0 -> true
+                    else -> false
+                }
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (showLabel) dayTimeLabel(point.timestamp, zone) else "",
+                        fontSize = 10.sp,
+                        color = Color(0xFF94A3B8),
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BloodOxygenWeekChart(entries: List<WeekBloodOxygenEntry>) {
+    val maxValue = (entries.maxOfOrNull { it.value ?: 0 } ?: 100).coerceAtLeast(100)
+    val minValue = 85
+    var selectedIndex by remember(entries) {
+        mutableStateOf(entries.indexOfLast { !it.isFuture && it.value != null }.coerceAtLeast(0))
+    }
+    val selected = entries.getOrNull(selectedIndex)
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        selected?.let { entry ->
+            val text = if (entry.value != null) {
+                "${entry.date.monthValue}月${entry.date.dayOfMonth}日 ${entry.value}%"
+            } else {
+                "${entry.date.monthValue}月${entry.date.dayOfMonth}日 暂无数据"
+            }
+            Text(text, fontSize = 13.sp, color = Color(0xFF475569))
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(190.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            entries.forEachIndexed { index, entry ->
+                val ratio = (((entry.value ?: minValue) - minValue).toFloat() / (maxValue - minValue).coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .clickable(enabled = !entry.isFuture) { selectedIndex = index },
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .background(Color(0xFFE2E8F0), RoundedCornerShape(999.dp))
+                        )
+                        if (!entry.isFuture) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height((150.dp * ratio).coerceAtLeast(6.dp))
+                                    .background(
+                                        if (index == selectedIndex) Color(0xFF10B981) else Color(0xFF86EFAC),
+                                        RoundedCornerShape(999.dp)
+                                    )
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = weekDayLabel(entry.date.dayOfWeek),
+                        fontSize = 11.sp,
+                        color = if (entry.isFuture) Color(0xFFCBD5E1) else Color(0xFF94A3B8)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BloodOxygenMonthGrid(cells: List<MonthBloodOxygenCell>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("一", "二", "三", "四", "五", "六", "日").forEach { label ->
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text(label, fontSize = 12.sp, color = Color(0xFF94A3B8))
+                }
+            }
+        }
+        cells.chunked(7).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { cell ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .background(monthCellColor(cell), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (cell.date != null) {
+                            Text(
+                                text = cell.date.dayOfMonth.toString(),
+                                color = monthCellTextColor(cell),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LegendItem("正常", Color(0xFF10B981))
+            LegendItem("偏低", Color(0xFFF59E0B))
+            LegendItem("预警", Color(0xFFEF4444))
+            LegendItem("未来/无数据", Color(0xFFF1F5F9), Color(0xFF94A3B8))
+        }
+    }
+}
+
+@Composable
+private fun LegendItem(label: String, color: Color, textColor: Color = Color(0xFF475569)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(modifier = Modifier.size(10.dp).background(color, CircleShape))
+        Text(label, fontSize = 12.sp, color = textColor)
     }
 }
 
@@ -568,15 +639,10 @@ private fun MetricCard(
 private fun SectionCard(title: String, subtitle: String? = null, content: @Composable () -> Unit) {
     Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF0F172A))
-                if (subtitle != null) {
-                    Text(subtitle, color = Color(0xFF007BFF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF0F172A))
+            if (subtitle != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(subtitle, color = Color(0xFF007BFF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(16.dp))
             content()
@@ -585,11 +651,8 @@ private fun SectionCard(title: String, subtitle: String? = null, content: @Compo
 }
 
 @Composable
-private fun InsightCard(title: String, body: String, highlight: Boolean) {
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = if (highlight) Color(0xFFECFDF5) else Color.White)
-    ) {
+private fun InsightCard(title: String, body: String) {
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -597,7 +660,7 @@ private fun InsightCard(title: String, body: String, highlight: Boolean) {
             Box(
                 modifier = Modifier
                     .size(38.dp)
-                    .background(if (highlight) Color.White else Color(0xFFF1F5F9), RoundedCornerShape(12.dp)),
+                    .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Color(0xFF10B981))
@@ -616,18 +679,133 @@ private fun EmptySectionText() {
     Text("暂无真实数据", color = Color(0xFF94A3B8))
 }
 
-private fun bloodOxygenStatus(value: Int): String {
-    return when {
-        value >= 95 -> "正常"
-        value >= 90 -> "偏低"
-        else -> "预警"
+private fun currentWeekWindow(zone: ZoneId): TimeWindow {
+    val today = LocalDate.now(zone)
+    val monday = today.with(DayOfWeek.MONDAY)
+    val sunday = monday.plusDays(6)
+    return TimeWindow(
+        start = monday.atStartOfDay(zone).toInstant().toEpochMilli(),
+        end = sunday.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+    )
+}
+
+private fun currentMonthWindow(zone: ZoneId): TimeWindow {
+    val today = LocalDate.now(zone)
+    val month = YearMonth.from(today)
+    return TimeWindow(
+        start = month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+        end = month.atEndOfMonth().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+    )
+}
+
+private fun buildWeekEntries(points: List<HealthTrendPoint>, zone: ZoneId): List<WeekBloodOxygenEntry> {
+    val today = LocalDate.now(zone)
+    val monday = today.with(DayOfWeek.MONDAY)
+    val valuesByDate = points.associateBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
+    return (0..6).map { offset ->
+        val date = monday.plusDays(offset.toLong())
+        val isFuture = date.isAfter(today)
+        WeekBloodOxygenEntry(
+            date = date,
+            value = if (isFuture) null else valuesByDate[date]?.value,
+            isFuture = isFuture
+        )
     }
 }
 
-private fun formatRangeLabel(points: List<HealthTrendPoint>): String {
-    if (points.isEmpty()) return "暂无数据"
-    val format = SimpleDateFormat("M月d日", Locale.CHINA)
-    return "${format.format(Date(points.first().timestamp))} - ${format.format(Date(points.last().timestamp))}"
+private fun currentMonthPoints(points: List<HealthTrendPoint>, zone: ZoneId): List<HealthTrendPoint> {
+    val today = LocalDate.now(zone)
+    val month = YearMonth.from(today)
+    return points.filter {
+        val date = Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate()
+        !date.isAfter(today) && YearMonth.from(date) == month
+    }
+}
+
+private fun buildMonthCells(points: List<HealthTrendPoint>, zone: ZoneId): List<MonthBloodOxygenCell> {
+    val today = LocalDate.now(zone)
+    val month = YearMonth.from(today)
+    val firstDay = month.atDay(1)
+    val leadingBlanks = firstDay.dayOfWeek.value - 1
+    val valuesByDate = points.associateBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
+    val cells = mutableListOf<MonthBloodOxygenCell>()
+    repeat(leadingBlanks) {
+        cells += MonthBloodOxygenCell(date = null, value = null, isFuture = false)
+    }
+    (1..month.lengthOfMonth()).forEach { day ->
+        val date = month.atDay(day)
+        val isFuture = date.isAfter(today)
+        cells += MonthBloodOxygenCell(
+            date = date,
+            value = if (isFuture) null else valuesByDate[date]?.value,
+            isFuture = isFuture
+        )
+    }
+    while (cells.size % 7 != 0) {
+        cells += MonthBloodOxygenCell(date = null, value = null, isFuture = false)
+    }
+    return cells
+}
+
+private fun buildHourlyBloodOxygenPoints(points: List<HealthTrendPoint>, zone: ZoneId): List<HealthTrendPoint> {
+    return points
+        .groupBy {
+            Instant.ofEpochMilli(it.timestamp)
+                .atZone(zone)
+                .toLocalDateTime()
+                .withMinute(0)
+                .withSecond(0)
+                .withNano(0)
+        }
+        .toSortedMap(compareBy<LocalDateTime> { it })
+        .map { (hour, values) ->
+            HealthTrendPoint(
+                timestamp = hour.atZone(zone).toInstant().toEpochMilli(),
+                value = values.map { it.value }.average().toInt()
+            )
+        }
+}
+
+private fun monthCellColor(cell: MonthBloodOxygenCell): Color {
+    if (cell.date == null) return Color.Transparent
+    if (cell.value == null) return Color(0xFFF1F5F9)
+    return when {
+        cell.value < 90 -> Color(0xFFEF4444)
+        cell.value < 95 -> Color(0xFFF59E0B)
+        else -> Color(0xFF10B981)
+    }
+}
+
+private fun monthCellTextColor(cell: MonthBloodOxygenCell): Color {
+    if (cell.date == null) return Color.Transparent
+    return if (cell.value == null) Color(0xFF94A3B8) else Color.White
+}
+
+private fun formatWeekLabel(zone: ZoneId): String {
+    val today = LocalDate.now(zone)
+    val monday = today.with(DayOfWeek.MONDAY)
+    val sunday = monday.plusDays(6)
+    return "${monday.monthValue}月${monday.dayOfMonth}日 - ${sunday.monthValue}月${sunday.dayOfMonth}日"
+}
+
+private fun formatMonthLabel(zone: ZoneId): String {
+    val month = YearMonth.from(LocalDate.now(zone))
+    return "${month.monthValue}月1日 - ${month.monthValue}月${month.lengthOfMonth()}日"
+}
+
+private fun weekDayLabel(dayOfWeek: DayOfWeek): String = when (dayOfWeek) {
+    DayOfWeek.MONDAY -> "一"
+    DayOfWeek.TUESDAY -> "二"
+    DayOfWeek.WEDNESDAY -> "三"
+    DayOfWeek.THURSDAY -> "四"
+    DayOfWeek.FRIDAY -> "五"
+    DayOfWeek.SATURDAY -> "六"
+    DayOfWeek.SUNDAY -> "日"
+}
+
+private fun dayTimeLabel(timestamp: Long, zone: ZoneId): String {
+    val time = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalTime()
+    return "${time.hour.toString().padStart(2, '0')}:00"
 }
 
 private fun monthLabelFromIndex(index: Int): String = "${index + 1}月"

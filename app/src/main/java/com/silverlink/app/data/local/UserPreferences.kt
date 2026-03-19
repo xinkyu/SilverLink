@@ -3,9 +3,12 @@ package com.silverlink.app.data.local
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
+import com.silverlink.sdk.health.BloodPressureData
+import com.silverlink.sdk.health.BodyMeasurementData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -423,6 +426,12 @@ class UserPreferences(context: Context) {
         // 位置共享相关
         private const val KEY_LOCATION_SHARING_ENABLED = "location_sharing_enabled"
         private const val KEY_OPPO_HEALTH_SDK_CONSENT = "oppo_health_sdk_consent"
+        private const val KEY_MANUAL_WEIGHT_RECORDS = "manual_weight_records"
+        private const val KEY_HIDDEN_WEIGHT_TIMESTAMPS = "hidden_weight_timestamps"
+        private const val KEY_TARGET_WEIGHT_KG = "target_weight_kg"
+        private const val KEY_MANUAL_BLOOD_PRESSURE_RECORDS = "manual_blood_pressure_records"
+        private const val KEY_HIDDEN_BLOOD_PRESSURE_TIMESTAMPS = "hidden_blood_pressure_timestamps"
+        private const val KEY_HISTORY_DASHBOARD_METRIC_IDS = "history_dashboard_metric_ids"
 
         // 字体大小相关
         private const val KEY_FONT_SCALE = "font_scale"
@@ -523,11 +532,206 @@ class UserPreferences(context: Context) {
         prefs.edit().putBoolean(KEY_OPPO_HEALTH_SDK_CONSENT, granted).apply()
     }
 
+    fun getManualWeightRecords(): List<BodyMeasurementData> {
+        val raw = prefs.getString(KEY_MANUAL_WEIGHT_RECORDS, null).orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    add(
+                        BodyMeasurementData(
+                            timestamp = item.optLong("timestamp"),
+                            weightKg = item.optDouble("weightKg").toFloat(),
+                            bmi = item.optDouble("bmi").toFloat()
+                        )
+                    )
+                }
+            }.sortedBy { it.timestamp }
+        }.getOrDefault(emptyList())
+    }
+
+    fun addManualWeightRecord(record: BodyMeasurementData) {
+        val updated = (getManualWeightRecords() + record)
+            .sortedByDescending { it.timestamp }
+            .distinctBy { it.timestamp }
+            .sortedBy { it.timestamp }
+
+        val array = JSONArray().apply {
+            updated.forEach { item ->
+                put(
+                    JSONObject().apply {
+                        put("timestamp", item.timestamp)
+                        put("weightKg", item.weightKg.toDouble())
+                        put("bmi", item.bmi.toDouble())
+                    }
+                )
+            }
+        }
+        prefs.edit().putString(KEY_MANUAL_WEIGHT_RECORDS, array.toString()).apply()
+        restoreWeightRecord(record.timestamp)
+    }
+
+    fun deleteManualWeightRecord(timestamp: Long) {
+        val updated = getManualWeightRecords().filterNot { it.timestamp == timestamp }
+        val array = JSONArray().apply {
+            updated.forEach { item ->
+                put(
+                    JSONObject().apply {
+                        put("timestamp", item.timestamp)
+                        put("weightKg", item.weightKg.toDouble())
+                        put("bmi", item.bmi.toDouble())
+                    }
+                )
+            }
+        }
+        prefs.edit().putString(KEY_MANUAL_WEIGHT_RECORDS, array.toString()).apply()
+    }
+
+    fun getHiddenWeightTimestamps(): Set<Long> {
+        return prefs.getStringSet(KEY_HIDDEN_WEIGHT_TIMESTAMPS, emptySet())
+            .orEmpty()
+            .mapNotNull { it.toLongOrNull() }
+            .toSet()
+    }
+
+    fun hideWeightRecord(timestamp: Long) {
+        val updated = getHiddenWeightTimestamps()
+            .plus(timestamp)
+            .map(Long::toString)
+            .toSet()
+        prefs.edit().putStringSet(KEY_HIDDEN_WEIGHT_TIMESTAMPS, updated).apply()
+    }
+
+    fun restoreWeightRecord(timestamp: Long) {
+        val updated = getHiddenWeightTimestamps()
+            .minus(timestamp)
+            .map(Long::toString)
+            .toSet()
+        prefs.edit().putStringSet(KEY_HIDDEN_WEIGHT_TIMESTAMPS, updated).apply()
+    }
+
+    fun getTargetWeightKg(): Float? {
+        return if (prefs.contains(KEY_TARGET_WEIGHT_KG)) {
+            prefs.getFloat(KEY_TARGET_WEIGHT_KG, 0f)
+        } else {
+            null
+        }
+    }
+
+    fun setTargetWeightKg(weightKg: Float) {
+        prefs.edit().putFloat(KEY_TARGET_WEIGHT_KG, weightKg).apply()
+    }
+
     // ==================== 字体大小设置 ====================
 
     /**
      * 获取字体大小倍率
      */
+    fun getManualBloodPressureRecords(): List<BloodPressureData> {
+        val raw = prefs.getString(KEY_MANUAL_BLOOD_PRESSURE_RECORDS, null).orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    add(
+                        BloodPressureData(
+                            timestamp = item.optLong("timestamp"),
+                            systolic = item.optInt("systolic"),
+                            diastolic = item.optInt("diastolic")
+                        )
+                    )
+                }
+            }.sortedBy { it.timestamp }
+        }.getOrDefault(emptyList())
+    }
+
+    fun addManualBloodPressureRecord(record: BloodPressureData) {
+        val updated = (getManualBloodPressureRecords() + record)
+            .sortedByDescending { it.timestamp }
+            .distinctBy { it.timestamp }
+            .sortedBy { it.timestamp }
+
+        val array = JSONArray().apply {
+            updated.forEach { item ->
+                put(
+                    JSONObject().apply {
+                        put("timestamp", item.timestamp)
+                        put("systolic", item.systolic)
+                        put("diastolic", item.diastolic)
+                    }
+                )
+            }
+        }
+        prefs.edit().putString(KEY_MANUAL_BLOOD_PRESSURE_RECORDS, array.toString()).apply()
+        restoreBloodPressureRecord(record.timestamp)
+    }
+
+    fun deleteManualBloodPressureRecord(timestamp: Long) {
+        val updated = getManualBloodPressureRecords().filterNot { it.timestamp == timestamp }
+        val array = JSONArray().apply {
+            updated.forEach { item ->
+                put(
+                    JSONObject().apply {
+                        put("timestamp", item.timestamp)
+                        put("systolic", item.systolic)
+                        put("diastolic", item.diastolic)
+                    }
+                )
+            }
+        }
+        prefs.edit().putString(KEY_MANUAL_BLOOD_PRESSURE_RECORDS, array.toString()).apply()
+    }
+
+    fun getHiddenBloodPressureTimestamps(): Set<Long> {
+        return prefs.getStringSet(KEY_HIDDEN_BLOOD_PRESSURE_TIMESTAMPS, emptySet())
+            .orEmpty()
+            .mapNotNull { it.toLongOrNull() }
+            .toSet()
+    }
+
+    fun hideBloodPressureRecord(timestamp: Long) {
+        val updated = getHiddenBloodPressureTimestamps()
+            .plus(timestamp)
+            .map(Long::toString)
+            .toSet()
+        prefs.edit().putStringSet(KEY_HIDDEN_BLOOD_PRESSURE_TIMESTAMPS, updated).apply()
+    }
+
+    fun restoreBloodPressureRecord(timestamp: Long) {
+        val updated = getHiddenBloodPressureTimestamps()
+            .minus(timestamp)
+            .map(Long::toString)
+            .toSet()
+        prefs.edit().putStringSet(KEY_HIDDEN_BLOOD_PRESSURE_TIMESTAMPS, updated).apply()
+    }
+
+    fun getHistoryDashboardMetricIds(defaultMetricIds: List<String>): List<String> {
+        if (!prefs.contains(KEY_HISTORY_DASHBOARD_METRIC_IDS)) {
+            return defaultMetricIds
+        }
+        val saved = prefs.getString(KEY_HISTORY_DASHBOARD_METRIC_IDS, "").orEmpty()
+        if (saved.isBlank()) {
+            return emptyList()
+        }
+        val allowedIds = defaultMetricIds.toSet()
+        return saved
+            .split(",")
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .filter { it in allowedIds }
+            .distinct()
+    }
+
+    fun setHistoryDashboardMetricIds(metricIds: List<String>) {
+        prefs.edit()
+            .putString(KEY_HISTORY_DASHBOARD_METRIC_IDS, metricIds.distinct().joinToString(","))
+            .apply()
+    }
+
     fun getFontScale(): Float {
         return prefs.getFloat(KEY_FONT_SCALE, 1f)
     }

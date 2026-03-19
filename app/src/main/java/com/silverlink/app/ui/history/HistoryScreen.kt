@@ -81,7 +81,9 @@ fun HistoryScreen(
     val defaultVisibleMetricIds = remember {
         listOf("mood", "medication", "cognitive", "heartRate", "activity", "stress", "bloodOxygen", "sleep", "bloodPressure", "weight")
     }
-    var visibleMetricIds by rememberSaveable { mutableStateOf(defaultVisibleMetricIds) }
+    var visibleMetricIds by rememberSaveable {
+        mutableStateOf(viewModel.getVisibleDashboardMetricIds(defaultVisibleMetricIds))
+    }
 
     val steps = healthDashboardData?.steps ?: 0
     val calories = healthDashboardData?.calories ?: 0
@@ -232,7 +234,12 @@ fun HistoryScreen(
             onClick = onNavigateToWeightDetail
         )
     )
-    val visibleMetricCards = metricCards.filter { visibleMetricIds.contains(it.id) }
+    val metricCardMap = remember(metricCards) { metricCards.associateBy(DashboardMetricCardState::id) }
+    val visibleMetricCards = visibleMetricIds.mapNotNull { metricCardMap[it] }
+    val updateVisibleMetricIds: (List<String>) -> Unit = { updated ->
+        visibleMetricIds = updated
+        viewModel.setVisibleDashboardMetricIds(updated)
+    }
 
     Scaffold(
         containerColor = Color(0xFFF5F7F8),
@@ -604,7 +611,9 @@ fun HistoryScreen(
                                 ) {
                                     Box(
                                         modifier = Modifier.size(24.dp).background(Color.Transparent, CircleShape)
-                                            .clickable { visibleMetricIds = visibleMetricIds.filterNot { it == id } },
+                                            .clickable {
+                                                updateVisibleMetricIds(visibleMetricIds.filterNot { it == id })
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.Default.Clear, contentDescription = "移除", tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
@@ -647,7 +656,7 @@ fun HistoryScreen(
                                                             val updated = visibleMetricIds.toMutableList()
                                                             updated.removeAt(fromIndex)
                                                             updated.add(toIndex, id)
-                                                            visibleMetricIds = updated
+                                                            updateVisibleMetricIds(updated)
                                                             draggingOffsetY -= step * dragRowHeightPx
                                                         }
                                                     }
@@ -677,7 +686,7 @@ fun HistoryScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(Color.White)
                                         .border(1.dp, Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
-                                        .clickable { visibleMetricIds = visibleMetricIds + id }
+                                        .clickable { updateVisibleMetricIds(visibleMetricIds + id) }
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {

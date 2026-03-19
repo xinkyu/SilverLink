@@ -1,7 +1,10 @@
 package com.silverlink.app.ui.history
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,11 +22,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,6 +62,7 @@ import com.silverlink.app.feature.health.OppoHealthDashboardData
 import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.ui.components.TimeRange
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -83,7 +85,11 @@ fun HeartRateDetailScreen(
         value = when (selectedRange) {
             TimeRange.DAY -> dayPoints
             else -> {
-                val window = currentTimeWindow(selectedRange)
+                val window = if (selectedRange == TimeRange.WEEK) {
+                    currentCalendarWeekWindow()
+                } else {
+                    currentTimeWindow(selectedRange)
+                }
                 OppoHealthSdkManager.getHeartRateSummary(context, window.start, window.end)
                     .getOrDefault(emptyList())
                     .sortedBy { it.timestamp }
@@ -102,13 +108,25 @@ fun HeartRateDetailScreen(
                     }
                 },
                 actions = {
-                    val actionIcon = when (selectedRange) {
-                        TimeRange.DAY, TimeRange.WEEK -> Icons.Default.IosShare
-                        TimeRange.MONTH -> Icons.Default.CalendarToday
-                        TimeRange.YEAR -> Icons.Default.Settings
-                    }
-                    IconButton(onClick = {}) {
-                        Icon(actionIcon, contentDescription = null)
+                    IconButton(
+                        onClick = {
+                            val summary = buildHeartRateShareText(
+                                range = selectedRange,
+                                points = rangePoints,
+                                dashboardData = healthDashboardData
+                            )
+                            if (summary.isBlank()) {
+                                Toast.makeText(context, "暂无可分享的心率数据", Toast.LENGTH_SHORT).show()
+                                return@IconButton
+                            }
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, summary)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "分享心率数据"))
+                        }
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "分享")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -145,7 +163,10 @@ fun HeartRateDetailScreen(
                         points = rangePoints
                     )
                     TimeRange.WEEK -> HeartRateWeekSection(points = rangePoints)
-                    TimeRange.MONTH -> HeartRateMonthSection(points = rangePoints)
+                    TimeRange.MONTH -> HeartRateMonthSection(
+                        points = rangePoints,
+                        selectedDate = Date()
+                    )
                     TimeRange.YEAR -> HeartRateYearSection(points = rangePoints)
                 }
             }
@@ -294,7 +315,26 @@ private fun HeartRateDaySection(
 
 @Composable
 private fun HeartRateWeekSection(points: List<HealthTrendPoint>) {
-    val weeklyPoints = lastDays(points, 7)
+    val context = LocalContext.current
+    val weeklyPoints = aggregateDailyHeartRate(points)
+    var selectedPointTimestamp by rememberSaveable { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+    val todayPoint = weeklyPoints.firstOrNull { isToday(it.timestamp) }
+    val activeTimestamp = selectedPointTimestamp ?: todayPoint?.timestamp
+    val selectedPoint = weeklyPoints.firstOrNull { it.timestamp == selectedPointTimestamp }
+    val selectedPointTimeline by produceState(
+        initialValue = emptyList<HealthTrendPoint>(),
+        selectedPointTimestamp
+    ) {
+        val timestamp = selectedPointTimestamp
+        value = if (timestamp == null) {
+            emptyList()
+        } else {
+            val window = dayWindow(timestamp)
+            OppoHealthSdkManager.getHeartRateTimeline(context, window.start, window.end)
+                .getOrDefault(emptyList())
+                .sortedBy { it.timestamp }
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             MetricCard(Modifier.weight(1f), "周平均", averageTrend(weeklyPoints).toString(), "bpm", "最近 7 天")
@@ -311,7 +351,24 @@ private fun HeartRateWeekSection(points: List<HealthTrendPoint>) {
                     color = Color(0xFF0F172A)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                HeartRateBarChart(points = weeklyPoints, highlightIndex = weeklyPoints.lastIndex)
+                HeartRateBarChart(
+                    points = weeklyPoints,
+                    activeTimestamp = activeTimestamp,
+                    onBarClick = { point ->
+                        selectedPointTimestamp = when {
+                            isToday(point.timestamp) -> null
+                            selectedPointTimestamp == point.timestamp -> null
+                            else -> point.timestamp
+                        }
+                    }
+                )
+                if (selectedPoint != null) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    MetricRow(
+                        title = "${formatPointDate(selectedPoint.timestamp)} 心率范围",
+                        value = buildHeartRateRangeLabel(selectedPoint, selectedPointTimeline)
+                    )
+                }
             }
         }
         InsightCard(
@@ -327,8 +384,17 @@ private fun HeartRateWeekSection(points: List<HealthTrendPoint>) {
 }
 
 @Composable
-private fun HeartRateMonthSection(points: List<HealthTrendPoint>) {
-    val monthlyPoints = lastDays(points, 30)
+private fun HeartRateMonthSection(
+    points: List<HealthTrendPoint>,
+    selectedDate: Date
+) {
+    val calendar = Calendar.getInstance().apply { time = selectedDate }
+    val targetYear = calendar.get(Calendar.YEAR)
+    val targetMonth = calendar.get(Calendar.MONTH)
+    val monthlyPoints = points.filter {
+        val pointCal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+        pointCal.get(Calendar.YEAR) == targetYear && pointCal.get(Calendar.MONTH) == targetMonth
+    }.sortedBy { it.timestamp }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             MetricCard(Modifier.weight(1f), "月平均", averageTrend(monthlyPoints).toString(), "bpm", "最近 30 天")
@@ -344,7 +410,10 @@ private fun HeartRateMonthSection(points: List<HealthTrendPoint>) {
                     Legend("偏高", Color(0xFFFB923C))
                 }
                 Spacer(modifier = Modifier.height(12.dp))
-                HeartRateMonthGrid(points = monthlyPoints)
+                HeartRateMonthGrid(
+                    points = monthlyPoints,
+                    selectedDate = selectedDate
+                )
             }
         }
         MetricRow(title = "稳定天数", value = "${monthlyPoints.count { it.value in 55..95 }} 天")
@@ -430,19 +499,36 @@ private fun HeartRateLineChart(points: List<HealthTrendPoint>) {
 }
 
 @Composable
-private fun HeartRateBarChart(points: List<HealthTrendPoint>, highlightIndex: Int) {
-    val maxValue = maxTrend(points).coerceAtLeast(1)
+private fun HeartRateBarChart(
+    points: List<HealthTrendPoint>,
+    activeTimestamp: Long?,
+    onBarClick: (HealthTrendPoint) -> Unit
+) {
+    val referenceMin = 40f
+    val referenceMax = 140f
+    val referenceRange = referenceMax - referenceMin
+    val minFillFraction = 0.34f
+    val maxFillFraction = 0.78f
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(210.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.Bottom
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        points.forEachIndexed { index, point ->
-            val value = point.value.toFloat() / maxValue.toFloat()
+        points.forEach { point ->
+            val ratio = ((point.value.toFloat() - referenceMin) / referenceRange).coerceIn(0f, 1f)
+            val fillFraction = minFillFraction + (maxFillFraction - minFillFraction) * ratio
+            val isActive = activeTimestamp == point.timestamp
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clickable { onBarClick(point) },
+                    contentAlignment = Alignment.Center
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -452,9 +538,9 @@ private fun HeartRateBarChart(points: List<HealthTrendPoint>, highlightIndex: In
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(170.dp * value)
+                            .height(170.dp * fillFraction)
                             .background(
-                                if (index == highlightIndex) Color(0xFF007BFF) else Color(0x66007BFF),
+                                if (isActive) Color(0xFF007BFF) else Color(0x66007BFF),
                                 RoundedCornerShape(999.dp)
                             )
                     )
@@ -463,7 +549,8 @@ private fun HeartRateBarChart(points: List<HealthTrendPoint>, highlightIndex: In
                 Text(
                     text = weekdayLabel(point.timestamp),
                     fontSize = 11.sp,
-                    color = Color(0xFF94A3B8)
+                    color = if (isActive) Color(0xFF0F172A) else Color(0xFF94A3B8),
+                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
         }
@@ -471,31 +558,71 @@ private fun HeartRateBarChart(points: List<HealthTrendPoint>, highlightIndex: In
 }
 
 @Composable
-private fun HeartRateMonthGrid(points: List<HealthTrendPoint>) {
-    val cells = points.map { point ->
-        val color = when {
-            point.value < 55 -> Color(0xFF34D399)
-            point.value <= 95 -> Color(0xFF007BFF)
-            else -> Color(0xFFFB923C)
-        }
-        dayOfMonthLabel(point.timestamp) to color
+private fun HeartRateMonthGrid(
+    points: List<HealthTrendPoint>,
+    selectedDate: Date
+) {
+    val monthCalendar = Calendar.getInstance().apply {
+        time = selectedDate
+        set(Calendar.DAY_OF_MONTH, 1)
     }
+    val year = monthCalendar.get(Calendar.YEAR)
+    val month = monthCalendar.get(Calendar.MONTH)
+    val daysInMonth = monthCalendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val firstDayOffset = (monthCalendar.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
+    val totalSlots = ((firstDayOffset + daysInMonth + 6) / 7) * 7
+
+    val dayValueMap = points
+        .asSequence()
+        .filter {
+            val cal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+            cal.get(Calendar.YEAR) == year && cal.get(Calendar.MONTH) == month
+        }
+        .groupBy {
+            Calendar.getInstance().apply { timeInMillis = it.timestamp }.get(Calendar.DAY_OF_MONTH)
+        }
+        .mapValues { (_, values) -> averageTrend(values) }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        cells.chunked(7).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (label, color) ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .background(color, RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(label, color = Color.White, fontSize = 12.sp)
-                    }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日").forEach { label ->
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, fontSize = 11.sp, color = Color(0xFF94A3B8))
                 }
-                repeat((7 - row.size).coerceAtLeast(0)) {
-                    Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
+            }
+        }
+        repeat(totalSlots / 7) { week ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(7) { weekday ->
+                    val slot = week * 7 + weekday
+                    val day = slot - firstDayOffset + 1
+                    when {
+                        day !in 1..daysInMonth -> {
+                            Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
+                        }
+                        else -> {
+                            val value = dayValueMap[day]
+                            val color = when {
+                                value == null -> Color(0xFFE2E8F0)
+                                value < 55 -> Color(0xFF34D399)
+                                value <= 95 -> Color(0xFF007BFF)
+                                else -> Color(0xFFFB923C)
+                            }
+                            val textColor = if (value == null) Color(0xFF64748B) else Color.White
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .background(color, RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(day.toString(), color = textColor, fontSize = 12.sp)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -672,7 +799,15 @@ private fun heartRateZones(points: List<HealthTrendPoint>): List<HeartRateZone> 
 }
 
 private fun weekdayLabel(timestamp: Long): String {
-    return SimpleDateFormat("E", Locale.CHINA).format(Date(timestamp))
+    return when (Calendar.getInstance().apply { timeInMillis = timestamp }.get(Calendar.DAY_OF_WEEK)) {
+        Calendar.MONDAY -> "周一"
+        Calendar.TUESDAY -> "周二"
+        Calendar.WEDNESDAY -> "周三"
+        Calendar.THURSDAY -> "周四"
+        Calendar.FRIDAY -> "周五"
+        Calendar.SATURDAY -> "周六"
+        else -> "周日"
+    }
 }
 
 private fun dayOfMonthLabel(timestamp: Long): String {
@@ -695,3 +830,106 @@ private fun formatMonthTitle(): String {
 }
 
 private fun monthLabelFromIndex(index: Int): String = "${index + 1}月"
+
+private fun buildHeartRateShareText(
+    range: TimeRange,
+    points: List<HealthTrendPoint>,
+    dashboardData: OppoHealthDashboardData?
+): String {
+    val currentValue = dashboardData?.latestHeartRate?.takeIf { it > 0 } ?: points.lastOrNull()?.value ?: 0
+    if (currentValue <= 0 && points.isEmpty()) return ""
+
+    val rangeLabel = when (range) {
+        TimeRange.DAY -> "今日"
+        TimeRange.WEEK -> "本周"
+        TimeRange.MONTH -> "本月"
+        TimeRange.YEAR -> "本年"
+    }
+    val avg = averageTrend(points)
+    val min = minTrend(points)
+    val max = maxTrend(points)
+
+    return buildString {
+        append("心率报告（").append(rangeLabel).append("）").append('\n')
+        append("最新心率：").append(currentValue).append(" bpm").append('\n')
+        if (points.isNotEmpty()) {
+            append("平均心率：").append(avg).append(" bpm").append('\n')
+            append("范围：").append(min).append(" - ").append(max).append(" bpm").append('\n')
+            append("样本数：").append(points.size)
+        } else {
+            append("当前时间范围暂无心率明细样本")
+        }
+    }
+}
+
+private fun isToday(timestamp: Long): Boolean {
+    val now = Calendar.getInstance()
+    val target = Calendar.getInstance().apply { timeInMillis = timestamp }
+    return now.get(Calendar.YEAR) == target.get(Calendar.YEAR) &&
+        now.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
+}
+
+private fun currentCalendarWeekWindow(): TimeWindow {
+    val calendar = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+    val offsetToMonday = when (dayOfWeek) {
+        Calendar.SUNDAY -> -6
+        else -> Calendar.MONDAY - dayOfWeek
+    }
+    calendar.add(Calendar.DAY_OF_MONTH, offsetToMonday)
+    val start = calendar.timeInMillis
+    calendar.add(Calendar.DAY_OF_MONTH, 7)
+    val end = calendar.timeInMillis - 1
+    return TimeWindow(start = start, end = end)
+}
+
+private fun dayWindow(timestamp: Long): TimeWindow {
+    val calendar = Calendar.getInstance().apply {
+        timeInMillis = timestamp
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val start = calendar.timeInMillis
+    calendar.add(Calendar.DAY_OF_MONTH, 1)
+    val end = calendar.timeInMillis - 1
+    return TimeWindow(start = start, end = end)
+}
+
+private fun buildHeartRateRangeLabel(
+    summaryPoint: HealthTrendPoint,
+    timeline: List<HealthTrendPoint>
+): String {
+    if (timeline.isEmpty()) {
+        return "${summaryPoint.value} - ${summaryPoint.value} bpm"
+    }
+    return "${minTrend(timeline)} - ${maxTrend(timeline)} bpm"
+}
+
+private fun aggregateDailyHeartRate(points: List<HealthTrendPoint>): List<HealthTrendPoint> {
+    return points
+        .groupBy { point ->
+            Calendar.getInstance().apply { timeInMillis = point.timestamp }.let { calendar ->
+                Triple(
+                    calendar.get(Calendar.YEAR),
+                    calendar.get(Calendar.MONTH),
+                    calendar.get(Calendar.DAY_OF_MONTH)
+                )
+            }
+        }
+        .values
+        .map { sameDayPoints ->
+            val latestPoint = sameDayPoints.maxByOrNull { it.timestamp } ?: sameDayPoints.first()
+            HealthTrendPoint(
+                timestamp = latestPoint.timestamp,
+                value = averageTrend(sameDayPoints)
+            )
+        }
+        .sortedBy { it.timestamp }
+}

@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -115,12 +116,13 @@ fun FullReportBottomSheet(
         onDismissRequest = onDismissRequest,
         containerColor = Color.Transparent,
         dragHandle = null,
+        sheetMaxWidth = Dp.Unspecified,
         modifier = Modifier.fillMaxHeight(0.92f)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(top = 8.dp)
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),

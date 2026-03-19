@@ -225,6 +225,10 @@ object OppoHealthSdkManager {
         return bridge(context).getHeartRateDailySummary(startTime, endTime).mapTrendPoints()
     }
 
+    suspend fun getHeartRateTimeline(context: Context, startTime: Long, endTime: Long): Result<List<HealthTrendPoint>> {
+        return bridge(context).getHeartRateTimeline(startTime, endTime).mapTrendPoints()
+    }
+
     suspend fun getActivitySummary(context: Context, startTime: Long, endTime: Long): Result<List<HealthTrendPoint>> {
         return bridge(context).getDailyActivityTimeline(startTime, endTime).mapTrendPoints()
     }

@@ -1,5 +1,7 @@
 package com.silverlink.app.ui.history
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,13 +22,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SelfImprovement
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
@@ -62,9 +61,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silverlink.app.feature.health.HealthTrendPoint
 import com.silverlink.app.feature.health.OppoHealthSdkManager
 import com.silverlink.app.ui.components.TimeRange
+import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,14 +102,21 @@ fun StressDetailScreen(
                     }
                 },
                 actions = {
-                    val actionIcon = when (selectedRange) {
-                        TimeRange.DAY, TimeRange.WEEK -> Icons.Default.MoreHoriz
-                        TimeRange.MONTH -> Icons.Default.CalendarToday
-                        TimeRange.YEAR -> Icons.Default.Settings
-                        else -> Icons.Default.MoreHoriz
-                    }
-                    IconButton(onClick = {}) {
-                        Icon(actionIcon, contentDescription = null)
+                    IconButton(
+                        onClick = {
+                            val summary = buildStressShareText(selectedRange, stressData)
+                            if (summary.isBlank()) {
+                                Toast.makeText(context, "暂无可分享的压力数据", Toast.LENGTH_SHORT).show()
+                                return@IconButton
+                            }
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, summary)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "分享压力数据"))
+                        }
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "分享")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -301,7 +308,7 @@ private fun WeekSection(data: StressUiData) {
 
 @Composable
 private fun MonthSection(data: StressUiData) {
-    val monthPoints = data.summary.takeLast(30)
+    val monthPoints = currentMonthStressPoints(data.summary)
     val average = averageValue(monthPoints)
     val relaxHours = (monthPoints.count { it.value < 40 } * 0.5f)
 
@@ -314,6 +321,7 @@ private fun MonthSection(data: StressUiData) {
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("月度压力分布", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(bottom = 8.dp))
+                WeekdayHeaderRow()
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Legend("低", Color(0xFF10B981))
                     Legend("中", Color(0xFFF59E0B))
@@ -410,30 +418,59 @@ private fun WeeklyStressBars(points: List<HealthTrendPoint>) {
 
 @Composable
 private fun MonthStressGrid(points: List<HealthTrendPoint>) {
-    val cells = buildList {
-        repeat(2) { add("" to Color.Transparent) }
-        val formatter = DateTimeFormatter.ofPattern("d")
-        points.takeLast(30).forEach { point ->
-            val label = LocalDate.ofInstant(java.time.Instant.ofEpochMilli(point.timestamp), ZoneId.systemDefault()).format(formatter)
-            add(label to stressLevel(point.value).color)
-        }
-        while (size % 7 != 0) add("" to Color.Transparent)
-    }
+    val cells = buildMonthStressCells(points)
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cells.chunked(7).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (label, color) ->
+                row.forEach { cell ->
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(36.dp)
-                            .background(color, RoundedCornerShape(8.dp)),
+                            .background(cell.background, RoundedCornerShape(8.dp))
+                            .then(
+                                if (cell.border != null) {
+                                    Modifier.border(1.dp, cell.border, RoundedCornerShape(8.dp))
+                                } else {
+                                    Modifier
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(label, color = if (color == Color.Transparent) Color(0xFF94A3B8) else Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            cell.label,
+                            color = cell.textColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeekdayHeaderRow() {
+    val labels = listOf("一", "二", "三", "四", "五", "六", "日")
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        labels.forEach { label ->
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    color = Color(0xFF94A3B8),
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }
@@ -556,6 +593,13 @@ private data class StressBucket(
     val alpha: Float
 )
 
+private data class StressCalendarCell(
+    val label: String,
+    val background: Color,
+    val textColor: Color,
+    val border: Color? = null
+)
+
 private fun bucketIntraday(points: List<HealthTrendPoint>): List<StressBucket> {
     if (points.isEmpty()) {
         return listOf("08", "10", "12", "14", "16", "18").map {
@@ -573,4 +617,91 @@ private fun bucketIntraday(points: List<HealthTrendPoint>): List<StressBucket> {
         StressBucket("${hour}:00", value, level.color, level.alpha)
     }
     return groups
+}
+
+private fun currentMonthStressPoints(points: List<HealthTrendPoint>): List<HealthTrendPoint> {
+    val zone = ZoneId.systemDefault()
+    val currentMonth = YearMonth.now(zone)
+    return points
+        .filter {
+            YearMonth.from(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate()) == currentMonth
+        }
+        .sortedBy { it.timestamp }
+}
+
+private fun buildMonthStressCells(points: List<HealthTrendPoint>): List<StressCalendarCell> {
+    val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    val currentMonth = YearMonth.now(zone)
+    val valuesByDate = currentMonthStressPoints(points)
+        .groupBy { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate() }
+        .mapValues { (_, entries) -> averageValue(entries) }
+
+    val cells = mutableListOf<StressCalendarCell>()
+    repeat(currentMonth.atDay(1).dayOfWeek.value - 1) {
+        cells += StressCalendarCell(
+            label = "",
+            background = Color.Transparent,
+            textColor = Color.Transparent
+        )
+    }
+
+    (1..currentMonth.lengthOfMonth()).forEach { day ->
+        val date = currentMonth.atDay(day)
+        val value = valuesByDate[date]
+        if (value == null || date.isAfter(today)) {
+            cells += StressCalendarCell(
+                label = day.toString(),
+                background = Color(0xFFF1F5F9),
+                textColor = Color(0xFF94A3B8),
+                border = Color(0xFFE2E8F0)
+            )
+        } else {
+            cells += StressCalendarCell(
+                label = day.toString(),
+                background = stressLevel(value).color,
+                textColor = Color.White
+            )
+        }
+    }
+
+    while (cells.size % 7 != 0) {
+        cells += StressCalendarCell(
+            label = "",
+            background = Color.Transparent,
+            textColor = Color.Transparent
+        )
+    }
+
+    return cells
+}
+
+private fun buildStressShareText(range: TimeRange, data: StressUiData): String {
+    val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    return when (range) {
+        TimeRange.DAY -> {
+            val points = data.detail.sortedBy { it.timestamp }
+            if (points.isEmpty() && data.current <= 0) return ""
+            val peak = points.maxByOrNull { it.value }?.value ?: data.current
+            val average = averageValue(points.ifEmpty { listOf(HealthTrendPoint(today.atStartOfDay(zone).toInstant().toEpochMilli(), data.current)) })
+            "压力指数日报\n日期：$today\n当前压力：${data.current}\n平均压力：$average\n峰值压力：$peak"
+        }
+        TimeRange.WEEK -> {
+            val points = data.summary.takeLast(7)
+            if (points.isEmpty()) return ""
+            "压力指数周报\n统计天数：${points.size}天\n平均压力：${averageValue(points)}\n高压力天数：${points.count { it.value >= 60 }}天"
+        }
+        TimeRange.MONTH -> {
+            val points = currentMonthStressPoints(data.summary)
+            if (points.isEmpty() && data.current <= 0) return ""
+            val currentMonth = YearMonth.now(zone)
+            "压力指数月报\n月份：${currentMonth.year}-${currentMonth.monthValue.toString().padStart(2, '0')}\n平均压力：${averageValue(points)}\n低压力天数：${points.count { it.value in 1..39 }}天\n高压力天数：${points.count { it.value >= 60 }}天"
+        }
+        TimeRange.YEAR -> {
+            val points = data.summary
+            if (points.isEmpty() && data.current <= 0) return ""
+            "压力指数年报\n平均压力：${averageValue(points)}\n最高压力月份：${highestPressureMonth(points)}"
+        }
+    }
 }

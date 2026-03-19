@@ -26,6 +26,8 @@ import com.silverlink.app.ui.components.MedicationStatus
 import com.silverlink.app.ui.components.MedicationSummary
 import com.silverlink.app.ui.components.MoodTimePoint
 import com.silverlink.app.ui.components.TimeRange
+import com.silverlink.sdk.health.BloodPressureData
+import com.silverlink.sdk.health.BodyMeasurementData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -176,6 +178,9 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val _healthAuthorized = MutableStateFlow(false)
     val healthAuthorized: StateFlow<Boolean> = _healthAuthorized.asStateFlow()
     
+    private val _weightTargetKg = MutableStateFlow(userPreferences.getTargetWeightKg())
+    val weightTargetKg: StateFlow<Float?> = _weightTargetKg.asStateFlow()
+    
     init {
         if (!userPreferences.isOppoHealthSdkConsentGranted()) {
             _showHealthPrivacyDialog.value = true
@@ -303,6 +308,51 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     /**
      * 清除所有缓存
      */
+    fun addManualWeightRecord(weightKg: Float, timestamp: Long, bmi: Float) {
+        userPreferences.addManualWeightRecord(
+            BodyMeasurementData(
+                timestamp = timestamp,
+                weightKg = weightKg,
+                bmi = bmi
+            )
+        )
+        loadHealthData()
+    }
+
+    fun deleteManualWeightRecord(timestamp: Long) {
+        userPreferences.deleteManualWeightRecord(timestamp)
+        loadHealthData()
+    }
+
+    fun setWeightTarget(weightKg: Float) {
+        userPreferences.setTargetWeightKg(weightKg)
+        _weightTargetKg.value = weightKg
+    }
+
+    fun addManualBloodPressureRecord(systolic: Int, diastolic: Int, timestamp: Long) {
+        userPreferences.addManualBloodPressureRecord(
+            BloodPressureData(
+                timestamp = timestamp,
+                systolic = systolic,
+                diastolic = diastolic
+            )
+        )
+        loadHealthData()
+    }
+
+    fun deleteManualBloodPressureRecord(timestamp: Long) {
+        userPreferences.deleteManualBloodPressureRecord(timestamp)
+        loadHealthData()
+    }
+
+    fun getVisibleDashboardMetricIds(defaultMetricIds: List<String>): List<String> {
+        return userPreferences.getHistoryDashboardMetricIds(defaultMetricIds)
+    }
+
+    fun setVisibleDashboardMetricIds(metricIds: List<String>) {
+        userPreferences.setHistoryDashboardMetricIds(metricIds)
+    }
+
     private fun invalidateCache() {
         cachedMoodLogs = null
         cachedMedicationLogs = null
