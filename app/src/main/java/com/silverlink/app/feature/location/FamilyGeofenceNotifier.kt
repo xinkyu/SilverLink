@@ -15,7 +15,7 @@ import com.silverlink.app.R
 
 object FamilyGeofenceNotifier {
     private const val CHANNEL_ID = "family_geofence_alerts"
-    private const val CHANNEL_NAME = "电子围栏提醒"
+    private const val CHANNEL_NAME = "防走失守护提醒"
     private const val NOTIFICATION_BASE_ID = 4100
 
     fun notify(context: Context, title: String, message: String, isExitAlert: Boolean) {
@@ -61,7 +61,7 @@ object FamilyGeofenceNotifier {
             CHANNEL_NAME,
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "家人端电子围栏进入/离开提醒"
+            description = "家人端防走失守护进入/离开提醒"
         }
         manager.createNotificationChannel(channel)
     }

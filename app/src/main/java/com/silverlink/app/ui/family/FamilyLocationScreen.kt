@@ -1,6 +1,8 @@
 package com.silverlink.app.ui.family
 
 import android.widget.Toast
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
@@ -145,7 +147,31 @@ fun FamilyLocationScreen(
                 LocationCard(
                     location = elderLocation,
                     isLoading = isLocationLoading,
-                    onRefresh = { viewModel.refreshLocation() }
+                    onRefresh = { viewModel.refreshLocation() },
+                    onViewMap = elderLocation?.let { location ->
+                        {
+                            Toast.makeText(context, "正在打开地图...", Toast.LENGTH_SHORT).show()
+
+                            val geoUri = Uri.parse("geo:${location.latitude},${location.longitude}?q=${location.latitude},${location.longitude}(长辈位置)")
+                            val mapIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+
+                            try {
+                                context.startActivity(mapIntent)
+                            } catch (_: Exception) {
+                                val webUri = Uri.parse("https://uri.amap.com/marker?position=${location.longitude},${location.latitude}&name=长辈位置")
+                                val webIntent = Intent(Intent.ACTION_VIEW, webUri).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                try {
+                                    context.startActivity(webIntent)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "没有可用的地图或浏览器应用", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
                 )
 
                 FenceSetupCard(
@@ -207,7 +233,7 @@ fun FamilyLocationScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "当前保留最近 2 小时内 ${locationHistory.size} 个位置点。围栏判断会结合精度和 ${settings.dwellMinutes} 分钟连续超界时间，避免刚越线就报警。",
+                                text = "当前保留最近 2 小时内 ${locationHistory.size} 个位置点。守护判断会结合定位精度和 ${settings.dwellMinutes} 分钟连续超界时间，避免刚越界就提醒。",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -252,12 +278,12 @@ private fun StatusSummaryCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "电子围栏",
+                            text = "防走失守护",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (enabled) "已开启，持续监测位置变化" else "已关闭，不会触发围栏提醒",
+                            text = if (enabled) "已开启，持续守护位置变化" else "已关闭，不会触发守护提醒",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -327,7 +353,7 @@ private fun FenceSetupCard(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "围栏圆心与半径",
+                    text = "守护中心与守护半径",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -339,7 +365,7 @@ private fun FenceSetupCard(
                 value = latitudeInput,
                 onValueChange = onLatitudeChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("圆心纬度") },
+                label = { Text("守护中心纬度") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 shape = RoundedCornerShape(18.dp),
@@ -357,7 +383,7 @@ private fun FenceSetupCard(
                 value = longitudeInput,
                 onValueChange = onLongitudeChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("圆心经度") },
+                label = { Text("守护中心经度") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 shape = RoundedCornerShape(18.dp),
@@ -375,7 +401,7 @@ private fun FenceSetupCard(
                 value = radiusInput,
                 onValueChange = onRadiusChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("半径（米）") },
+                label = { Text("守护半径（米）") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = RoundedCornerShape(18.dp),
@@ -399,7 +425,7 @@ private fun FenceSetupCard(
                     Text("设为当前位置")
                 }
                 Button(onClick = onSave) {
-                    Text("保存围栏")
+                    Text("保存")
                 }
             }
         }
@@ -442,14 +468,14 @@ private fun AlertStrategyCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             StrategySwitchRow(
-                title = "离开围栏提醒",
-                description = "连续超出围栏后才提醒",
+                title = "离开守护范围提醒",
+                description = "连续超出守护范围后才提醒",
                 checked = notifyOnExit,
                 onCheckedChange = onNotifyOnExitChange
             )
             StrategySwitchRow(
-                title = "回到围栏提醒",
-                description = "重新进入围栏时提醒",
+                title = "回到守护范围提醒",
+                description = "重新进入守护范围时提醒",
                 checked = notifyOnEnter,
                 onCheckedChange = onNotifyOnEnterChange
             )
@@ -457,7 +483,7 @@ private fun AlertStrategyCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "连续超界时长：${dwellMinutes} 分钟",
+                text = "连续离开时长：${dwellMinutes} 分钟",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
@@ -470,7 +496,7 @@ private fun AlertStrategyCard(
 
             StrategySwitchRow(
                 title = "安静时段（22:00 - 07:00）",
-                description = "夜间不推送围栏提醒",
+                description = "夜间不推送守护提醒",
                 checked = quietHoursEnabled,
                 onCheckedChange = onQuietHoursChange
             )

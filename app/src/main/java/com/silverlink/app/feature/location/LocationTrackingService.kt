@@ -47,6 +47,8 @@ class LocationTrackingService : Service() {
         // 最快更新间隔：2分钟（防止过于频繁）
         private const val LOCATION_FASTEST_INTERVAL_MS = 2 * 60 * 1000L
         private const val SINGLE_FIX_TIMEOUT_MS = 15_000L
+        private const val BOOTSTRAP_RETRY_INTERVAL_MS = 30_000L
+        private const val BOOTSTRAP_WINDOW_MS = 10 * 60 * 1000L
         
         /**
          * 启动位置追踪服务
@@ -96,6 +98,9 @@ class LocationTrackingService : Service() {
     private lateinit var userPreferences: UserPreferences
     private lateinit var syncRepository: com.silverlink.app.data.repository.SyncRepository
     private var locationCallback: LocationCallback? = null
+    private var bootstrapRetryJob: Job? = null
+    private var hasUploadedLocation = false
+    private var serviceStartedAtMs = 0L
     
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
@@ -122,6 +127,8 @@ class LocationTrackingService : Service() {
         userPreferences = UserPreferences.getInstance(applicationContext)
         syncRepository = com.silverlink.app.data.repository.SyncRepository.getInstance(applicationContext)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        serviceStartedAtMs = System.currentTimeMillis()
+        hasUploadedLocation = false
         
         // 开始位置追踪
         startLocationUpdates()
@@ -184,7 +191,7 @@ class LocationTrackingService : Service() {
             LOCATION_UPDATE_INTERVAL_MS
         )
             .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL_MS)
-            .setWaitForAccurateLocation(true)
+            .setWaitForAccurateLocation(false)
             .build()
         
         locationCallback = object : LocationCallback() {
@@ -206,6 +213,7 @@ class LocationTrackingService : Service() {
         
         // 立即获取一次位置并上传
         getImmediateLocation()
+        startBootstrapRetries()
     }
     
     /**
@@ -336,6 +344,24 @@ class LocationTrackingService : Service() {
             forceGetCurrentLocation(retryCount + 1)
         }
     }
+
+    private fun startBootstrapRetries() {
+        bootstrapRetryJob?.cancel()
+        bootstrapRetryJob = serviceScope.launch {
+            while (isActive && !hasUploadedLocation) {
+                val elapsed = System.currentTimeMillis() - serviceStartedAtMs
+                if (elapsed >= BOOTSTRAP_WINDOW_MS) {
+                    Log.w(TAG, "首定位兜底结束，${BOOTSTRAP_WINDOW_MS / 1000}s 内仍未上传成功，转为常规定位")
+                    break
+                }
+                delay(BOOTSTRAP_RETRY_INTERVAL_MS)
+                if (!hasUploadedLocation && isLocationEnabled()) {
+                    Log.d(TAG, "首定位仍未成功，执行兜底重试")
+                    forceGetCurrentLocation()
+                }
+            }
+        }
+    }
     
     /**
      * 上传位置到云端
@@ -362,6 +388,9 @@ class LocationTrackingService : Service() {
                 )
                 
                 if (result.isSuccess) {
+                    hasUploadedLocation = true
+                    bootstrapRetryJob?.cancel()
+                    bootstrapRetryJob = null
                     Log.d(TAG, "位置上传成功: $address")
                 } else {
                     Log.e(TAG, "位置上传失败: ${result.exceptionOrNull()?.message}")
@@ -432,6 +461,7 @@ class LocationTrackingService : Service() {
         locationCallback?.let {
             fusedLocationClient.removeLocationUpdates(it)
         }
+        bootstrapRetryJob?.cancel()
         
         // 取消所有协程
         serviceScope.cancel()

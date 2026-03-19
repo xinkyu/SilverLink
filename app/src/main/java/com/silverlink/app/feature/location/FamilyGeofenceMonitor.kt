@@ -69,7 +69,7 @@ object FamilyGeofenceMonitor {
                 effectiveRadiusMeters = outsideThreshold,
                 stableStatus = clearedState.currentStatus,
                 isUncertain = true,
-                suppressReason = if (rawAccuracy >= MAX_RELIABLE_ACCURACY_METERS) "定位精度较差，暂不判断" else "位于围栏边界缓冲区"
+                suppressReason = if (rawAccuracy >= MAX_RELIABLE_ACCURACY_METERS) "定位精度较差，暂不判断" else "位于守护范围边界缓冲区"
             )
         }
 

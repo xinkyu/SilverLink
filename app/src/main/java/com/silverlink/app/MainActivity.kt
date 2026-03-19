@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.silverlink.app.ui.theme.SilverLinkTheme
 import com.silverlink.app.ui.MainScreen
+import com.silverlink.app.feature.location.LocationTrackingService
 import com.silverlink.app.ui.onboarding.OnboardingNavigation
 import com.silverlink.app.feature.proactive.ProactiveInteractionService
 import android.content.Intent
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
         // 启动主动闲聊服务（前台服务）- 仅老人端需要
         val userPrefs = com.silverlink.app.data.local.UserPreferences.getInstance(this)
         startProactiveServiceIfElder(userPrefs)
+        startLocationServiceIfEnabled(userPrefs)
 
         
         setContent {
@@ -72,6 +74,7 @@ class MainActivity : ComponentActivity() {
                             showOnboarding = false
                             // Onboarding完成后，检查并启动服务（如果是老人端）
                             startProactiveServiceIfElder(userPrefs)
+                            startLocationServiceIfEnabled(userPrefs)
                         },
                         onSplashStateChanged = { isSplash ->
                             isOnSplashScreen = isSplash
@@ -104,6 +107,25 @@ class MainActivity : ComponentActivity() {
             )
         } else {
             android.util.Log.d("MainActivity", "Skipping ProactiveService: role=${config.role}, activated=${config.isActivated}")
+        }
+    }
+
+    private fun startLocationServiceIfEnabled(userPrefs: com.silverlink.app.data.local.UserPreferences) {
+        val config = userPrefs.userConfig.value
+        val shouldStart =
+            config.role == com.silverlink.app.data.local.UserRole.ELDER &&
+                config.isActivated &&
+                userPrefs.isLocationSharingEnabled() &&
+                LocationTrackingService.hasLocationPermission(this)
+
+        if (shouldStart) {
+            android.util.Log.d("MainActivity", "Starting LocationTrackingService for elder")
+            LocationTrackingService.start(this)
+        } else {
+            android.util.Log.d(
+                "MainActivity",
+                "Skipping LocationTrackingService: role=${config.role}, activated=${config.isActivated}, sharing=${userPrefs.isLocationSharingEnabled()}, hasPermission=${LocationTrackingService.hasLocationPermission(this)}"
+            )
         }
     }
     

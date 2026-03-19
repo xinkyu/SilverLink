@@ -46,7 +46,7 @@ fun LocationCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -168,7 +168,7 @@ fun LocationCard(
                             onClick = onViewMap,
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            Text("查看地图", fontSize = 13.sp)
+                            Text("在地图中查看", fontSize = 13.sp)
                         }
                     }
                 }

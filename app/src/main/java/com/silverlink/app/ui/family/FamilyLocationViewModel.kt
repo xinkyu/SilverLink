@@ -149,15 +149,15 @@ class FamilyLocationViewModel(application: Application) : AndroidViewModel(appli
 
         when {
             latitude == null || latitude !in -90.0..90.0 -> {
-                _toastMessage.value = "请输入有效的围栏圆心纬度"
+                _toastMessage.value = "请输入有效的守护中心纬度"
                 return false
             }
             longitude == null || longitude !in -180.0..180.0 -> {
-                _toastMessage.value = "请输入有效的围栏圆心经度"
+                _toastMessage.value = "请输入有效的守护中心经度"
                 return false
             }
             radius == null || radius !in 50f..5000f -> {
-                _toastMessage.value = "半径请设置在 50 到 5000 米之间"
+                _toastMessage.value = "守护半径请设置在 50 到 5000 米之间"
                 return false
             }
         }
@@ -170,7 +170,7 @@ class FamilyLocationViewModel(application: Application) : AndroidViewModel(appli
             )
         )
         reevaluateLatestLocation()
-        _toastMessage.value = "电子围栏已更新"
+        _toastMessage.value = "防走失守护范围已更新"
         return true
     }
 
@@ -187,7 +187,7 @@ class FamilyLocationViewModel(application: Application) : AndroidViewModel(appli
             )
         )
         reevaluateLatestLocation()
-        _toastMessage.value = "已将当前位置设为圆心"
+        _toastMessage.value = "已将当前位置设为守护中心"
     }
 
     fun updateNotifyOnExit(enabled: Boolean) {
@@ -250,7 +250,7 @@ class FamilyLocationViewModel(application: Application) : AndroidViewModel(appli
     }
 
     private suspend fun sendFenceAlert(isExitAlert: Boolean, message: String) {
-        val title = if (isExitAlert) "电子围栏离开提醒" else "电子围栏返回提醒"
+        val title = if (isExitAlert) "防走失守护离开提醒" else "防走失守护返回提醒"
         Log.w(TAG, "sendFenceAlert title=$title, message=$message")
         FamilyGeofenceNotifier.notify(
             context = getApplication(),
@@ -271,35 +271,35 @@ class FamilyLocationViewModel(application: Application) : AndroidViewModel(appli
     ): String {
         val distanceText = result.distanceMeters?.let { "${it.toInt()}米" } ?: "未知距离"
         return if (isExitAlert) {
-            "${elderName}已连续${_settings.value.dwellMinutes}分钟处于围栏外，当前距离圆心约$distanceText。"
+            "${elderName}已连续${_settings.value.dwellMinutes}分钟离开守护范围，当前距离守护中心约$distanceText。"
         } else {
-            "${elderName}已重新回到围栏范围内，当前距离圆心约$distanceText。"
+            "${elderName}已重新回到守护范围内，当前距离守护中心约$distanceText。"
         }
     }
 
     fun currentStatusLabel(): String {
         if (!_settings.value.enabled) return "监测已关闭"
-        if (!_settings.value.hasCenter) return "待设置围栏"
+        if (!_settings.value.hasCenter) return "待设置守护范围"
         return when (_evaluation.value.stableStatus) {
-            GeofenceBoundaryStatus.INSIDE -> "在围栏内"
-            GeofenceBoundaryStatus.OUTSIDE -> "在围栏外"
+            GeofenceBoundaryStatus.INSIDE -> "在守护中"
+            GeofenceBoundaryStatus.OUTSIDE -> "已离开守护范围"
             GeofenceBoundaryStatus.UNKNOWN -> "等待判断"
         }
     }
 
     fun pendingStatusLabel(): String? {
         return when (_evaluation.value.pendingStatus) {
-            GeofenceBoundaryStatus.INSIDE -> "正在确认返回围栏"
-            GeofenceBoundaryStatus.OUTSIDE -> "正在确认离开围栏"
+            GeofenceBoundaryStatus.INSIDE -> "正在确认回到守护范围"
+            GeofenceBoundaryStatus.OUTSIDE -> "正在确认离开守护范围"
             else -> null
         }
     }
 
     fun distanceSummary(): String {
-        if (!_settings.value.hasCenter) return "请先设置围栏圆心和半径"
+        if (!_settings.value.hasCenter) return "请先设置守护中心和守护半径"
         val distance = _evaluation.value.distanceMeters ?: return "暂无距离数据"
         val radius = _settings.value.radiusMeters
-        return String.format(Locale.CHINA, "距离圆心 %.0f 米，围栏半径 %.0f 米", distance, radius)
+        return String.format(Locale.CHINA, "距离守护中心 %.0f 米，守护半径 %.0f 米", distance, radius)
     }
 
     override fun onCleared() {
