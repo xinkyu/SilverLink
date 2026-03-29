@@ -36,11 +36,23 @@ exports.main = async (event, context) => {
       } catch (e) {
         // ignore
       }
-      // 构造完整的 fileId
-      // 注意: 需要知道 bucket 信息，这里从环境变量或硬编码获取
-      const envId = process.env.TCB_ENV || "silverlink-3ghlz8es381befbf";
-      const bucket = `7369-${envId}-1408550226`;
-      fileId = `cloud://${envId}.${bucket}/${decodedPath}`;
+      // 通过 SDK 动态解析正确的 fileId，避免硬编码 bucket 命名规则
+      try {
+        const uploadMeta = await app.getUploadMetadata({
+          cloudPath: decodedPath,
+        });
+        const meta = uploadMeta.data || uploadMeta;
+        fileId = meta.fileId;
+        console.log("Using SDK-resolved fileId:", fileId);
+      } catch (e) {
+        console.error("getUploadMetadata failed, fallback to TCB_ENV:", e.message);
+        // 回退：使用 TCB_ENV 环境变量拼接（不再硬编码 bucket 规则）
+        const envId = process.env.TCB_ENV;
+        if (envId) {
+          // 尝试常见 bucket 格式
+          fileId = `cloud://${envId}/${decodedPath}`;
+        }
+      }
       console.log("Using path-based fileId:", fileId);
     } else if (rawFileId) {
       // 使用传统的 fileId 参数

@@ -34,7 +34,7 @@ object CloudBaseService {
         if (configured.isNotBlank()) {
             if (configured.endsWith("/")) configured else "$configured/"
         } else {
-            "https://silverlink-3ghlz8es381befbf-1408550226.ap-shanghai.app.tcloudbase.com/"
+            "https://silverlink-9ghfrozgb4226f22-1417212787.ap-shanghai.app.tcloudbase.com/"
         }
     }
     
