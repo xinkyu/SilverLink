@@ -27,6 +27,13 @@ import com.silverlink.app.feature.chat.TextToSpeechService
 import com.silverlink.app.feature.emotion.EmotionRecognitionService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import com.silverlink.app.feature.chat.realtime.ConversationState
+import com.silverlink.app.feature.chat.realtime.PcmAudioStream
+import com.silverlink.app.feature.chat.realtime.RealtimeConversationManager
+import com.silverlink.app.feature.chat.realtime.QwenRealtimeAsrClient
+import com.silverlink.app.feature.chat.realtime.StreamingAsrClientApi
+import com.silverlink.app.feature.chat.realtime.StreamingTtsControllerImpl
+import com.silverlink.app.feature.chat.realtime.WebRtcVadEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -94,6 +101,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _ragDebugSnapshot = MutableStateFlow<RagDebugSnapshot?>(null)
     val ragDebugSnapshot: StateFlow<RagDebugSnapshot?> = _ragDebugSnapshot.asStateFlow()
+    private val _conversationState = MutableStateFlow<ConversationState>(ConversationState.Idle)
+    val conversationState: StateFlow<ConversationState> = _conversationState.asStateFlow()
+
+    private val _partialTranscript = MutableStateFlow("")
+    val partialTranscript: StateFlow<String> = _partialTranscript.asStateFlow()
 
     // 语音命令意图状态 - 用于触发导航和执行操作
     enum class SafetyFeature { FALL_DETECTION, PROACTIVE_INTERACTION, LOCATION_SHARING }
@@ -101,6 +113,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     sealed class VoiceCommandIntent {
         object None : VoiceCommandIntent()
         // 导航类
+        object OpenRealtimeCall : VoiceCommandIntent()
         object OpenGallery : VoiceCommandIntent()
         data class SearchPhotos(val query: String) : VoiceCommandIntent()
         object OpenMedicationAdd : VoiceCommandIntent()      // 拍照加药
@@ -146,6 +159,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val ttsService = TextToSpeechService()
     private val audioPlayer = AudioPlayerHelper(application)
     private var currentAudioFile: String? = null
+    private var realtimeManager: RealtimeConversationManager? = null
+    private var streamingTts: StreamingTtsControllerImpl? = null
+    private var realtimeAsr: StreamingAsrClientApi? = null
     
     // 数据库访问
     private val appDatabase = AppDatabase.getInstance(application)
@@ -193,14 +209,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // 加载会话列表
         loadConversations()
 
-        // 设置音频播放完成监听器
-        audioPlayer.setOnCompletionListener {
-            _ttsState.value = TtsState.Idle
-        }
-        audioPlayer.setOnErrorListener { errorMsg ->
-            _ttsState.value = TtsState.Error(errorMsg)
-        }
-        
         // 设置复刻音色ID（如果有）
         val clonedVoiceId = userPrefs.userConfig.value.clonedVoiceId
         Log.d(TAG, "Loaded user config - clonedVoiceId: '$clonedVoiceId', dialect: ${userPrefs.userConfig.value.dialect}")
@@ -212,13 +220,85 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         startPeriodicMemoryExtraction()
+
+        audioPlayer.setOnCompletionListener {
+            _ttsState.value = TtsState.Idle
+            realtimeManager?.onPlaybackFinished()
+        }
+        audioPlayer.setOnErrorListener { errorMsg ->
+            _ttsState.value = TtsState.Error(errorMsg)
+            realtimeManager?.onPlaybackFinished()
+        }
+
+        setupRealtimeConversation()
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        idleMemoryExtractionJob?.cancel()
-        periodicMemoryExtractionJob?.cancel()
-        audioPlayer.release()
+    private fun setupRealtimeConversation() {
+        val vadEngine = WebRtcVadEngine()
+        val audioStream = PcmAudioStream()
+        val asrClient = QwenRealtimeAsrClient(
+            onPartial = { partial ->
+                _partialTranscript.value = partial
+            },
+            onFinal = { speech ->
+                handleRealtimeFinal(speech.text, speech.emotion)
+            }
+        )
+        realtimeAsr = asrClient
+
+        streamingTts = StreamingTtsControllerImpl(
+            ttsService = ttsService,
+            audioPlayer = audioPlayer,
+            scope = viewModelScope,
+            onPlaybackState = { isPlaying ->
+                _ttsState.value = if (isPlaying) TtsState.Speaking else TtsState.Idle
+                if (isPlaying) {
+                    realtimeManager?.onPlaybackStarted()
+                } else {
+                    realtimeManager?.onPlaybackFinished()
+                }
+            },
+            clonedVoiceIdProvider = {
+                userPrefs.userConfig.value.clonedVoiceId
+            },
+            emotionProvider = { _currentEmotion.value },
+            dialectProvider = {
+                val dialect = userPrefs.userConfig.value.dialect
+                if (dialect != com.silverlink.app.data.local.Dialect.NONE) dialect.displayName else ""
+            },
+            rateProvider = { getTtsRateForEmotion(_currentEmotion.value) }
+        )
+        realtimeManager = RealtimeConversationManager(
+            vadEngine = vadEngine,
+            audioStream = audioStream,
+            asrClient = asrClient,
+            silenceTimeoutMs = 450,
+            bargeInRmsThreshold = 4000,
+            consecutiveFramesRequired = 3,
+            playbackCooldownMs = 500,
+            onInterrupt = {
+                stopSpeaking()
+            },
+            onFinalText = { text, emotion ->
+                handleRealtimeFinal(text, emotion)
+            }
+        )
+
+        viewModelScope.launch {
+            realtimeManager?.state?.collect { state ->
+                _conversationState.value = state
+            }
+        }
+    }
+
+    fun startRealtimeConversation() {
+        realtimeManager?.start()
+    }
+
+    fun stopRealtimeConversation() {
+        realtimeManager?.stop()
+        _conversationState.value = ConversationState.Idle
+        _partialTranscript.value = ""
     }
 
     private fun loadConversations() {
@@ -779,6 +859,58 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun detectVoiceCommand(text: String): Boolean {
         val elderName = getElderName()
         val prefix = if (elderName.isNotBlank()) "${elderName}，" else ""
+
+        // ========== 通话模式命令 ==========
+        val callModeKeywords = listOf(
+            "打开和你的电话对话模式", "电话对话模式", "语音通话模式", "语音电话模式",
+            "打开电话模式", "打开通话模式", "和你电话对话"
+        )
+        if (callModeKeywords.any { text.contains(it) }) {
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenRealtimeCall
+            respondAndSpeak("${prefix}好的，这就打开和我的语音通话模式。")
+            return true
+        }
+
+        // ========== 新增记忆命令 ==========
+        val addMemoryKeywords = listOf(
+            "新增一条记忆", "添加一条记忆", "加一条记忆", "记一条记忆", "记住这件事", "帮我记住"
+        )
+        if (addMemoryKeywords.any { text.contains(it) }) {
+            val memoryContent = extractMemoryContentFromCommand(text)
+            if (memoryContent.isNullOrBlank()) {
+                respondAndSpeak("${prefix}好的，请告诉我这条记忆的具体内容，我会帮您记住。")
+            } else {
+                addMemoryFromUi(memoryContent)
+                respondAndSpeak("${prefix}好的，我已经帮您记住了：${memoryContent.take(40)}")
+            }
+            return true
+        }
+
+        // ========== 每日服药/情绪总结命令 ==========
+        val askMedicationSummary = isMedicationSummaryQuery(text)
+        val askMoodSummary = isMoodSummaryQuery(text)
+        if (askMedicationSummary || askMoodSummary) {
+            val target = resolveDateQueryTarget(text)
+            viewModelScope.launch {
+                val parts = mutableListOf<String>()
+                if (askMedicationSummary) {
+                    parts.add(buildMedicationSummaryForDate(target.date, target.label))
+                }
+                if (askMoodSummary) {
+                    parts.add(buildMoodSummaryForDate(target.date, target.label))
+                }
+                respondAndSpeak("${prefix}${parts.joinToString(" ")}")
+            }
+            return true
+        }
+
+        // ========== 最近照片命令 ==========
+        val latestPhotoKeywords = listOf("最近一张照片", "最新照片", "最近照片")
+        if (latestPhotoKeywords.any { text.contains(it) }) {
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenGallery
+            respondAndSpeak("${prefix}好的，这就打开记忆相册，默认显示最近一张照片。")
+            return true
+        }
         
         // ========== 导航类命令 ==========
         
@@ -903,6 +1035,92 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         
         return false
+    }
+
+    private data class DateQueryTarget(val date: String, val label: String)
+
+    private fun resolveDateQueryTarget(text: String): DateQueryTarget {
+        val today = java.time.LocalDate.now()
+        return when {
+            text.contains("前天") -> DateQueryTarget(today.minusDays(2).toString(), "前天")
+            text.contains("昨天") -> DateQueryTarget(today.minusDays(1).toString(), "昨天")
+            text.contains("今天") || text.contains("今日") -> DateQueryTarget(today.toString(), "今天")
+            else -> {
+                val matchedDate = Regex("(20\\d{2}-\\d{2}-\\d{2})").find(text)?.groupValues?.getOrNull(1)
+                if (matchedDate != null) DateQueryTarget(matchedDate, matchedDate) else DateQueryTarget(today.toString(), "今天")
+            }
+        }
+    }
+
+    private fun extractMemoryContentFromCommand(text: String): String? {
+        val anchors = listOf("新增一条记忆", "添加一条记忆", "加一条记忆", "记一条记忆", "记住这件事", "帮我记住")
+        anchors.forEach { anchor ->
+            if (text.contains(anchor)) {
+                val rest = text.substringAfter(anchor, "")
+                    .trim()
+                    .trimStart('，', ',', '。', '：', ':', '、')
+                    .trim()
+                if (rest.isNotBlank()) {
+                    return rest
+                }
+            }
+        }
+        return null
+    }
+
+    private fun isMedicationSummaryQuery(text: String): Boolean {
+        val medicationKeywords = listOf(
+            "药都全吃了吗", "药都吃了吗", "药有没有吃", "吃药情况", "服药情况", "药吃了没"
+        )
+        return medicationKeywords.any { text.contains(it) }
+    }
+
+    private fun isMoodSummaryQuery(text: String): Boolean {
+        val moodKeywords = listOf(
+            "情绪怎么样", "心情怎么样", "情绪如何", "心情如何", "今天心情", "昨天情绪"
+        )
+        return moodKeywords.any { text.contains(it) }
+    }
+
+    private suspend fun buildMedicationSummaryForDate(date: String, label: String): String {
+        val logs = historyDao.getMedicationLogsByDate(date)
+        if (logs.isEmpty()) {
+            return "${label}没有查到服药记录。"
+        }
+
+        val total = logs.size
+        val taken = logs.count { it.status.equals("taken", ignoreCase = true) }
+        if (taken == total) {
+            return "${label}药都按时吃了，共${total}次。"
+        }
+
+        val missedLogs = logs.filterNot { it.status.equals("taken", ignoreCase = true) }
+        val missedExamples = missedLogs
+            .take(3)
+            .joinToString("、") { "${it.medicationName}(${it.scheduledTime})" }
+        val suffix = if (missedLogs.size > 3) "等${missedLogs.size}次" else ""
+
+        return if (missedExamples.isNotBlank()) {
+            "${label}一共记录${total}次服药，已完成${taken}次，还有${total - taken}次未完成，主要是${missedExamples}${suffix}。"
+        } else {
+            "${label}一共记录${total}次服药，已完成${taken}次，还有${total - taken}次未完成。"
+        }
+    }
+
+    private suspend fun buildMoodSummaryForDate(date: String, label: String): String {
+        val logs = historyDao.getMoodLogsByDate(date)
+        if (logs.isEmpty()) {
+            return "${label}还没有情绪记录。"
+        }
+
+        val dominantMoodLabel = logs
+            .groupingBy { it.mood }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+            ?: logs.first().mood
+        val dominantMood = Emotion.fromLabel(dominantMoodLabel).displayName
+        return "${label}记录了${logs.size}次情绪，整体以${dominantMood}为主。"
     }
     
     /**
@@ -1143,6 +1361,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             result.fold(
                 onSuccess = { audioData ->
                     _ttsState.value = TtsState.Speaking
+                    realtimeManager?.onPlaybackStarted()
                     audioPlayer.play(audioData)
                 },
                 onFailure = { error ->
@@ -1156,8 +1375,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * 停止语音播放
      */
     fun stopSpeaking() {
+        streamingTts?.cancelPlayback()
         audioPlayer.stop()
         _ttsState.value = TtsState.Idle
+        realtimeManager?.onPlaybackFinished()
     }
 
     /**
@@ -1242,6 +1463,59 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun handleRealtimeFinal(text: String, emotion: Emotion) {
+        if (text.isBlank()) {
+            _conversationState.value = ConversationState.Listening
+            return
+        }
+
+        _currentEmotion.value = emotion
+        val userMessage = Message("user", text)
+        val currentHistory = _messages.value
+        _messages.value = currentHistory + userMessage
+
+        viewModelScope.launch {
+            saveMoodLog(_currentEmotion.value, text)
+            saveMessageToDb(userMessage, _currentEmotion.value)
+            scheduleIdleMemoryExtraction()
+
+            if (detectVoiceCommand(text)) {
+                return@launch
+            }
+
+            _isLoading.value = true
+            try {
+                val apiMessages = mutableListOf<Message>()
+                apiMessages.add(buildSystemPrompt(text))
+                apiMessages.addAll(currentHistory.takeLast(SHORT_TERM_WINDOW_SIZE))
+                apiMessages.add(userMessage)
+
+                val request = QwenRequest(
+                    input = Input(messages = apiMessages)
+                )
+
+                val response = RetrofitClient.api.chat(request)
+                val assistantMessageContent = response.output.choices?.firstOrNull()?.message?.content
+                    ?: response.output.text
+                    ?: "哎呀，我刚才走神了，没听清您说什么，能再说一遍吗？"
+
+                val assistantMessage = Message("assistant", assistantMessageContent)
+                _messages.value = _messages.value + assistantMessage
+                saveMessageToDb(assistantMessage, null)
+
+                streamingTts?.requestReply(assistantMessageContent)
+            } catch (e: Exception) {
+                val errorMessage = "网络好像有点卡，请检查一下网络连接哦。"
+                val errorMsg = Message("assistant", errorMessage)
+                _messages.value = _messages.value + errorMsg
+                saveMessageToDb(errorMsg, null)
+                streamingTts?.requestReply(errorMessage)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun refreshMemoryCenter() {
         viewModelScope.launch {
             _memoryRecords.value = memoryDao.listAllMemories()
@@ -1309,7 +1583,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             refreshMemoryCenter()
         }
     }
-
     /**
      * 检查药品 - 通过拍照识别并验证是否是当前应该吃的药
      */
@@ -1405,4 +1678,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return "${prefix}抱歉，我没能认出这个药。你可以把药瓶正面对着我再试一次吗？"
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        idleMemoryExtractionJob?.cancel()
+        periodicMemoryExtractionJob?.cancel()
+        realtimeManager?.release()
+        audioPlayer.release()
+        com.silverlink.app.feature.chat.realtime.SharedAudioSession.reset()
+    }
 }

@@ -376,24 +376,37 @@ class LocationTrackingService : Service() {
                     return@launch
                 }
                 
-                // 反地理编码获取地址
-                val address = getAddressFromLocation(latitude, longitude)
-                
-                // 上传到云端
-                val result = syncRepository.uploadLocation(
+                // 优化：先上传一次经纬度数据，确保家人端能立即同步到位置（反地理编码可能耗时数秒）
+                val quickResult = syncRepository.uploadLocation(
                     latitude = latitude,
                     longitude = longitude,
                     accuracy = accuracy,
-                    address = address
+                    address = ""
                 )
                 
-                if (result.isSuccess) {
+                if (quickResult.isSuccess) {
                     hasUploadedLocation = true
                     bootstrapRetryJob?.cancel()
                     bootstrapRetryJob = null
-                    Log.d(TAG, "位置上传成功: $address")
+                    Log.d(TAG, "快速位置上传成功")
                 } else {
-                    Log.e(TAG, "位置上传失败: ${result.exceptionOrNull()?.message}")
+                    Log.e(TAG, "快速位置上传失败: ${quickResult.exceptionOrNull()?.message}")
+                }
+                
+                // 异步进行耗时的反地理编码获取地址
+                val address = getAddressFromLocation(latitude, longitude)
+                
+                // 如果获取到了地址，再补充上传一次
+                if (address.isNotBlank()) {
+                    val addressResult = syncRepository.uploadLocation(
+                        latitude = latitude,
+                        longitude = longitude,
+                        accuracy = accuracy,
+                        address = address
+                    )
+                    if (addressResult.isSuccess) {
+                        Log.d(TAG, "带地址的位置上传成功: $address")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "位置上传异常: ${e.message}", e)
@@ -450,6 +463,11 @@ class LocationTrackingService : Service() {
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
+        // 每次服务启动或收到启动指令时，立即获取一次位置并上传
+        // 这解决了“打开位置共享时家人端无法立即同步”的问题（如果服务已在后台但未刷新位置）
+        if (::fusedLocationClient.isInitialized) {
+            getImmediateLocation()
+        }
         return START_STICKY
     }
     
