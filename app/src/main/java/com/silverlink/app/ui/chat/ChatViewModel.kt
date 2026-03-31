@@ -113,6 +113,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     sealed class VoiceCommandIntent {
         object None : VoiceCommandIntent()
         // 导航类
+        object OpenRealtimeCall : VoiceCommandIntent()
         object OpenGallery : VoiceCommandIntent()
         data class SearchPhotos(val query: String) : VoiceCommandIntent()
         object OpenMedicationAdd : VoiceCommandIntent()      // 拍照加药
@@ -256,6 +257,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     realtimeManager?.onPlaybackFinished()
                 }
+            },
+            clonedVoiceIdProvider = {
+                userPrefs.userConfig.value.clonedVoiceId
             },
             emotionProvider = { _currentEmotion.value },
             dialectProvider = {
@@ -855,6 +859,58 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun detectVoiceCommand(text: String): Boolean {
         val elderName = getElderName()
         val prefix = if (elderName.isNotBlank()) "${elderName}，" else ""
+
+        // ========== 通话模式命令 ==========
+        val callModeKeywords = listOf(
+            "打开和你的电话对话模式", "电话对话模式", "语音通话模式", "语音电话模式",
+            "打开电话模式", "打开通话模式", "和你电话对话"
+        )
+        if (callModeKeywords.any { text.contains(it) }) {
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenRealtimeCall
+            respondAndSpeak("${prefix}好的，这就打开和我的语音通话模式。")
+            return true
+        }
+
+        // ========== 新增记忆命令 ==========
+        val addMemoryKeywords = listOf(
+            "新增一条记忆", "添加一条记忆", "加一条记忆", "记一条记忆", "记住这件事", "帮我记住"
+        )
+        if (addMemoryKeywords.any { text.contains(it) }) {
+            val memoryContent = extractMemoryContentFromCommand(text)
+            if (memoryContent.isNullOrBlank()) {
+                respondAndSpeak("${prefix}好的，请告诉我这条记忆的具体内容，我会帮您记住。")
+            } else {
+                addMemoryFromUi(memoryContent)
+                respondAndSpeak("${prefix}好的，我已经帮您记住了：${memoryContent.take(40)}")
+            }
+            return true
+        }
+
+        // ========== 每日服药/情绪总结命令 ==========
+        val askMedicationSummary = isMedicationSummaryQuery(text)
+        val askMoodSummary = isMoodSummaryQuery(text)
+        if (askMedicationSummary || askMoodSummary) {
+            val target = resolveDateQueryTarget(text)
+            viewModelScope.launch {
+                val parts = mutableListOf<String>()
+                if (askMedicationSummary) {
+                    parts.add(buildMedicationSummaryForDate(target.date, target.label))
+                }
+                if (askMoodSummary) {
+                    parts.add(buildMoodSummaryForDate(target.date, target.label))
+                }
+                respondAndSpeak("${prefix}${parts.joinToString(" ")}")
+            }
+            return true
+        }
+
+        // ========== 最近照片命令 ==========
+        val latestPhotoKeywords = listOf("最近一张照片", "最新照片", "最近照片")
+        if (latestPhotoKeywords.any { text.contains(it) }) {
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenGallery
+            respondAndSpeak("${prefix}好的，这就打开记忆相册，默认显示最近一张照片。")
+            return true
+        }
         
         // ========== 导航类命令 ==========
         
@@ -979,6 +1035,92 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         
         return false
+    }
+
+    private data class DateQueryTarget(val date: String, val label: String)
+
+    private fun resolveDateQueryTarget(text: String): DateQueryTarget {
+        val today = java.time.LocalDate.now()
+        return when {
+            text.contains("前天") -> DateQueryTarget(today.minusDays(2).toString(), "前天")
+            text.contains("昨天") -> DateQueryTarget(today.minusDays(1).toString(), "昨天")
+            text.contains("今天") || text.contains("今日") -> DateQueryTarget(today.toString(), "今天")
+            else -> {
+                val matchedDate = Regex("(20\\d{2}-\\d{2}-\\d{2})").find(text)?.groupValues?.getOrNull(1)
+                if (matchedDate != null) DateQueryTarget(matchedDate, matchedDate) else DateQueryTarget(today.toString(), "今天")
+            }
+        }
+    }
+
+    private fun extractMemoryContentFromCommand(text: String): String? {
+        val anchors = listOf("新增一条记忆", "添加一条记忆", "加一条记忆", "记一条记忆", "记住这件事", "帮我记住")
+        anchors.forEach { anchor ->
+            if (text.contains(anchor)) {
+                val rest = text.substringAfter(anchor, "")
+                    .trim()
+                    .trimStart('，', ',', '。', '：', ':', '、')
+                    .trim()
+                if (rest.isNotBlank()) {
+                    return rest
+                }
+            }
+        }
+        return null
+    }
+
+    private fun isMedicationSummaryQuery(text: String): Boolean {
+        val medicationKeywords = listOf(
+            "药都全吃了吗", "药都吃了吗", "药有没有吃", "吃药情况", "服药情况", "药吃了没"
+        )
+        return medicationKeywords.any { text.contains(it) }
+    }
+
+    private fun isMoodSummaryQuery(text: String): Boolean {
+        val moodKeywords = listOf(
+            "情绪怎么样", "心情怎么样", "情绪如何", "心情如何", "今天心情", "昨天情绪"
+        )
+        return moodKeywords.any { text.contains(it) }
+    }
+
+    private suspend fun buildMedicationSummaryForDate(date: String, label: String): String {
+        val logs = historyDao.getMedicationLogsByDate(date)
+        if (logs.isEmpty()) {
+            return "${label}没有查到服药记录。"
+        }
+
+        val total = logs.size
+        val taken = logs.count { it.status.equals("taken", ignoreCase = true) }
+        if (taken == total) {
+            return "${label}药都按时吃了，共${total}次。"
+        }
+
+        val missedLogs = logs.filterNot { it.status.equals("taken", ignoreCase = true) }
+        val missedExamples = missedLogs
+            .take(3)
+            .joinToString("、") { "${it.medicationName}(${it.scheduledTime})" }
+        val suffix = if (missedLogs.size > 3) "等${missedLogs.size}次" else ""
+
+        return if (missedExamples.isNotBlank()) {
+            "${label}一共记录${total}次服药，已完成${taken}次，还有${total - taken}次未完成，主要是${missedExamples}${suffix}。"
+        } else {
+            "${label}一共记录${total}次服药，已完成${taken}次，还有${total - taken}次未完成。"
+        }
+    }
+
+    private suspend fun buildMoodSummaryForDate(date: String, label: String): String {
+        val logs = historyDao.getMoodLogsByDate(date)
+        if (logs.isEmpty()) {
+            return "${label}还没有情绪记录。"
+        }
+
+        val dominantMoodLabel = logs
+            .groupingBy { it.mood }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+            ?: logs.first().mood
+        val dominantMood = Emotion.fromLabel(dominantMoodLabel).displayName
+        return "${label}记录了${logs.size}次情绪，整体以${dominantMood}为主。"
     }
     
     /**
@@ -1336,6 +1478,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             saveMoodLog(_currentEmotion.value, text)
             saveMessageToDb(userMessage, _currentEmotion.value)
             scheduleIdleMemoryExtraction()
+
+            if (detectVoiceCommand(text)) {
+                return@launch
+            }
 
             _isLoading.value = true
             try {

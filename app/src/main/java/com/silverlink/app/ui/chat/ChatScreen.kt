@@ -230,6 +230,10 @@ fun ChatScreen(
     LaunchedEffect(voiceCommandIntent) {
         when (val intent = voiceCommandIntent) {
             is ChatViewModel.VoiceCommandIntent.None -> { /* 不处理 */ }
+            is ChatViewModel.VoiceCommandIntent.OpenRealtimeCall -> {
+                showCallScreen = true
+                viewModel.clearVoiceCommandIntent()
+            }
             is ChatViewModel.VoiceCommandIntent.OpenGallery -> {
                 onNavigateToGallery()
                 viewModel.clearVoiceCommandIntent()
@@ -405,6 +409,9 @@ fun ChatScreen(
                 },
                 onVoiceEnd = {
                     viewModel.stopRecordingAndRecognize()
+                },
+                onVoiceCallClick = {
+                    showCallScreen = true
                 }
             )
         }
@@ -701,7 +708,8 @@ fun ChatInputArea(
     onTextChanged: (String) -> Unit,
     onSendClick: () -> Unit,
     onVoiceStart: () -> Unit,
-    onVoiceEnd: () -> Unit
+    onVoiceEnd: () -> Unit,
+    onVoiceCallClick: () -> Unit
 ) {
     var isVoiceMode by remember { mutableStateOf(false) }
     val isRecording = voiceState is VoiceState.Recording
@@ -734,6 +742,24 @@ fun ChatInputArea(
             Spacer(modifier = Modifier.width(8.dp))
 
             if (isVoiceMode) {
+                IconButton(
+                    onClick = onVoiceCallClick,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Call,
+                        contentDescription = "语音通话",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 // Press-to-Talk Button
                 Box(
                     modifier = Modifier

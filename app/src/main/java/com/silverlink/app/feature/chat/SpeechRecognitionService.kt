@@ -71,7 +71,13 @@ class SpeechRecognitionService(private val context: Context) {
                 return Result.failure(textResult.exceptionOrNull() ?: Exception("语音识别失败"))
             }
             val text = textResult.getOrThrow()
-            val emotion = analyzeEmotion(base64Audio, text, "wav")
+            val tempWav = File.createTempFile("realtime_pcm_", ".wav", context.cacheDir)
+            tempWav.writeBytes(wavBytes)
+            val emotion = try {
+                analyzeEmotion(tempWav.absolutePath, text)
+            } finally {
+                tempWav.delete()
+            }
             Result.success(SpeechResult(text = text, emotion = emotion))
         } catch (e: Exception) {
             Result.failure(Exception("语音识别失败: ${e.message}"))

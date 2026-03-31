@@ -13,6 +13,7 @@ class StreamingTtsControllerImpl(
     private val audioPlayer: AudioPlayerHelper,
     private val scope: CoroutineScope,
     private val onPlaybackState: (Boolean) -> Unit,
+    private val clonedVoiceIdProvider: () -> String,
     private val emotionProvider: () -> Emotion,
     private val dialectProvider: () -> String,
     private val rateProvider: () -> Double
@@ -22,6 +23,8 @@ class StreamingTtsControllerImpl(
     fun requestReply(text: String) {
         ttsJob?.cancel()
         ttsJob = scope.launch(Dispatchers.IO) {
+            val latestClonedVoiceId = clonedVoiceIdProvider().trim()
+            ttsService.setClonedVoiceId(latestClonedVoiceId)
             val emotion = emotionProvider()
             val rate = rateProvider()
             val dialect = dialectProvider()
