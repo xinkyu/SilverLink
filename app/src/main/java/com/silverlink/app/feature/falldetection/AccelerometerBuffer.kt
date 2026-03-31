@@ -102,6 +102,26 @@ class AccelerometerBuffer(
         val samples = buffer.takeLast(n)
         return samples.map { it.magnitude }.average().toFloat()
     }
+
+    /**
+     * 获取最近N个样本幅度的标准差
+     */
+    fun getRecentStd(n: Int): Float {
+        if (buffer.size < 2) return 0f
+        val samples = buffer.takeLast(n).map { it.magnitude }
+        return standardDeviation(samples)
+    }
+
+    /**
+     * 获取最近N个样本幅度的范围（max-min）
+     */
+    fun getRecentRange(n: Int): Float {
+        if (buffer.isEmpty()) return 0f
+        val samples = buffer.takeLast(n).map { it.magnitude }
+        val max = samples.maxOrNull() ?: 0f
+        val min = samples.minOrNull() ?: 0f
+        return max - min
+    }
     
     /**
      * 获取原始加速度序列，供深度学习模型输入

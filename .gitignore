@@ -33,6 +33,7 @@ Thumbs.db
 # APK/AAB
 *.apk
 *.aab
+/app/release/
 
 # Heap dumps
 *.hprof

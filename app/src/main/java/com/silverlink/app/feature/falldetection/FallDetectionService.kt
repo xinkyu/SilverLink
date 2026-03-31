@@ -63,7 +63,13 @@ class FallDetectionService : Service(), SensorEventListener {
         private const val FREE_FALL_DURATION_MS = 250L      // 再次延长到250ms，彻底过滤手持晃动
         private const val IMPACT_WINDOW_MS = 1000L          // 1秒内撞击
         private const val STILLNESS_DURATION_MS = 3000L     // 静止3秒确认
-        private const val DETECTION_COOLDOWN_MS = 5000L     
+        private const val DETECTION_COOLDOWN_MS = 12000L
+
+        // ML 检测防抖参数
+        private const val CLASSIFICATION_INTERVAL_MS = 200L
+        private const val POSSIBLE_FALL_WINDOW_MS = 1400L
+        private const val ML_CONFIRMATION_DURATION_MS = 2200L
+        private const val ML_CONFIRMATION_TIMEOUT_MS = 8000L
         
         // 备用检测：突然的剧烈冲击（防误触：大幅提高）
         // 原来 42 容易误触，现在 65 (约 6.6G)，只有极猛烈的摔倒才触发
@@ -114,6 +120,7 @@ class FallDetectionService : Service(), SensorEventListener {
     private var lastDetectionTime = 0L
     
     // 当前灵敏度阈值
+    private var currentSensitivity = FallDetectionSensitivity.MEDIUM
     private var freeFallThreshold = FREE_FALL_THRESHOLD_MEDIUM
     private var impactThreshold = IMPACT_THRESHOLD_MEDIUM
     private var stillnessThreshold = STILLNESS_THRESHOLD_MEDIUM
@@ -131,7 +138,10 @@ class FallDetectionService : Service(), SensorEventListener {
     // ML 检测状态
     private var mlDetectionState = MLDetectionState.MONITORING
     private var mlConfirmationStartTime = 0L
-    private val ML_CONFIRMATION_DURATION_MS = 1000L  // 缩短到1秒，加快响应
+    private var confirmingStateStartTime = 0L
+    private var possibleFallHitCount = 0
+    private var possibleFallWindowStartTime = 0L
+    private var lastClassificationTime = 0L
     
     private enum class MLDetectionState {
         MONITORING,      // 正常监控
@@ -275,7 +285,8 @@ class FallDetectionService : Service(), SensorEventListener {
      * 根据用户设置更新灵敏度阈值
      */
     private fun updateSensitivityThresholds() {
-        when (userPreferences.getFallDetectionSensitivity()) {
+        currentSensitivity = userPreferences.getFallDetectionSensitivity()
+        when (currentSensitivity) {
             FallDetectionSensitivity.HIGH -> {
                 freeFallThreshold = FREE_FALL_THRESHOLD_HIGH
                 impactThreshold = IMPACT_THRESHOLD_HIGH
@@ -323,6 +334,9 @@ class FallDetectionService : Service(), SensorEventListener {
         if (mlDetectionState == MLDetectionState.COOLDOWN) {
             if (currentTime - lastDetectionTime > DETECTION_COOLDOWN_MS) {
                 mlDetectionState = MLDetectionState.MONITORING
+                mlConfirmationStartTime = 0L
+                confirmingStateStartTime = 0L
+                resetPossibleFallState()
                 accelBuffer.clear()
             }
             return
@@ -336,10 +350,12 @@ class FallDetectionService : Service(), SensorEventListener {
         
         // ★ 备用检测：剧烈撞击直接触发（绕过 ML）
         // 提高到 50 m/s²（约5G），只有非常猛烈的撞击才直接触发
-        if (magnitude > 50.0f && mlDetectionState == MLDetectionState.MONITORING) {
+        if (magnitude > SUDDEN_IMPACT_THRESHOLD && mlDetectionState == MLDetectionState.MONITORING) {
             Log.i(TAG, "STRONG IMPACT detected! mag=$magnitude -> entering confirmation")
             mlDetectionState = MLDetectionState.CONFIRMING
-            mlConfirmationStartTime = currentTime
+            confirmingStateStartTime = currentTime
+            mlConfirmationStartTime = 0L
+            resetPossibleFallState()
             return
         }
         
@@ -360,6 +376,11 @@ class FallDetectionService : Service(), SensorEventListener {
                     Log.d(TAG, "Features is null")
                     return
                 }
+
+                if (currentTime - lastClassificationTime < CLASSIFICATION_INTERVAL_MS) {
+                    return
+                }
+                lastClassificationTime = currentTime
                 
                 if (useDLClassifier && dlClassifier != null) {
                     // ===== 深度学习路径 =====
@@ -384,9 +405,11 @@ class FallDetectionService : Service(), SensorEventListener {
                             "patterns=${result.detectedPatterns}")
                     
                     if (result.fallProbability >= FallDetectionDLClassifier.FALL_PROBABILITY_THRESHOLD) {
-                        Log.i(TAG, "DL detected possible fall (prob=${result.fallProbability}), entering confirmation...")
-                        mlDetectionState = MLDetectionState.CONFIRMING
-                        mlConfirmationStartTime = currentTime
+                        if (passesSensitivityGate(features, result.fallProbability)) {
+                            registerPossibleFallHit(currentTime, result.fallProbability, "DL", features)
+                        } else {
+                            resetPossibleFallState()
+                        }
                     }
                 } else {
                     // ===== 降级路径：规则分类器 =====
@@ -397,45 +420,83 @@ class FallDetectionService : Service(), SensorEventListener {
                     Log.d(TAG, "Fallback ML Result: prob=${String.format("%.2f", result.fallProbability)}")
                     
                     if (result.fallProbability >= FallDetectionMLClassifier.FALL_PROBABILITY_THRESHOLD) {
-                        Log.i(TAG, "Fallback ML detected possible fall (prob=${result.fallProbability}), entering confirmation...")
-                        mlDetectionState = MLDetectionState.CONFIRMING
-                        mlConfirmationStartTime = currentTime
+                        if (passesSensitivityGate(features, result.fallProbability)) {
+                            registerPossibleFallHit(currentTime, result.fallProbability, "Fallback", features)
+                        } else {
+                            resetPossibleFallState()
+                        }
                     }
                 }
             }
             
             MLDetectionState.CONFIRMING -> {
                 // 确认阶段：检查是否保持相对静止
-                val avgMagnitude = accelBuffer.getRecentAverage(10)
+                val avgMagnitude = accelBuffer.getRecentAverage(12)
                 val deviation = abs(avgMagnitude - 9.8f)
+                val recentStd = accelBuffer.getRecentStd(15)
+                val recentRange = accelBuffer.getRecentRange(15)
+
+                val movementCancelThreshold = when (currentSensitivity) {
+                    FallDetectionSensitivity.HIGH -> 26.0f
+                    FallDetectionSensitivity.MEDIUM -> 23.0f
+                    FallDetectionSensitivity.LOW -> 21.0f
+                }
+
+                val stillnessStdThreshold = when (currentSensitivity) {
+                    FallDetectionSensitivity.HIGH -> 1.8f
+                    FallDetectionSensitivity.MEDIUM -> 1.4f
+                    FallDetectionSensitivity.LOW -> 1.1f
+                }
+
+                val stillnessRangeThreshold = when (currentSensitivity) {
+                    FallDetectionSensitivity.HIGH -> 4.5f
+                    FallDetectionSensitivity.MEDIUM -> 3.5f
+                    FallDetectionSensitivity.LOW -> 2.8f
+                }
                 
                 // 如果检测到剧烈活动，取消警报（说明人在动）
-                // 放宽条件：只有非常剧烈的活动才取消
-                if (magnitude > 25.0f) {
+                if (magnitude > movementCancelThreshold) {
                     Log.d(TAG, "Strong activity detected during confirmation, resetting...")
                     mlDetectionState = MLDetectionState.MONITORING
+                    mlConfirmationStartTime = 0L
+                    confirmingStateStartTime = 0L
+                    resetPossibleFallState()
                     accelBuffer.clear()
                     return
                 }
                 
-                // 如果加速度在合理范围内（不需要完全静止）
-                // 放宽静止条件
-                if (deviation < stillnessThreshold + 1.0f) {
+                val stableEnough =
+                    deviation < stillnessThreshold &&
+                    recentStd < stillnessStdThreshold &&
+                    recentRange < stillnessRangeThreshold
+
+                if (stableEnough) {
+                    if (mlConfirmationStartTime == 0L) {
+                        mlConfirmationStartTime = currentTime
+                    }
                     if (currentTime - mlConfirmationStartTime > ML_CONFIRMATION_DURATION_MS) {
                         // 确认跌倒！
                         Log.i(TAG, "FALL CONFIRMED! Triggering alert...")
                         onFallDetected()
                         mlDetectionState = MLDetectionState.COOLDOWN
+                        mlConfirmationStartTime = 0L
+                        confirmingStateStartTime = 0L
+                        resetPossibleFallState()
                         lastDetectionTime = currentTime
                         return
                     }
+                } else {
+                    // 必须连续稳定，任何明显波动都会重置确认计时
+                    mlConfirmationStartTime = 0L
                 }
-                // 不再重置计时器，让时间自然流逝
                 
-                // 超时未确认，重置（延长超时时间）
-                if (currentTime - mlConfirmationStartTime > ML_CONFIRMATION_DURATION_MS * 3) {
+                // 超时未确认，重置
+                if (currentTime - confirmingStateStartTime > ML_CONFIRMATION_TIMEOUT_MS) {
                     Log.d(TAG, "Confirmation timeout, resetting...")
                     mlDetectionState = MLDetectionState.MONITORING
+                    mlConfirmationStartTime = 0L
+                    confirmingStateStartTime = 0L
+                    resetPossibleFallState()
                     accelBuffer.clear()
                 }
             }
@@ -444,6 +505,94 @@ class FallDetectionService : Service(), SensorEventListener {
                 // 已在前面处理
             }
         }
+    }
+
+    private fun passesSensitivityGate(features: AccelFeatures, probability: Float): Boolean {
+        val minProbability: Float
+        val minImpactMagnitude: Float
+        val minRange: Float
+        val minImpactCount: Int
+        val minFreeFallCount: Int
+
+        when (currentSensitivity) {
+            FallDetectionSensitivity.HIGH -> {
+                minProbability = 0.70f
+                minImpactMagnitude = 22.0f
+                minRange = 16.0f
+                minImpactCount = 1
+                minFreeFallCount = 1
+            }
+            FallDetectionSensitivity.MEDIUM -> {
+                minProbability = 0.78f
+                minImpactMagnitude = 26.0f
+                minRange = 20.0f
+                minImpactCount = 2
+                minFreeFallCount = 1
+            }
+            FallDetectionSensitivity.LOW -> {
+                minProbability = 0.85f
+                minImpactMagnitude = 30.0f
+                minRange = 24.0f
+                minImpactCount = 3
+                minFreeFallCount = 2
+            }
+        }
+
+        val hasImpact = features.magMax >= minImpactMagnitude && features.impactCount >= minImpactCount
+        val hasFallPattern =
+            features.freeFallCount >= minFreeFallCount ||
+            (features.magRange >= minRange && features.magStd >= 4.0f)
+        val pass = probability >= minProbability && hasImpact && hasFallPattern
+
+        if (!pass) {
+            Log.d(
+                TAG,
+                "Gate rejected: prob=${String.format("%.3f", probability)}, " +
+                    "max=${String.format("%.2f", features.magMax)}, range=${String.format("%.2f", features.magRange)}, " +
+                    "impactCount=${features.impactCount}, freeFall=${features.freeFallCount}"
+            )
+        }
+
+        return pass
+    }
+
+    private fun registerPossibleFallHit(
+        currentTime: Long,
+        probability: Float,
+        source: String,
+        features: AccelFeatures
+    ) {
+        if (possibleFallWindowStartTime == 0L || currentTime - possibleFallWindowStartTime > POSSIBLE_FALL_WINDOW_MS) {
+            possibleFallWindowStartTime = currentTime
+            possibleFallHitCount = 1
+        } else {
+            possibleFallHitCount += 1
+        }
+
+        val requiredHits = when (currentSensitivity) {
+            FallDetectionSensitivity.HIGH -> 1
+            FallDetectionSensitivity.MEDIUM -> 2
+            FallDetectionSensitivity.LOW -> 3
+        }
+
+        Log.i(
+            TAG,
+            "$source possible fall hit $possibleFallHitCount/$requiredHits, " +
+                "prob=${String.format("%.3f", probability)}, max=${String.format("%.1f", features.magMax)}"
+        )
+
+        if (possibleFallHitCount >= requiredHits) {
+            mlDetectionState = MLDetectionState.CONFIRMING
+            confirmingStateStartTime = currentTime
+            mlConfirmationStartTime = 0L
+            resetPossibleFallState()
+            Log.i(TAG, "$source fall candidate accepted, entering confirmation")
+        }
+    }
+
+    private fun resetPossibleFallState() {
+        possibleFallHitCount = 0
+        possibleFallWindowStartTime = 0L
     }
 
     

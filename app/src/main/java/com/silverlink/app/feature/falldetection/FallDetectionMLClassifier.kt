@@ -18,14 +18,14 @@ class FallDetectionMLClassifier(private val context: Context) {
     companion object {
         private const val TAG = "FallMLClassifier"
         
-        // 跌倒特征阈值（针对软着陆场景大幅优化）
-        private const val MIN_IMPACT_MAGNITUDE = 13.0f    // 降低到 1.3G (摔床上冲击较小)
-        private const val MIN_FREE_FALL_SAMPLES = 1       // 只要有任何失重迹象即可
-        private const val MIN_MAG_RANGE = 8.0f            // 最小幅度范围降低
-        private const val MAX_NORMAL_STD = 2.0f           // 进一步收紧静止时的标准差
+        // 跌倒特征阈值（优先抑制“放下/拿起手机”误报）
+        private const val MIN_IMPACT_MAGNITUDE = 24.0f
+        private const val MIN_FREE_FALL_SAMPLES = 2
+        private const val MIN_MAG_RANGE = 20.0f
+        private const val MAX_NORMAL_STD = 3.0f           // 放宽静止时的标准差
         
         // 分类概率阈值
-        const val FALL_PROBABILITY_THRESHOLD = 0.40f      // 降低到 40%，通过确认期来过滤误报
+        const val FALL_PROBABILITY_THRESHOLD = 0.75f
     }
     
     /**
@@ -120,8 +120,8 @@ class FallDetectionMLClassifier(private val context: Context) {
         var hasHighPhase = false
         
         for (i in 0 until samples.size - 1) {
-            if (samples[i] < 6.0f) hasLowPhase = true  // 从 4.0 降低到 6.0
-            if (hasLowPhase && samples[i] > 12.0f) hasHighPhase = true  // 从 15.0 降低到 12.0
+            if (samples[i] < 4.0f) hasLowPhase = true
+            if (hasLowPhase && samples[i] > 20.0f) hasHighPhase = true
         }
         
         return hasLowPhase && hasHighPhase
@@ -153,12 +153,16 @@ class FallDetectionMLClassifier(private val context: Context) {
      * 在完整分析前先做快速检查，过滤明显不是跌倒的情况
      */
     fun quickPrescreen(features: AccelFeatures): Boolean {
-        // 放宽预筛选条件，避免漏掉软着陆
-        if (features.magMax < 11.0f) {
+        // 预筛选条件，过滤桌面放置等低冲击动作
+        if (features.magMax < 20.0f) {
             return false
         }
         
-        if (features.magRange < 6.0f) {
+        if (features.magRange < 14.0f) {
+            return false
+        }
+
+        if (features.impactCount < 1) {
             return false
         }
         
