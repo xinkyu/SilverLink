@@ -150,6 +150,8 @@ dependencies {
 
     // ONNX Runtime for on-device emotion recognition
     implementation(libs.onnxruntime.android)
+    // WebRTC VAD
+    implementation(libs.android.vad.webrtc)
 
     // WebRTC VAD
     implementation(libs.android.vad.webrtc)

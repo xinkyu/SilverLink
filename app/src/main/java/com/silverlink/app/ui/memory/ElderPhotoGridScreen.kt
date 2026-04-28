@@ -2,17 +2,42 @@ package com.silverlink.app.ui.memory
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Quiz
-
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,11 +71,12 @@ fun ElderPhotoGridScreen(
 ) {
     val photos by viewModel.photos.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    
+    val errorMessage by viewModel.errorMessage.collectAsState()
+
     LaunchedEffect(Unit) {
         viewModel.loadPhotos()
     }
-    
+
     Scaffold(
         topBar = {
             UnifiedTopBar(
@@ -94,14 +120,31 @@ fun ElderPhotoGridScreen(
                 isLoading && photos.isEmpty() -> {
                     LoadingView()
                 }
+
                 photos.isEmpty() -> {
                     EmptyStateView()
                 }
+
                 else -> {
                     PhotoGrid(
                         photos = photos,
                         onPhotoClick = onPhotoClick
                     )
+                }
+            }
+
+            errorMessage?.let { message ->
+                Snackbar(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp),
+                    action = {
+                        TextButton(onClick = { viewModel.clearError() }) {
+                            Text("关闭")
+                        }
+                    }
+                ) {
+                    Text(message)
                 }
             }
         }
@@ -194,7 +237,6 @@ private fun PhotoGridItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Box {
-            // 照片
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(photo.thumbnailUrl ?: photo.imageUrl)
@@ -204,8 +246,7 @@ private fun PhotoGridItem(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-            
-            // 底部渐变遮罩 + 描述
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -231,8 +272,7 @@ private fun PhotoGridItem(
                     fontWeight = FontWeight.Medium
                 )
             }
-            
-            // 人物标签
+
             photo.people?.let { people ->
                 Surface(
                     modifier = Modifier
