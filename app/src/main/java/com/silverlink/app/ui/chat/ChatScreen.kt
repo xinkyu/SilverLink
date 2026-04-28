@@ -846,19 +846,6 @@ fun ChatInputArea(
                         }
                     }
                 }
-
-                // Call Button in voice mode
-                IconButton(
-                    onClick = onVoiceCallClick,
-                    modifier = Modifier
-                        .size(56.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Call,
-                        contentDescription = "语音通话",
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
             } else {
                 // Text Input
                 OutlinedTextField(

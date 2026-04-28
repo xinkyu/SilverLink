@@ -882,7 +882,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // ========== 通话模式命令 ==========
         val callModeKeywords = listOf(
             "打开和你的电话对话模式", "电话对话模式", "语音通话模式", "语音电话模式",
-            "打开电话模式", "打开通话模式", "和你电话对话"
+            "打开电话模式", "打开通话模式", "和你电话对话",
+            "打电话", "语音通话", "实时对话", "通话模式", "打个电话", "跟你聊天"
         )
         if (callModeKeywords.any { text.contains(it) }) {
             _voiceCommandIntent.value = VoiceCommandIntent.OpenRealtimeCall
@@ -932,14 +933,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         
         // ========== 导航类命令 ==========
-        
-        // 实时通话模式
-        val callModeKeywords = listOf("打电话", "语音通话", "实时对话", "通话模式", "打个电话", "跟你聊天")
-        if (callModeKeywords.any { text.contains(it) }) {
-            _voiceCommandIntent.value = VoiceCommandIntent.OpenRealtimeCall
-            respondAndSpeak("${prefix}好的，这就打开和我的语音通话模式。")
-            return true
-        }
         
         // 记忆相册
         val galleryKeywords = listOf("看照片", "看看照片", "老照片", "翻相册", "记忆相册", "看相册", "打开相册")
@@ -1490,58 +1483,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun handleRealtimeFinal(text: String, emotion: Emotion) {
-        if (text.isBlank()) {
-            _conversationState.value = ConversationState.Listening
-            return
-        }
 
-        _currentEmotion.value = emotion
-        val userMessage = Message("user", text)
-        val currentHistory = _messages.value
-        _messages.value = currentHistory + userMessage
-
-        viewModelScope.launch {
-            saveMoodLog(_currentEmotion.value, text)
-            saveMessageToDb(userMessage, _currentEmotion.value)
-            scheduleIdleMemoryExtraction()
-
-            if (detectVoiceCommand(text)) {
-                return@launch
-            }
-
-            _isLoading.value = true
-            try {
-                val apiMessages = mutableListOf<Message>()
-                apiMessages.add(buildSystemPrompt(text))
-                apiMessages.addAll(currentHistory.takeLast(SHORT_TERM_WINDOW_SIZE))
-                apiMessages.add(userMessage)
-
-                val request = QwenRequest(
-                    input = Input(messages = apiMessages)
-                )
-
-                val response = RetrofitClient.api.chat(request)
-                val assistantMessageContent = response.output.choices?.firstOrNull()?.message?.content
-                    ?: response.output.text
-                    ?: "哎呀，我刚才走神了，没听清您说什么，能再说一遍吗？"
-
-                val assistantMessage = Message("assistant", assistantMessageContent)
-                _messages.value = _messages.value + assistantMessage
-                saveMessageToDb(assistantMessage, null)
-
-                streamingTts?.requestReply(assistantMessageContent)
-            } catch (e: Exception) {
-                val errorMessage = "网络好像有点卡，请检查一下网络连接哦。"
-                val errorMsg = Message("assistant", errorMessage)
-                _messages.value = _messages.value + errorMsg
-                saveMessageToDb(errorMsg, null)
-                streamingTts?.requestReply(errorMessage)
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
 
     fun refreshMemoryCenter() {
         viewModelScope.launch {
@@ -1705,12 +1647,4 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return "${prefix}抱歉，我没能认出这个药。你可以把药瓶正面对着我再试一次吗？"
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        idleMemoryExtractionJob?.cancel()
-        periodicMemoryExtractionJob?.cancel()
-        realtimeManager?.release()
-        audioPlayer.release()
-        com.silverlink.app.feature.chat.realtime.SharedAudioSession.reset()
-    }
 }

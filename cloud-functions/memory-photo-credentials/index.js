@@ -6,19 +6,38 @@ const app = cloud.init({
 });
 const db = app.database();
 
-exports.main = async (event, context) => {
-  try {
-    // 1. 解析参数
-    let body = event.body || {};
+function getParams(event) {
+  if (!event) return {};
+  if (typeof event === "string") {
+    try {
+      return JSON.parse(event);
+    } catch (e) {
+      return {};
+    }
+  }
+  if (event.body) {
+    let body = event.body;
     if (event.isBase64Encoded) {
       body = Buffer.from(body, "base64").toString("utf8");
     }
     if (typeof body === "string") {
       try {
-        body = JSON.parse(body);
-      } catch (e) {}
+        return JSON.parse(body);
+      } catch (e) {
+        return {};
+      }
     }
-    const params = { ...(event.queryStringParameters || {}), ...body };
+    return body || {};
+  }
+  if (event.queryStringParameters) {
+    return event.queryStringParameters;
+  }
+  return event;
+}
+
+exports.main = async (event, context) => {
+  try {
+    const params = getParams(event);
     const { elderDeviceId, familyDeviceId, fileExtension = "jpg" } = params;
 
     // 2. 校验参数

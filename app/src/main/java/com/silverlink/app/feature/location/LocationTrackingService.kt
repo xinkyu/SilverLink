@@ -312,11 +312,6 @@ class LocationTrackingService : Service(), LocationListener {
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
-        // 每次服务启动或收到启动指令时，立即获取一次位置并上传
-        // 这解决了“打开位置共享时家人端无法立即同步”的问题（如果服务已在后台但未刷新位置）
-        if (::fusedLocationClient.isInitialized) {
-            getImmediateLocation()
-        }
         return START_STICKY
     }
     

@@ -110,6 +110,23 @@ object CloudBaseService {
             .build()
     }
     
+    /**
+     * 专用于 COS 直传的 OkHttpClient（不含 CloudBase 鉴权拦截器）
+     * 
+     * 重要：COS 上传使用的 Authorization 是 COS 签名（q-sign-algorithm=sha1&...），
+     * 如果使用 okHttpClient，其拦截器会将 Authorization 覆盖为 Bearer token，导致 403。
+     */
+    private val cosHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.HEADERS
+            })
+            .build()
+    }
+    
     private val retrofit by lazy {
         Retrofit.Builder()
             .baseUrl(CLOUD_BASE_URL)
@@ -885,7 +902,7 @@ object CloudBaseService {
                 
                 Log.d("CloudStorage", "COS PUT 请求 headers: ${request.headers}")
 
-                val response = okHttpClient.newCall(request).execute()
+                val response = cosHttpClient.newCall(request).execute()
 
                 if (response.isSuccessful) {
                     Log.d("CloudStorage", "COS PUT 成功, code=${response.code}")
