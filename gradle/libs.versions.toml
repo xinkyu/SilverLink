@@ -13,7 +13,7 @@ okhttp = "4.12.0"
 room = "2.6.1"
 ksp = "2.0.0-1.0.22"
 workmanager = "2.9.0"
-androidVad = "2.0.10"
+androidVad = "2.0.8"
 kotlinxSerializationJson = "1.6.0"
 onnxruntime = "1.19.2"
 

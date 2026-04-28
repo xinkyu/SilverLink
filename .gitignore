@@ -55,10 +55,10 @@ build_error*.txt
 
 # Stitch generated assets
 /docs/stitch/
-
+/docs/*.pdf
 docs/银龄守护 - 第十九届全国大学生软件创新大赛-项目计划书1.0.0.pdf
 docs/CLOUD_DEPLOYMENT_GUIDE.md
-
+/docs/实践/
 # Claude Code temp files
 tmpclaude-*
 nul

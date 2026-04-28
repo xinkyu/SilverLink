@@ -5,7 +5,11 @@ import com.silverlink.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -16,28 +20,73 @@ import java.util.concurrent.TimeUnit
  * 腾讯云 CloudBase 云函数服务
  * 
  * 架构说明：
- * - Android 端通过 HTTP 请求调用云函数
+ * - Android 端通过 CloudBase 鉴权网关 HTTP API 调用云函数
+ * - 自动进行匿名登录获取 access_token，无需手动管理鉴权
  * - 云函数处理业务逻辑并读写云数据库
- * - 无需集成官方 SDK，轻量且稳定
+ * - 无需集成官方 SDK，无需 HTTP 访问服务（不会过期）
  * 
- * 部署步骤：
- * 1. 在腾讯云 CloudBase 控制台创建环境
- * 2. 部署云函数（见 cloud-functions 目录）
- * 3. 配置 HTTP 访问服务
- * 4. 将云函数访问地址填入 CLOUD_BASE_URL
+ * API 网关地址（永久有效，免费）：
+ *   https://{envId}.api.tcloudbasegateway.com/v1/functions/{functionName}
  */
 object CloudBaseService {
 
-    // 统一从 BuildConfig 读取，避免不同代码路径使用不同环境地址。
-    private val CLOUD_BASE_URL: String = run {
+    // 从 BuildConfig.CLOUDBASE_URL 提取环境 ID
+    private val envId: String = run {
         val configured = BuildConfig.CLOUDBASE_URL.trim()
-        if (configured.isNotBlank()) {
-            if (configured.endsWith("/")) configured else "$configured/"
-        } else {
-            "https://silverlink-9ghfrozgb4226f22-1417212787.ap-shanghai.app.tcloudbase.com/"
-        }
+        val match = Regex("https://([^.]+)-[0-9]+\\.ap-shanghai\\.app\\.tcloudbase\\.com").find(configured)
+        match?.groupValues?.get(1) ?: "silverlink-d8gy4d87n16579978"
     }
+
+    /** 云函数调用地址（通过鉴权网关，永久有效） */
+    private val CLOUD_BASE_URL = "https://${envId}.api.tcloudbasegateway.com/v1/functions/"
+    /** 匿名登录地址 */
+    private val AUTH_URL = "https://${envId}.api.tcloudbasegateway.com/auth/v1/"
     
+
+    private var accessToken: String? = null
+    private var tokenExpiry: Long = 0
+    private val deviceId: String by lazy { java.util.UUID.randomUUID().toString() }
+
+    private fun fetchAccessTokenSync(): String? {
+        try {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .build()
+            
+            val request = okhttp3.Request.Builder()
+                .url("${AUTH_URL}signin/anonymously")
+                .header("x-device-id", deviceId)
+                .post(okhttp3.RequestBody.create("application/json".toMediaType(), "{}"))
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val bodyString = response.body?.string()
+                if (bodyString != null) {
+                    val jsonElement = json.parseToJsonElement(bodyString)
+                    val token = jsonElement.jsonObject["access_token"]?.jsonPrimitive?.content
+                    val expiresIn = jsonElement.jsonObject["expires_in"]?.jsonPrimitive?.longOrNull ?: 7200L
+                    if (token != null) {
+                        accessToken = token
+                        tokenExpiry = System.currentTimeMillis() + (expiresIn - 300) * 1000 // Buffer 5 min
+                        return token
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CloudBase", "Fetch access token failed: ${e.message}")
+        }
+        return null
+    }
+
+    @Synchronized
+    private fun getValidToken(): String? {
+        if (accessToken != null && System.currentTimeMillis() < tokenExpiry) {
+            return accessToken
+        }
+        return fetchAccessTokenSync()
+    }
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -48,6 +97,13 @@ object CloudBaseService {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val requestBuilder = chain.request().newBuilder()
+                getValidToken()?.let { token ->
+                    requestBuilder.header("Authorization", "Bearer $token")
+                }
+                chain.proceed(requestBuilder.build())
+            }
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             })
@@ -146,12 +202,15 @@ object CloudBaseService {
      */
     suspend fun getPairedElderDeviceId(familyDeviceId: String): Result<String?> {
         return try {
+            Log.d("CloudBase", "查询配对: familyDeviceId=$familyDeviceId, gateway=$CLOUD_BASE_URL")
             val response = api.getPairedElderDeviceId(
                 GetPairedElderRequest(familyDeviceId = familyDeviceId)
             )
+            Log.d("CloudBase", "配对查询结果: success=${response.success}, data=${response.data}, message=${response.message}")
             if (response.success) {
                 Result.success(response.data)
             } else {
+                Log.w("CloudBase", "配对查询失败: ${response.message}")
                 Result.success(null)
             }
         } catch (e: retrofit2.HttpException) {
@@ -160,6 +219,7 @@ object CloudBaseService {
             Log.e("CloudBase", "获取已配对长辈异常: HTTP ${e.code()}, url=$url, body=${errorBody ?: ""}", e)
             Result.failure(Exception("HTTP ${e.code()}: ${errorBody ?: e.message()}"))
         } catch (e: Exception) {
+            Log.e("CloudBase", "获取已配对长辈异常: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -887,14 +947,22 @@ object CloudBaseService {
         familyDeviceId: String? = null
     ): Result<LocationQueryResult> = withContext(Dispatchers.IO) {
         try {
-            Log.d("CloudBase", "查询位置(OkHttp): elderDeviceId=$elderDeviceId")
-            // 直接拼装 URL，绕过 Retrofit，确保万无一失
-            val baseUrl = "${CLOUD_BASE_URL}location-query"
-            val url = "$baseUrl?elderDeviceId=$elderDeviceId&familyDeviceId=${familyDeviceId ?: ""}"
+            Log.d("CloudBase", "查询位置(OkHttp POST): elderDeviceId=$elderDeviceId")
+            val url = "${CLOUD_BASE_URL}location-query"
+            
+            val jsonBody = org.json.JSONObject().apply {
+                put("elderDeviceId", elderDeviceId)
+                if (!familyDeviceId.isNullOrBlank()) {
+                    put("familyDeviceId", familyDeviceId)
+                }
+            }.toString()
+            
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = jsonBody.toRequestBody(mediaType)
             
             val request = okhttp3.Request.Builder()
                 .url(url)
-                .get()
+                .post(requestBody)
                 .build()
                 
             val response = okHttpClient.newCall(request).execute()
@@ -903,17 +971,18 @@ object CloudBaseService {
                 val bodyString = response.body?.string()
                 Log.d("CloudBase", "OkHttp响应: $bodyString")
                 if (!bodyString.isNullOrBlank()) {
-                    val apiResponse = retrofit2.converter.gson.GsonConverterFactory.create()
-                        .responseBodyConverter(
-                            com.google.gson.reflect.TypeToken.getParameterized(ApiResponse::class.java, LocationQueryResult::class.java).type,
-                            arrayOf(),
-                            retrofit
-                        )?.convert(okhttp3.ResponseBody.create(null, bodyString)) as? ApiResponse<LocationQueryResult>
+                    val type = com.google.gson.reflect.TypeToken
+                        .getParameterized(ApiResponse::class.java, LocationQueryResult::class.java)
+                        .type
+                    val apiResponse: ApiResponse<LocationQueryResult>? = com.google.gson.Gson()
+                        .fromJson(bodyString, type)
 
-                    if (apiResponse != null && apiResponse.success && apiResponse.data != null) {
-                         Result.success(apiResponse.data)
+                    if (apiResponse == null) {
+                        Result.failure(Exception("位置查询响应解析失败"))
+                    } else if (apiResponse.success) {
+                        Result.success(apiResponse.data ?: LocationQueryResult(null, emptyList()))
                     } else {
-                         Result.success(LocationQueryResult(null, emptyList()))
+                        Result.failure(Exception(apiResponse.message ?: "位置查询失败"))
                     }
                 } else {
                     Result.failure(Exception("响应为空"))

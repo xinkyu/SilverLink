@@ -87,10 +87,11 @@ class VoiceCloningService {
             
             // Step 2: 调用创建音色API
             Log.d(TAG, "Step 2: Creating voice enrollment...")
-            val voiceId = submitVoiceCreation(audioUrl, voicePrefix)
-            if (voiceId == null) {
-                return@withContext Result.failure(Exception("创建音色请求失败"))
+            val voiceResult = submitVoiceCreation(audioUrl, voicePrefix)
+            if (voiceResult.isFailure) {
+                return@withContext Result.failure(voiceResult.exceptionOrNull() ?: Exception("创建音色请求失败"))
             }
+            val voiceId = voiceResult.getOrThrow()
             Log.d(TAG, "Voice creation submitted, voice_id: $voiceId")
             
             // Step 3: 轮询查询音色状态
@@ -150,7 +151,7 @@ class VoiceCloningService {
      * - 端点: /services/audio/tts/customization
      * - action, target_model, prefix, url, language_hints 都在 input 中
      */
-    private fun submitVoiceCreation(audioUrl: String, voicePrefix: String): String? {
+    private fun submitVoiceCreation(audioUrl: String, voicePrefix: String): Result<String> {
         try {
             // 构建请求体 (根据阿里云官方文档格式)
             val requestJson = JSONObject().apply {
@@ -193,20 +194,38 @@ class VoiceCloningService {
                 
                 // 检查错误
                 if (json.has("code") && json.optString("code") != "Success" && json.optString("code").isNotEmpty()) {
-                    Log.e(TAG, "API error: ${json.optString("message")}")
-                    return null
+                    val errorMsg = json.optString("message", "未知API错误")
+                    val errorCode = json.optString("code")
+                    Log.e(TAG, "API error: code=$errorCode, message=$errorMsg")
+                    return Result.failure(Exception("阿里云API错误: $errorMsg ($errorCode)"))
                 }
                 
                 // 获取 voice_id
                 val output = json.optJSONObject("output")
-                return output?.optString("voice_id")
+                val voiceId = output?.optString("voice_id")
+                if (voiceId.isNullOrBlank()) {
+                    Log.e(TAG, "No voice_id in response: $responseBody")
+                    return Result.failure(Exception("API返回中缺少voice_id"))
+                }
+                return Result.success(voiceId)
             } else {
-                Log.e(TAG, "Create request failed: HTTP ${response.code}, $responseBody")
-                return null
+                // HTTP 错误，尝试解析错误信息
+                val errorDetail = if (responseBody != null) {
+                    try {
+                        val errorJson = JSONObject(responseBody)
+                        errorJson.optString("message", responseBody.take(200))
+                    } catch (e: Exception) {
+                        responseBody.take(200)
+                    }
+                } else {
+                    "无响应内容"
+                }
+                Log.e(TAG, "Create request failed: HTTP ${response.code}, $errorDetail")
+                return Result.failure(Exception("HTTP ${response.code}: $errorDetail"))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Submit voice creation error", e)
-            return null
+            return Result.failure(e)
         }
     }
     

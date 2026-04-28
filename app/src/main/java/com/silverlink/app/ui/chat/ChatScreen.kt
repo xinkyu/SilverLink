@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Face
@@ -130,6 +131,9 @@ fun ChatScreen(
     val ragDebugSnapshot by viewModel.ragDebugSnapshot.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
+    var showCallScreen by remember { mutableStateOf(false) }
+    val conversationState by viewModel.conversationState.collectAsState()
+    val partialTranscript by viewModel.partialTranscript.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
     
     // 会话列表底部弹窗状态
@@ -209,6 +213,12 @@ fun ChatScreen(
         }
     }
 
+    LaunchedEffect(showCallScreen) {
+        if (!showCallScreen) {
+            viewModel.stopRealtimeConversation()
+        }
+    }
+
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
@@ -220,6 +230,10 @@ fun ChatScreen(
     LaunchedEffect(voiceCommandIntent) {
         when (val intent = voiceCommandIntent) {
             is ChatViewModel.VoiceCommandIntent.None -> { /* 不处理 */ }
+            is ChatViewModel.VoiceCommandIntent.OpenRealtimeCall -> {
+                showCallScreen = true
+                viewModel.clearVoiceCommandIntent()
+            }
             is ChatViewModel.VoiceCommandIntent.OpenGallery -> {
                 onNavigateToGallery()
                 viewModel.clearVoiceCommandIntent()
@@ -262,6 +276,23 @@ fun ChatScreen(
                 viewModel.clearVoiceCommandIntent()
             }
         }
+    }
+
+    if (showCallScreen) {
+        RealtimeCallScreen(
+            assistantName = assistantName,
+            conversationState = conversationState,
+            partialTranscript = partialTranscript,
+            onEndCall = { showCallScreen = false },
+            onStartCall = {
+                if (hasAudioPermission) {
+                    viewModel.startRealtimeConversation()
+                } else {
+                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+        )
+        return
     }
 
     Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -365,6 +396,9 @@ fun ChatScreen(
             },
             onVoiceEnd = {
                 viewModel.stopRecordingAndRecognize()
+            },
+            onVoiceCallClick = {
+                showCallScreen = true
             }
         )
     }
@@ -660,7 +694,8 @@ fun ChatInputArea(
     onTextChanged: (String) -> Unit,
     onSendClick: () -> Unit,
     onVoiceStart: () -> Unit,
-    onVoiceEnd: () -> Unit
+    onVoiceEnd: () -> Unit,
+    onVoiceCallClick: () -> Unit
 ) {
     var isVoiceMode by remember { mutableStateOf(false) }
     val isRecording = voiceState is VoiceState.Recording
@@ -754,6 +789,19 @@ fun ChatInputArea(
                             )
                         }
                     }
+                }
+
+                // Call Button in voice mode
+                IconButton(
+                    onClick = onVoiceCallClick,
+                    modifier = Modifier
+                        .size(56.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Call,
+                        contentDescription = "语音通话",
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             } else {
                 // Text Input

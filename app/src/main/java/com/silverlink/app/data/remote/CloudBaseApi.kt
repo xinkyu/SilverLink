@@ -7,8 +7,10 @@ import retrofit2.http.Query
 import kotlinx.serialization.Serializable
 
 /**
- * 腾讯云 CloudBase 云函数 HTTP API
- * 轻量化架构：Android 端 -> HTTP 请求 -> 云函数 -> 数据库
+ * 腾讯云 CloudBase 云函数 - 鉴权网关 HTTP API
+ * 
+ * 通过 CloudBase 鉴权网关调用云函数（永久有效，无需 HTTP 访问服务）
+ * 网关地址: https://{envId}.api.tcloudbasegateway.com/v1/functions/{functionName}
  */
 interface CloudBaseApi {
     
@@ -16,49 +18,49 @@ interface CloudBaseApi {
      * 创建配对码（家人端调用）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("pairing/create")
+    @POST("pairing-create")
     suspend fun createPairingCode(@Body request: CreatePairingRequest): ApiResponse<PairingCodeData>
     
     /**
      * 验证配对码（长辈端调用）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("pairing/verify")
+    @POST("pairing-verify")
     suspend fun verifyPairingCode(@Body request: VerifyPairingRequest): ApiResponse<PairingResult>
     
     /**
      * 添加服药记录
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("medication/log")
+    @POST("medication-log")
     suspend fun addMedicationLog(@Body request: MedicationLogRequest): ApiResponse<Unit>
     
     /**
      * 查询服药记录（家人端查看长辈）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("medication/query")
+    @POST("medication-query")
     suspend fun getMedicationLogs(@Body request: QueryMedicationRequest): ApiResponse<List<MedicationLogData>>
     
     /**
      * 添加情绪记录
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("mood/log")
+    @POST("mood-log")
     suspend fun addMoodLog(@Body request: MoodLogRequest): ApiResponse<Unit>
     
     /**
      * 查询情绪记录（家人端查看长辈）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("mood/query")
+    @POST("mood-query")
     suspend fun getMoodLogs(@Body request: QueryMoodRequest): ApiResponse<List<MoodLogData>>
     
     /**
      * 获取配对的长辈设备ID（家人端调用）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("pairing/get-elder")
+    @POST("pairing-get-elder")
     suspend fun getPairedElderDeviceId(@Body request: GetPairedElderRequest): ApiResponse<String?>
     
     // ==================== 药品管理 ====================
@@ -67,28 +69,28 @@ interface CloudBaseApi {
      * 添加药品（家人端为长辈添加）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("medication/add")
+    @POST("medication-add")
     suspend fun addMedication(@Body request: AddMedicationRequest): ApiResponse<MedicationData>
     
     /**
      * 获取药品列表
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("medication/list")
+    @POST("medication-list")
     suspend fun getMedicationList(@Body request: GetMedicationListRequest): ApiResponse<List<MedicationData>>
 
     /**
      * 更新药品时间
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("medication/update")
+    @POST("medication-update")
     suspend fun updateMedication(@Body request: UpdateMedicationRequest): ApiResponse<MedicationData>
     
     /**
      * 删除药品
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("medication/delete")
+    @POST("medication-delete")
     suspend fun deleteMedication(@Body request: DeleteMedicationRequest): ApiResponse<Unit>
     
     // ==================== 警报管理 ====================
@@ -97,21 +99,21 @@ interface CloudBaseApi {
      * 发送警报（老人端调用，通知家人端）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("alert/send")
+    @POST("alert-send")
     suspend fun sendAlert(@Body request: SendAlertRequest): ApiResponse<Unit>
     
     /**
      * 查询警报（家人端轮询）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("alert/query")
+    @POST("alert-query")
     suspend fun getAlerts(@Body request: QueryAlertRequest): ApiResponse<List<AlertData>>
     
     /**
      * 标记警报已读（家人端调用）
      */
     @retrofit2.http.Headers("Content-Type: application/json")
-    @POST("alert/dismiss")
+    @POST("alert-dismiss")
     suspend fun dismissAlert(@Body request: DismissAlertRequest): ApiResponse<Unit>
     
     // ==================== 记忆照片管理 ====================
@@ -173,11 +175,8 @@ interface CloudBaseApi {
      * 查询位置（家人端调用）
      * 改为 GET 请求以绕过部分环境对 POST 的限制
      */
-    @GET("location-query")
-    suspend fun queryLocation(
-        @Query("elderDeviceId") elderDeviceId: String,
-        @Query("familyDeviceId") familyDeviceId: String
-    ): ApiResponse<LocationQueryResult>
+    @POST("location-query")
+    suspend fun queryLocation(@Body request: QueryLocationRequest): ApiResponse<LocationQueryResult>
     
     // ==================== 声音复刻管理 ====================
     

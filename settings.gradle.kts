@@ -16,6 +16,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven(url = "https://jitpack.io")
         maven {
             url = uri("https://maven.columbus.heytapmobi.com/repository/heytap-health-releases/")
             isAllowInsecureProtocol = true

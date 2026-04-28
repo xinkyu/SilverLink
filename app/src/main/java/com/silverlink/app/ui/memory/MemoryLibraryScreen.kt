@@ -1,5 +1,8 @@
 package com.silverlink.app.ui.memory
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -34,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -72,6 +76,32 @@ fun MemoryLibraryScreen(
                 selectedBitmap = BitmapFactory.decodeStream(stream)
             }
             showUploadDialog = true
+        }
+    }
+    
+    // 权限请求 launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            imagePickerLauncher.launch("image/*")
+        }
+    }
+    
+    // 检查权限并启动图片选择器
+    val launchPickerWithPermission: () -> Unit = {
+        val requiredPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        
+        if (ContextCompat.checkSelfPermission(context, requiredPermission)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            imagePickerLauncher.launch("image/*")
+        } else {
+            permissionLauncher.launch(requiredPermission)
         }
     }
     
@@ -115,13 +145,13 @@ fun MemoryLibraryScreen(
                     LoadingView()
                 }
                 photos.isEmpty() -> {
-                    EmptyStateView(onUpload = { imagePickerLauncher.launch("image/*") })
+                    EmptyStateView(onUpload = { launchPickerWithPermission() })
                 }
                 else -> {
                     PhotoGrid(
                         photos = photos,
                         onPhotoClick = { /* TODO: 预览照片 */ },
-                        onUploadPhotoClick = { imagePickerLauncher.launch("image/*") }
+                        onUploadPhotoClick = { launchPickerWithPermission() }
                     )
                 }
             }

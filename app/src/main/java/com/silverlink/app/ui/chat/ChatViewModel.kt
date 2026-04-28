@@ -25,6 +25,13 @@ import com.silverlink.app.feature.chat.RagDebugSnapshot
 import com.silverlink.app.feature.chat.SpeechRecognitionService
 import com.silverlink.app.feature.chat.TextToSpeechService
 import com.silverlink.app.feature.emotion.EmotionRecognitionService
+import com.silverlink.app.feature.chat.realtime.ConversationState
+import com.silverlink.app.feature.chat.realtime.PcmAudioStream
+import com.silverlink.app.feature.chat.realtime.RealtimeConversationManager
+import com.silverlink.app.feature.chat.realtime.QwenRealtimeAsrClient
+import com.silverlink.app.feature.chat.realtime.StreamingAsrClientApi
+import com.silverlink.app.feature.chat.realtime.StreamingTtsControllerImpl
+import com.silverlink.app.feature.chat.realtime.WebRtcVadEngine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,12 +102,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _ragDebugSnapshot = MutableStateFlow<RagDebugSnapshot?>(null)
     val ragDebugSnapshot: StateFlow<RagDebugSnapshot?> = _ragDebugSnapshot.asStateFlow()
 
+    private val _conversationState = MutableStateFlow<ConversationState>(ConversationState.Idle)
+    val conversationState: StateFlow<ConversationState> = _conversationState.asStateFlow()
+
+    private val _partialTranscript = MutableStateFlow("")
+    val partialTranscript: StateFlow<String> = _partialTranscript.asStateFlow()
+
     // 语音命令意图状态 - 用于触发导航和执行操作
     enum class SafetyFeature { FALL_DETECTION, PROACTIVE_INTERACTION, LOCATION_SHARING }
     
     sealed class VoiceCommandIntent {
         object None : VoiceCommandIntent()
         // 导航类
+        object OpenRealtimeCall : VoiceCommandIntent()
         object OpenGallery : VoiceCommandIntent()
         data class SearchPhotos(val query: String) : VoiceCommandIntent()
         object OpenMedicationAdd : VoiceCommandIntent()      // 拍照加药
@@ -146,6 +160,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val ttsService = TextToSpeechService()
     private val audioPlayer = AudioPlayerHelper(application)
     private var currentAudioFile: String? = null
+    private var realtimeManager: RealtimeConversationManager? = null
+    private var streamingTts: StreamingTtsControllerImpl? = null
+    private var realtimeAsr: StreamingAsrClientApi? = null
     
     // 数据库访问
     private val appDatabase = AppDatabase.getInstance(application)
@@ -196,9 +213,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // 设置音频播放完成监听器
         audioPlayer.setOnCompletionListener {
             _ttsState.value = TtsState.Idle
+            realtimeManager?.onPlaybackFinished()
         }
         audioPlayer.setOnErrorListener { errorMsg ->
             _ttsState.value = TtsState.Error(errorMsg)
+            realtimeManager?.onPlaybackFinished()
         }
         
         // 设置复刻音色ID（如果有）
@@ -212,13 +231,87 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         startPeriodicMemoryExtraction()
+        setupRealtimeConversation()
     }
 
     override fun onCleared() {
         super.onCleared()
         idleMemoryExtractionJob?.cancel()
         periodicMemoryExtractionJob?.cancel()
+        realtimeManager?.release()
         audioPlayer.release()
+        com.silverlink.app.feature.chat.realtime.SharedAudioSession.reset()
+    }
+
+    private fun setupRealtimeConversation() {
+        val vadEngine = WebRtcVadEngine()
+        val audioStream = PcmAudioStream()
+        val asrClient = QwenRealtimeAsrClient(
+            onPartial = { partial ->
+                _partialTranscript.value = partial
+            },
+            onFinal = { speech ->
+                handleRealtimeFinal(speech.text, speech.emotion)
+            }
+        )
+        realtimeAsr = asrClient
+
+        streamingTts = StreamingTtsControllerImpl(
+            ttsService = ttsService,
+            audioPlayer = audioPlayer,
+            scope = viewModelScope,
+            onPlaybackState = { isPlaying ->
+                if (isPlaying) {
+                    realtimeManager?.onPlaybackStarted()
+                } else {
+                    realtimeManager?.onPlaybackFinished()
+                }
+            },
+            clonedVoiceIdProvider = { userPrefs.userConfig.value.clonedVoiceId },
+            emotionProvider = { _currentEmotion.value },
+            dialectProvider = {
+                val dialect = userPrefs.userConfig.value.dialect
+                if (dialect != com.silverlink.app.data.local.Dialect.NONE) dialect.displayName else ""
+            },
+            rateProvider = { getTtsRateForEmotion(_currentEmotion.value) }
+        )
+        realtimeManager = RealtimeConversationManager(
+            vadEngine = vadEngine,
+            audioStream = audioStream,
+            asrClient = asrClient,
+            onInterrupt = {
+                stopSpeaking()
+            },
+            onFinalText = { text, emotion ->
+                handleRealtimeFinal(text, emotion)
+            }
+        )
+        viewModelScope.launch {
+            realtimeManager?.state?.collect { state ->
+                _conversationState.value = state
+            }
+        }
+    }
+
+    fun startRealtimeConversation() {
+        realtimeManager?.start()
+    }
+
+    fun stopRealtimeConversation() {
+        realtimeManager?.stop()
+        _conversationState.value = ConversationState.Idle
+        _partialTranscript.value = ""
+    }
+
+    private fun handleRealtimeFinal(text: String, emotion: Emotion) {
+        if (text.isBlank()) {
+            _conversationState.value = ConversationState.Listening
+            return
+        }
+        _conversationState.value = ConversationState.Processing
+        _partialTranscript.value = ""
+        _currentEmotion.value = emotion
+        sendMessage(text)
     }
 
     private fun loadConversations() {
@@ -782,6 +875,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         
         // ========== 导航类命令 ==========
         
+        // 实时通话模式
+        val callModeKeywords = listOf("打电话", "语音通话", "实时对话", "通话模式", "打个电话", "跟你聊天")
+        if (callModeKeywords.any { text.contains(it) }) {
+            _voiceCommandIntent.value = VoiceCommandIntent.OpenRealtimeCall
+            respondAndSpeak("${prefix}好的，这就打开和我的语音通话模式。")
+            return true
+        }
+        
         // 记忆相册
         val galleryKeywords = listOf("看照片", "看看照片", "老照片", "翻相册", "记忆相册", "看相册", "打开相册")
         if (galleryKeywords.any { text.contains(it) }) {
@@ -1143,6 +1244,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             result.fold(
                 onSuccess = { audioData ->
                     _ttsState.value = TtsState.Speaking
+                    realtimeManager?.onPlaybackStarted()
                     audioPlayer.play(audioData)
                 },
                 onFailure = { error ->
@@ -1158,6 +1260,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun stopSpeaking() {
         audioPlayer.stop()
         _ttsState.value = TtsState.Idle
+        realtimeManager?.onPlaybackFinished()
     }
 
     /**

@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Quiz
-import androidx.compose.material.icons.filled.Add
+
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,10 +31,7 @@ import coil.request.ImageRequest
 import com.silverlink.app.data.remote.MemoryPhotoData
 import com.silverlink.app.ui.components.UnifiedTopBar
 import com.silverlink.app.ui.theme.WarmPrimary
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
+
 
 /**
  * 老人端照片网格视图
@@ -167,43 +164,18 @@ private fun PhotoGrid(
     photos: List<MemoryPhotoData>,
     onPhotoClick: (Int) -> Unit
 ) {
-    Column() {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            itemsIndexed(photos) { index, photo ->
-                PhotoGridItem(
-                    photo = photo,
-                    onClick = { onPhotoClick(index) }
-                )
-            }
-        }
-        
-        // Image 5 Style Add Button below photos
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 24.dp)
-                .height(100.dp)
-                .clickable { /* TODO: upload photo action */ }
-                .drawBehind { 
-                    drawRoundRect(
-                        color = Color(0xFFFFB74D), 
-                        style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)),
-                        cornerRadius = CornerRadius(16.dp.toPx())
-                    )
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFFFF8A00), modifier = Modifier.size(32.dp))
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("添加更多回忆", color = Color(0xFFFF8A00), fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        contentPadding = PaddingValues(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        itemsIndexed(photos) { index, photo ->
+            PhotoGridItem(
+                photo = photo,
+                onClick = { onPhotoClick(index) }
+            )
         }
     }
 }
